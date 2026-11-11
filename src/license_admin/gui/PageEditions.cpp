@@ -382,7 +382,7 @@ public:
         reloadBtn_ = add(*this, std::make_unique<ui::Button>("Actualiser", prefix_ + ".actualiser"));
         reloadBtn_->setIcon(ui::Icon::Refresh);
         reloadBtn_->setTooltip("Relit tout de suite le registre de l'archive et les licences (F5) ; tes modifications pas encore sign\xC3\xA9" "es restent");
-        barDeleteBtn_ = add(*this, std::make_unique<ui::Button>("Supprimer\xE2\x80\xA6", prefix_ + ".supprimer"));
+        barDeleteBtn_ = add(*this, std::make_unique<ui::Button>("Supprimer\xE2\x80\xA6", prefix_ + ".barre.supprimer"));
         barDeleteBtn_->setStyle(ui::Button::Style::Danger);
         barDeleteBtn_->setIcon(ui::Icon::Delete);
         links_ += reloadBtn_->clicked->connect([this] {
@@ -576,7 +576,9 @@ protected:
         titleY_ = y;
         // L'etat du registre, a droite du titre.
         const float tw = ui::measureWidth(title_, kFonts.title) + 24.f;
-        statusRect_ = {x + tw, y + 4.f, std::max(0.f, w - tw), 22.f};
+        const float rw = reloadBtn_->sizeHint().preferred.w + 8.f;   // 1.48.1 : Actualiser, a droite du titre
+        reloadBtn_->setBounds({x + w - rw, y - 2.f, rw, kButtonH});
+        statusRect_ = {x + tw, y + 4.f, std::max(0.f, w - tw - rw - kGap), 22.f};
         y += 34.f;
         leadLines_ = wrap(lead_, kFonts.ui, w, 3);
         leadY_ = y;
@@ -591,16 +593,22 @@ protected:
         }
         // La barre : Nouvelle..., Annuler (1.48.1 : Supprimer...) ; Actualiser et Signer a droite.
         float bx = x;
+        const float sw = signBtn_->sizeHint().preferred.w;
+        // 1.48.1 : etroite, Supprimer... monte a cote d'Actualiser (Signer garde sa place a droite)
+        const bool deleteUp = barDeleteBtn_->visibility() != ui::Visibility::Collapsed &&
+                              newBtn_->sizeHint().preferred.w + cancelBtn_->sizeHint().preferred.w + barDeleteBtn_->sizeHint().preferred.w + sw + 3.f * kGap > w;
         for (ui::Button* btn : {newBtn_, cancelBtn_, barDeleteBtn_}) {
             if (btn->visibility() == ui::Visibility::Collapsed) continue;
             const float bw = btn->sizeHint().preferred.w;
+            if (btn == barDeleteBtn_ && deleteUp) {
+                btn->setBounds({reloadBtn_->bounds().x - kGap - bw, titleY_ - 2.f, bw, kButtonH});
+                statusRect_.w = std::max(0.f, btn->bounds().x - kGap - statusRect_.x);
+                continue;
+            }
             btn->setBounds({bx, y, bw, kButtonH});
             bx += bw + kGap;
         }
-        const float sw = signBtn_->sizeHint().preferred.w;
         signBtn_->setBounds({std::max(bx, x + w - sw), y, sw, kButtonH});
-        const float rw = reloadBtn_->sizeHint().preferred.w + 8.f;   // 1.48.1
-        reloadBtn_->setBounds({std::max(bx, x + w - sw - kGap - rw), y, rw, kButtonH});
         y += kButtonH + kGap;
         newHintLines_.clear();
         if (newOpen_ && hasRegistry_) {

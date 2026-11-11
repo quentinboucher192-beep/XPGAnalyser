@@ -387,8 +387,8 @@ int main(int argc, char** argv) {
         const int hmi = table ? rowOf(*table, 0, "hmi_editor") : -1;
         auto items = hmi >= 0 ? rightClick(*table, {static_cast<ui::RowIndex>(hmi)}) : std::vector<ui::PopupMenu::Item>{};
         const std::string o = topLabels(items);
-        check(o == "D\xC3\xA9plier;|Retirer (plus accord\xC3\xA9" "e);|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|Rien ne se supprime;",
-              "Fonctionnalites : l'ordre de la regle (rien en rouge : une fonctionnalite se retire) : " + o);
+        check(o == "D\xC3\xA9plier;|Retirer (plus accord\xC3\xA9" "e);|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|Supprimer\xE2\x80\xA6;",
+              "Fonctionnalites : l'ordre de la regle (1.48.1 : Supprimer, grise tant que des licences l'ont) : " + o);
         check(table && table->setUnfolded(static_cast<ui::RowIndex>(hmi), true) && has(cardText(*table, static_cast<ui::RowIndex>(hmi)), "QUI L'ACCORDE") &&
                   has(cardText(*table, static_cast<ui::RowIndex>(hmi)), "limite max_views"),
               "la ligne depliee : qui l'accorde, ses limites");

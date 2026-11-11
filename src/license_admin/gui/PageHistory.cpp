@@ -564,7 +564,6 @@ private:
         }
         m.copy("La ligne", lines, ui::Icon::Copy, "Copier les %n lignes", lines);
         m.exportRows([this, list] { exportList(list); }, host_.busy && host_.busy() ? std::string("un travail est en cours") : std::string());
-        m.note("Rien ne s'efface de l'historique");
         m.danger({.label = "Supprimer\xE2\x80\xA6", .many = "Supprimer les %n lignes\xE2\x80\xA6", .icon = ui::Icon::Delete, .why = kNoDelete});   // 1.48.1 : jamais
         return m;
     }

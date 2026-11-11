@@ -734,8 +734,8 @@ int main(int argc, char** argv) {
                     if (!it.separator) labels.push_back(it.label);
             const auto in = [&](const std::string& l) { return std::find(labels.begin(), labels.end(), l) != labels.end(); };
             check(menu && menu->isOpen() && in("Retirer ce PC\xE2\x80\xA6") && in("Nouveau code\xE2\x80\xA6") && in("D\xC3\xA9sactiver\xE2\x80\xA6") &&
-                      in("R\xC3\xA9voquer\xE2\x80\xA6") && in("Ouvrir le dossier de l'archive") && labels.back() == "R\xC3\xA9voquer\xE2\x80\xA6",
-                  "le menu ... : retirer, nouveau code, desactiver, revoquer (a la fin), le dossier");
+                      in("R\xC3\xA9voquer\xE2\x80\xA6") && in("Ouvrir le dossier de l'archive") && labels.back() == "Supprimer\xE2\x80\xA6",
+                  "le menu ... : retirer, nouveau code, desactiver, revoquer, supprimer (1.48.1 : toujours la, a la fin), le dossier");
             if (menu) menu->close();
         }
         check(rows(*lp, "licences.pcs") == 2 && cell(*lp, "licences.pcs", 0, 0) == "Poste essai en ligne 1" && cell(*lp, "licences.pcs", 1, 1) == "retir\xC3\xA9" "e" &&

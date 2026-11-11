@@ -267,20 +267,37 @@ protected:
         const float x = b.x + kPad, w = std::max(200.f, b.w - 2.f * kPad);
         float y = b.y + kPad;
         titleY_ = y;
+        {   // 1.48.1 : Actualiser, a droite du titre (comme Clients)
+            const float rw = reload_->sizeHint().preferred.w + 8.f;
+            reload_->setBounds({x + w - rw, y - 2.f, rw, kButtonH});
+        }
         y += 34.f;
         leadLines_ = wrap(kLead, kFonts.ui, w, 3);
         leadY_ = y;
         y += static_cast<float>(leadLines_.size()) * kLineH + 10.f;
+        // 1.48.1 : Supprimer dans la rangee ; etroite, le dossier dit moins (son infobulle dit le reste), puis Supprimer
+        // monte a cote d'Actualiser.
+        const auto rowWidth = [&] {
+            float sum = 0.f;
+            for (ui::Button* btn : {record_, export_, folder_, delete_}) sum += btn->sizeHint().preferred.w + kGap;
+            return sum;
+        };
+        const char* longFolder = "Ouvrir le registre des activations";
+        if (folder_->text() != longFolder) folder_->setText(longFolder);
+        if (rowWidth() > w) folder_->setText("Le registre");
+        const bool deleteUp = rowWidth() > w;
         float bx = x;
         for (ui::Button* btn : {record_, export_, folder_, delete_}) {
+            if (btn == delete_ && deleteUp) continue;
             const float bw = btn->sizeHint().preferred.w;
             btn->setBounds({bx, y, bw, kButtonH});
             bx += bw + kGap;
         }
-        {   // 1.48.1 : Actualiser, a droite
-            const float rw = reload_->sizeHint().preferred.w + 8.f;
-            reload_->setBounds({std::max(bx, x + w - rw), y, rw, kButtonH});
+        if (deleteUp) {
+            const float dw = delete_->sizeHint().preferred.w;
+            delete_->setBounds({reload_->bounds().x - kGap - dw, titleY_ - 2.f, dw, kButtonH});
         }
+
         y += kButtonH + kGap;
         const float bh = bar_->heightFor(w);   // 1.47.0 : la barre de filtres
         bar_->setBounds({x, y + 2.f, w, bh});

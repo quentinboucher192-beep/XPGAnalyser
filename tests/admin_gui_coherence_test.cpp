@@ -173,7 +173,9 @@ void sweep(Rig& rig, const std::string& step, const std::vector<std::string>& go
         for (const auto& g : gone) check(l.licenseId != g, step + " - le releve du service : plus de " + g);
     // 3. chaque page dessinee (sauf l'histoire : Historique, Revocations, Journal des admins)
     s.flash("Relu.", gui::Tone::Info);   // le bandeau du dernier resultat (qui nomme ce qui vient d'etre supprime) : pas la page
-    for (const char* page : {"tableau", "licences", "clients", "activations", "flottantes"}) {
+    // (le tableau de bord : ses chiffres, plus haut - son fil << dernieres operations >> est de l'histoire, comme l'Historique ;
+    // Clients : sa table, plus haut - la corbeille des clients montre un client supprime, pour le restaurer)
+    for (const char* page : {"licences", "activations", "flottantes"}) {
         s.navigate(page);
         const std::string t = rig.paint();
         for (const auto& g : gone) {

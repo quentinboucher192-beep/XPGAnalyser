@@ -408,7 +408,7 @@ int main(int argc, char** argv) {
         check(rr >= 0, "la r\xC3\xA9vocation de la Soci\xC3\xA9t\xC3\xA9 d'essai");
         auto items = rightClick(*table, {static_cast<ui::RowIndex>(rr)});
         const std::string order = topLabels(items);
-        check(order == "Ouvrir la licence;D\xC3\xA9plier;|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|Rien ne s'efface de l'historique;",
+        check(order == "Ouvrir la licence;D\xC3\xA9plier;|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|Supprimer\xE2\x80\xA6;",   // 1.48.1 : la, grise (sa raison)
               "l'ordre de la r\xC3\xA8gle, rien en rouge : " + order);
         const std::string goTo = childLabels(items, "Aller \xC3\xA0");
         check(inOrder(goTo, {"La licence " + idB, "Le client : Soci\xC3\xA9t\xC3\xA9 d'essai", "Ses PC (Activations)", "La r\xC3\xA9vocation (R\xC3\xA9vocations)", "Par " + plus}).empty(),
@@ -499,7 +499,7 @@ int main(int argc, char** argv) {
         const auto items = menu ? menu->items() : std::vector<ui::PopupMenu::Item>{};
         const std::string order = topLabels(items);
         check(menu && menu->isOpen() &&
-                  order == "D\xC3\xA9plier;|Renvoyer XPG-License-Admin-Setup-1.46.0.exe\xE2\x80\xA6;|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|Une version publi\xC3\xA9" "e ne se retire pas;",
+                  order == "D\xC3\xA9plier;|Renvoyer XPG-License-Admin-Setup-1.46.0.exe\xE2\x80\xA6;|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|Supprimer\xE2\x80\xA6;",   // 1.48.1 : la, grise (sa raison)
               "le clic droit, l'ordre de la r\xC3\xA8gle : " + order);
         check(has(childLabels(items, "Filtrer sur"), "Cette sorte : version") && has(childLabels(items, "Filtrer sur"), "\xC3\x80 jour : plus aucun PC") &&
                   has(childLabels(items, "Copier"), "Le SHA-256 de l'Admin") && has(childLabels(items, "Copier"), "Les notes"),
