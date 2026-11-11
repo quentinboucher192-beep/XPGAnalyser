@@ -184,8 +184,9 @@ int main(int argc, char** argv) {
         rig.shell->navigate("tableau");
         rig.shell->navigate("demandes");
         b = rig.paint(1100.f, 700.f);
-        check(rig.shell->currentPageId() == "commandes" && rig.shell->pageTitle() == "Commandes et demandes" && !has(b, "Demandes en ligne") && !has(b, "Page inconnue"),
-              "<< demandes >> (les anciens liens) : Commandes et demandes");
+        check(rig.shell->currentPageId() == "commandes" && rig.shell->pageTitle() == "Commandes et demandes",
+              "<< demandes >> (les anciens liens) : Commandes et demandes (" + rig.shell->currentPageId() + ", " + rig.shell->pageTitle() + ")");
+        check(!has(b, "Demandes en ligne"), "plus de << Demandes en ligne >> nulle part");
         // 1.46.0 : aux tailles de la fenetre du client (1373x917, 1400x900) et en 1920x1080 : aucune colonne hors de la
         // vue (les colonnes tiennent dans la table, sa barre de defilement comprise ; la table dans la fenetre).
         const struct {

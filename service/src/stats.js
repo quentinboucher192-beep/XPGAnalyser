@@ -284,14 +284,36 @@ function finDeVersion(publiees, version) {
     return fin;
 }
 
+// ============================================================================ 1.48.1 : ce qui n'existe plus
+// Les clients et les licences SUPPRIMES dans l'Admin (Clients > Supprimer le client, Licences > Supprimer : son archive,
+// sa corbeille) - le service garde leurs lignes (une licence revoquee reste dans la liste signee), mais les statistiques
+// ne les comptent plus, ni leurs PC (config stats_exclus, tenue par POST /admin/stats/reevaluer ; docs/STATISTIQUES.md,
+// par. 15). `clients` : normalises (normClient).
+export const MAX_EXCLUS = 5000;
+function lireExclus(o) {
+    const vide = { clients: new Set(), licences: new Set() };
+    try {
+        const v = JSON.parse(o.config("stats_exclus") || "{}");
+        return {
+            clients: new Set((Array.isArray(v.clients) ? v.clients : []).map(normClient).filter(Boolean)),
+            licences: new Set((Array.isArray(v.licences) ? v.licences : []).filter((x) => typeof x === "string" && x)),
+        };
+    } catch {
+        return vide;
+    }
+}
+
 // ============================================================================ les donnees d'une requete
-// Lues une fois, a la demande (une requete de statistiques en lit beaucoup : jamais deux fois la meme table).
-function donnees(o, now) {
+// Lues une fois, a la demande (une requete de statistiques en lit beaucoup : jamais deux fois la meme table). `brut` :
+// sans retirer ce qui n'existe plus (la part a retirer des releves : reevaluer).
+function donnees(o, now, brut = false) {
     const memo = new Map();
     const une = (nom, f) => {
         if (!memo.has(nom)) memo.set(nom, f());
         return memo.get(nom);
     };
+    const ex = brut ? { clients: new Set(), licences: new Set() } : lireExclus(o);
+    const rien = !ex.clients.size && !ex.licences.size;
     const d = {
         now,
         debut: o.debutStats(now),
@@ -299,7 +321,34 @@ function donnees(o, now) {
             const j = Number.parseInt(String(o.env.DECOUVERTE_JOURS || "30"), 10);
             return Number.isFinite(j) && j >= 1 && j <= 366 ? j : 30;
         })(),
-        faits: (genre) => une("f:" + genre, () => o.lignes("SELECT * FROM stats_faits WHERE genre = ? ORDER BY t, numero", genre)),
+        exclus: ex,
+        // Les licences qui n'existent plus : supprimees, ou d'un client supprime.
+        licencesExclues: () =>
+            une("licEx", () => {
+                const s = new Set(ex.licences);
+                if (ex.clients.size)
+                    for (const r of o.lignes("SELECT id, bloc, emission FROM licences")) if (ex.clients.has(normClient(o.infosLicence(r.id, r.bloc, r.emission).client))) s.add(r.id);
+                return s;
+            }),
+        exclu: (licence, client) => !rien && ((!!licence && d.licencesExclues().has(licence)) || (!!client && ex.clients.has(normClient(client)))),
+        // Les PC qui n'existent plus : toutes leurs activations sont celles de licences qui n'existent plus.
+        clesExclues: () =>
+            une("clesEx", () => {
+                const s = new Set();
+                if (rien) return s;
+                const lx = d.licencesExclues();
+                const gardees = new Set();
+                for (const r of o.lignes("SELECT licence, poste FROM activations")) (lx.has(r.licence) ? s : gardees).add(r.poste);
+                for (const c of gardees) s.delete(c);
+                return s;
+            }),
+        // Les admins connus (la liste, meme retires, et les cles de l'editeur) ; null : pas lus (aucun tri).
+        idsAdmins: null,
+        faits: (genre) =>
+            une("f:" + genre, () => {
+                const l = o.lignes("SELECT * FROM stats_faits WHERE genre = ? ORDER BY t, numero", genre);
+                return rien ? l : l.filter((f) => !d.exclu(f.licence, f.client) && !(f.poste && d.clesExclues().has(f.poste)));
+            }),
         detail: (f) => {
             try {
                 return f.detail ? JSON.parse(f.detail) : {};
@@ -330,7 +379,8 @@ function donnees(o, now) {
         licences: () => une("licences", () => o.licencesPourStats(d)),
         licMap: () => une("licMap", () => new Map(d.licences().map((l) => [l.id, l]))),
         // Les logiciels vus : cle -> {logiciel, version, vu}.
-        logiciels: () => une("logiciels", () => new Map(o.lignes("SELECT cle, logiciel, version, vu FROM logiciels").map((r) => [r.cle, r]))),
+        logiciels: () =>
+            une("logiciels", () => new Map(o.lignes("SELECT cle, logiciel, version, vu FROM logiciels").filter((r) => rien || !d.clesExclues().has(r.cle)).map((r) => [r.cle, r]))),
         activations: () => une("activations", () => o.activationsPourStats(d)),
         // La licence (la plus recemment activee) de chaque cle de PC : cle -> {licence, client, admin, nom, activee}.
         clePc: () =>
@@ -361,19 +411,28 @@ function donnees(o, now) {
                             admin: livreurs.get(c.numero) || "",
                             licence: c.licence || c.licence_existante || "",
                         },
-                    }));
+                    }))
+                    .filter((c) => !d.exclu(c.k.licence, c.k.client));
             }),
         publiees: () => une("publiees", () => versionsTriees(o.lignes("SELECT version, publiee FROM versions"))),
         versionsVues: () =>
             une("vv", () => {
                 const m = new Map();
                 for (const r of o.lignes("SELECT cle, version, logiciel, premiere FROM versions_vues ORDER BY cle, premiere")) {
+                    if (!rien && d.clesExclues().has(r.cle)) continue;
                     if (!m.has(r.cle)) m.set(r.cle, []);
                     m.get(r.cle).push(r);
                 }
                 return m;
             }),
-        compteurs: (mesure, de, a) => o.lignes("SELECT jour, cle, n FROM stats_compteurs WHERE jour >= ? AND jour <= ? AND mesure = ?", jourTexte(de), jourTexte(a), mesure),
+        compteurs: (mesure, de, a) =>
+            o
+                .lignes("SELECT jour, cle, n FROM stats_compteurs WHERE jour >= ? AND jour <= ? AND mesure = ?", jourTexte(de), jourTexte(a), mesure)
+                .filter((r) => {
+                    if (mesure === "jetons_pic_licence") return !d.exclu(r.cle, "");
+                    if (mesure === "admin_appels" && d.idsAdmins) return d.idsAdmins.has(r.cle.slice(0, r.cle.indexOf("|")));
+                    return true;
+                }),
         prixOffre: () =>
             une("prix", () => {
                 const m = new Map();
@@ -764,6 +823,14 @@ export const MESURES = {
 
 // Les mesures du releve du jour (des niveaux sans filtre) et leurs divisions.
 const MESURES_RELEVE = Object.keys(MESURES).filter((n) => MESURES[n].releve);
+// 1.48.1 : les niveaux que reevaluer compare (et leurs mots, dans la liste des corrections).
+const LIBELLES_NIVEAUX = {
+    licences_actives: "Licences actives",
+    pc_actifs: "PC actifs",
+    jetons_plafond: "Plafond des jetons",
+    pc_vus: "PC vus (30 jours)",
+    pc_a_jour: "PC à jour",
+};
 
 // Un element passe-t-il les filtres ?
 function passe(k, f) {
@@ -1121,7 +1188,7 @@ export const RoutesStats = {
                 k: { offre: i.offre, client: i.client, admin: i.signataire, type, licence: r.id },
                 kc: { offre: i.offre, client: i.client, admin: createur, type, licence: r.id },
             };
-        });
+        }).filter((l) => !d.exclu(l.id, l.client));
     },
 
     // Les activations : [activee, fin) (fin : le bail pour une active, la liberation ou le retrait sinon, la revocation).
@@ -1130,7 +1197,7 @@ export const RoutesStats = {
         const revT = d.revocationsTemps();
         const liste = this.revocations();
         const logiciels = d.logiciels();
-        return this.lignes("SELECT licence, poste, nom, activee, vue, jusqu_a, etat FROM activations").map((r) => {
+        return this.lignes("SELECT licence, poste, nom, activee, vue, jusqu_a, etat FROM activations").filter((r) => !d.exclu(r.licence, "")).map((r) => {
             const l = lic.get(r.licence);
             let fin = r.etat === "active" ? r.jusqu_a : r.vue;
             if (r.etat === "active" && l && trouverRevocation(liste, r.licence, r.poste, l.emission))
@@ -1167,6 +1234,7 @@ export const RoutesStats = {
                 if (aJour) fin = Math.min(fin, finDeVersion(publiees, lignes[i].version));
                 if (fin > debut)
                     out.push({
+                        cle,
                         debut,
                         fin,
                         p: 1,
@@ -1348,6 +1416,7 @@ export const RoutesStats = {
         const perAvant = comparer === "rien" ? null : per.map(([x, y]) => (comparer === "avant" ? [x - longueur, y - longueur] : [anAvant(x), anAvant(y)]));
         this.ecrireCompteursStats(ctx.now, true);
         const d = donnees(this, ctx.now);
+        d.idsAdmins = await this.idsAdminsConnus(); // 1.48.1 : un admin sorti de la liste n'est plus compte
         const de = perAvant ? Math.min(du, perAvant[0][0]) : du;
         const releves = this.relevesEntre(de, au);
         const moi = await this.idAppelant(ctx);
@@ -1418,6 +1487,8 @@ export const RoutesStats = {
             out[nom] = m;
         }
         out.version_derniere = this.config("version_derniere") || "";
+        // 1.48.1 : ce qu'il ne compte deja pas (reevaluer ne le retire pas une seconde fois)
+        if (d.licencesExclues().size || d.clesExclues().size) out.retires = { licences: [...d.licencesExclues()].sort(), cles: [...d.clesExclues()].sort() };
         return out;
     },
 
@@ -1644,13 +1715,45 @@ export const RoutesStats = {
         const p = ctx.url.searchParams;
         const periode = p.get("periode") === null ? 30 : Number(p.get("periode"));
         if (!Number.isInteger(periode) || periode < 1 || periode > 400) throw mal("periode", "« periode » : un nombre de jours, de 1 à 400.");
-        const now = ctx.now;
-        const st = this.etatStats();
-        const d = donnees(this, now);
         const voitDemandes = ctx.appelant.role !== "admin" || ctx.appelant.droits.includes("demandes");
+        return reponseJson(200, await this.calculerGlobe(ctx.now, periode, voitDemandes));
+    },
+
+    // 1.48.1 : les admins connus (la liste, meme retires ; les cles de l'editeur) : leurs identifiants xpg-...
+    async idsAdminsConnus() {
+        const s = new Set(this.lignes("SELECT id FROM admins").map((r) => r.id));
+        for (const k of await this.clesEditeur()) s.add(k.id);
+        return s;
+    },
+
+    // 1.48.1 : << actifs maintenant >> - les cles des Studios vues dans les 15 dernieres minutes (en memoire, ou le << vu >>
+    // de leur lieu) : jamais une cle d'admin (meme retire) ou de l'editeur, un Admin, un PC d'un client supprime. Le
+    // globe (ses villes et sans_lieu) et le direct comptent les memes.
+    async clesActives(d, now) {
+        const st = this.etatStats();
+        const admins = new Set(this.lignes("SELECT cle FROM admins").map((r) => r.cle));
+        for (const k of await this.clesEditeur()) admins.add(k.hex);
+        const lieux = new Map(this.lignes("SELECT cle, logiciel, vu FROM lieux WHERE vu >= ?", now - ACTIF).map((r) => [r.cle, r]));
+        const vus = new Map();
+        for (const [cle, l] of lieux) vus.set(cle, l.vu);
+        for (const [cle, t] of st.vus) vus.set(cle, Math.max(t, vus.get(cle) || 0));
+        const out = new Set();
+        for (const [cle, t] of vus) {
+            if (now - t > ACTIF || admins.has(cle) || d.clesExclues().has(cle)) continue;
+            const log = d.logiciels().get(cle);
+            const logiciel = log ? log.logiciel : lieux.has(cle) ? lieux.get(cle).logiciel : "";
+            if (logiciel !== LOGICIEL_ADMIN) out.add(cle);
+        }
+        return out;
+    },
+
+    // Le globe (GET /admin/globe ; reevaluer le compare avant et apres).
+    async calculerGlobe(now, periode, voitDemandes) {
+        const d = donnees(this, now);
         // les cles des admins (pas retires) et de l'editeur
         const admins = new Map(this.lignes("SELECT cle, id FROM admins WHERE retire = 0").map((r) => [r.cle, r.id]));
         for (const k of await this.clesEditeur()) admins.set(k.hex, k.id);
+        const actifsMaintenant = await this.clesActives(d, now);
         const derniere = this.config("version_derniere") || "";
         const nDerniere = versionEnNombres(derniere);
         // les PC actives : cle -> {clients}
@@ -1673,6 +1776,7 @@ export const RoutesStats = {
         const placees = new Set();
         for (const l of this.lignes("SELECT cle, poste, logiciel, ville, region, pays, lat, lon, colo, vu FROM lieux")) {
             placees.add(l.cle);
+            if (d.clesExclues().has(l.cle)) continue; // 1.48.1 : un PC d'un client supprime n'est plus sur le globe
             const id = idVille(l);
             let v = villes.get(id);
             if (!v) {
@@ -1708,8 +1812,7 @@ export const RoutesStats = {
                 continue;
             }
             if (l.logiciel === LOGICIEL_ADMIN) continue; // un Admin qui n'est (plus) pas dans la liste
-            const vu = Math.max(st.vus.get(l.cle) || 0, l.vu);
-            if (now - vu <= ACTIF) {
+            if (actifsMaintenant.has(l.cle)) {
                 v.actifs++;
                 totaux.actifs++;
             }
@@ -1771,7 +1874,9 @@ export const RoutesStats = {
         for (const cle of actives.keys()) if (!placees.has(cle)) sansPc++;
         let sansAdmins = 0;
         for (const cle of admins.keys()) if (!placees.has(cle)) sansAdmins++;
-        return reponseJson(200, {
+        let sansActifs = 0;
+        for (const cle of actifsMaintenant) if (!placees.has(cle)) sansActifs++;
+        return {
             version: this.versionService,
             heure: now,
             periode,
@@ -1789,8 +1894,8 @@ export const RoutesStats = {
                 commandes: totaux.commandes,
                 demandes: totaux.demandes,
             },
-            sans_lieu: { pc: sansPc, admins: sansAdmins },
-        });
+            sans_lieu: { pc: sansPc, admins: sansAdmins, actifs: sansActifs },
+        };
     },
 
     // GET /admin/globe/direct?depuis=<unix> : les connexions depuis `depuis` (15 minutes au plus), en memoire.
@@ -1802,11 +1907,217 @@ export const RoutesStats = {
         const st = this.etatStats();
         this.elaguerStats(now, false);
         const connexions = st.direct.filter((x) => x.t > depuis).slice(-DIRECT_RENDUS);
-        const admins = new Set(this.lignes("SELECT cle FROM admins").map((r) => r.cle));
-        for (const k of await this.clesEditeur()) admins.add(k.hex);
-        let actifs = 0;
-        for (const [cle, t] of st.vus) if (now - t <= ACTIF && !admins.has(cle)) actifs++;
+        // 1.48.1 : les memes que le globe (ses villes et sans_lieu.actifs)
+        const actifs = (await this.clesActives(donnees(this, now), now)).size;
         return reponseJson(200, { heure: now, actifs, connexions });
+    },
+
+    // ============================================================ 1.48.1 : POST /admin/stats/reevaluer ==
+    // Les statistiques remises d'accord avec ce qui existe (docs/STATISTIQUES.md, par. 15) : la liste de ce qui n'existe
+    // plus (corps facultatif : {"supprimer": {"clients": [...], "licences": [...]}, "remettre": {...}} - un client ou une
+    // licence supprimes, ou restaures, dans l'Admin), puis ce qui est garde et ne le dit plus : les releves des jours
+    // passes (la part de ce qui n'existe plus), les compteurs (les jetons d'une licence supprimee, les appels d'un admin
+    // sorti de la liste ; le pic du jour), la derniere version. N'ecrit QUE des statistiques (jamais une licence, un
+    // client) ; une seconde fois : rien. Rend la liste des corrections.
+    async reevaluerStats(ctx) {
+        const corps = this.corpsJson(ctx);
+        const now = ctx.now;
+        const lire = (o, champ) => {
+            if (o === undefined || o === null) return { clients: [], licences: [] };
+            if (typeof o !== "object" || Array.isArray(o)) throw mal(champ, "« " + champ + " » : {\"clients\": [...], \"licences\": [...]}.");
+            const liste = (v, nom) => {
+                if (v === undefined || v === null) return [];
+                if (!Array.isArray(v) || v.length > MAX_EXCLUS || v.some((x) => typeof x !== "string" || !x.trim() || x.length > 200))
+                    throw mal(champ, "« " + champ + "." + nom + " » : une liste de noms (" + MAX_EXCLUS + " au plus).");
+                return v.map((x) => x.trim());
+            };
+            return { clients: liste(o.clients, "clients"), licences: liste(o.licences, "licences") };
+        };
+        const sup = lire(corps.supprimer, "supprimer");
+        const rem = lire(corps.remettre, "remettre");
+        // les droits : ceux de la suppression elle-meme (un admin ; l'admin+ a tout)
+        if (ctx.appelant.role === "admin") {
+            const faut = [];
+            if ((sup.clients.length || rem.clients.length) && !ctx.appelant.droits.includes("client_supprimer")) faut.push("client_supprimer");
+            if ((sup.licences.length || rem.licences.length) && !ctx.appelant.droits.includes("licence_revoquer")) faut.push("licence_revoquer");
+            if (faut.length) throw new Erreur(403, "droit", "Il te faut le droit « " + faut.join(" », « ") + " » pour dire au service ce qui est supprimé.", { droits: faut });
+        }
+        this.ecrireCompteursStats(now, true);
+        const corrections = [];
+        const dire = (groupe, texte, plus = {}) => corrections.push({ groupe, texte, ...plus });
+        // 1. la liste de ce qui n'existe plus
+        const ex = lireExclus(this);
+        const avantEx = JSON.stringify({ c: [...ex.clients].sort(), l: [...ex.licences].sort() });
+        for (const c of sup.clients) ex.clients.add(normClient(c));
+        for (const c of rem.clients) ex.clients.delete(normClient(c));
+        for (const l of sup.licences) ex.licences.add(l);
+        for (const l of rem.licences) ex.licences.delete(l);
+        const apresEx = { clients: [...ex.clients].sort(), licences: [...ex.licences].sort() };
+        if (apresEx.clients.length > MAX_EXCLUS || apresEx.licences.length > MAX_EXCLUS) throw new Erreur(507, "limite", "Trop de clients ou de licences supprimés (" + MAX_EXCLUS + " au plus).");
+        if (JSON.stringify({ c: apresEx.clients, l: apresEx.licences }) !== avantEx) {
+            const avant = await this.resumeStats(now);
+            this.ecrireConfig("stats_exclus", apresEx.clients.length || apresEx.licences.length ? JSON.stringify(apresEx) : null);
+            const apres = await this.resumeStats(now);
+            for (const c of sup.clients) dire("exclus", "Client « " + c + " » : retiré des statistiques");
+            for (const c of rem.clients) dire("exclus", "Client « " + c + " » : de nouveau compté");
+            for (const l of sup.licences) dire("exclus", "Licence " + l + " : retirée des statistiques");
+            for (const l of rem.licences) dire("exclus", "Licence " + l + " : de nouveau comptée");
+            for (const nom of Object.keys(LIBELLES_NIVEAUX))
+                if (avant.niveaux[nom] !== apres.niveaux[nom])
+                    dire("maintenant", LIBELLES_NIVEAUX[nom] + " (maintenant) : " + avant.niveaux[nom] + " → " + apres.niveaux[nom], { mesure: nom, avant: avant.niveaux[nom], apres: apres.niveaux[nom] });
+            for (const [cle, lib] of [["clients", "clients"], ["pc", "PC"], ["actifs", "actifs maintenant"], ["pas_a_jour", "clients pas à jour"]])
+                if (avant.globe.totaux[cle] !== apres.globe.totaux[cle]) dire("globe", "Globe, " + lib + " : " + avant.globe.totaux[cle] + " → " + apres.globe.totaux[cle]);
+            const villes = new Map(apres.globe.villes.map((v) => [v.id, v]));
+            for (const v of avant.globe.villes) {
+                const w = villes.get(v.id);
+                if (!w) dire("globe", "Globe : " + v.ville + " retirée (plus rien à y montrer)");
+                else if (w.pc !== v.pc) dire("globe", "Globe, " + v.ville + " : " + v.pc + " → " + w.pc + " PC");
+            }
+        }
+        // 2. les releves des jours passes
+        this.corrigerReleves(now, dire);
+        // 3. les compteurs
+        await this.corrigerCompteurs(now, dire);
+        // 4. la derniere version publiee
+        const dv = this.derniereVersion();
+        const cfg = this.config("version_derniere") || "";
+        if (dv && dv.version !== cfg) {
+            this.ecrireConfig("version_derniere", dv.version);
+            dire("versions", "Mises à jour, dernière version : " + (cfg || "aucune") + " → " + dv.version);
+        }
+        const d = donnees(this, now);
+        return reponseJson(200, {
+            version: this.versionService,
+            heure: now,
+            jour: jourDe(now),
+            exclus: { clients: d.exclus.clients.size, licences: d.licencesExclues().size, pc: d.clesExclues().size },
+            nombre: corrections.length,
+            corrections,
+        });
+    },
+
+    // Ce que montrent les vues maintenant (reevaluer : avant et apres une suppression).
+    async resumeStats(now) {
+        const n = this.niveauxMaintenant(now);
+        const niveaux = {};
+        for (const nom of Object.keys(LIBELLES_NIVEAUX)) niveaux[nom] = n[nom] ? n[nom].total : 0;
+        return { niveaux, globe: await this.calculerGlobe(now, 30, true) };
+    },
+
+    // Les releves des jours passes : la part de ce qui n'existe plus retiree (celle de ce qui revient, remise). Une ligne
+    // sait ce qu'elle ne compte deja plus (retires).
+    corrigerReleves(now, dire) {
+        const d = donnees(this, now);
+        const lx = d.licencesExclues();
+        const kx = d.clesExclues();
+        let brut = null;
+        for (const r of this.lignes("SELECT jour, heure, donnees FROM stats_quotidien ORDER BY jour")) {
+            let rel;
+            try {
+                rel = JSON.parse(r.donnees);
+            } catch {
+                continue;
+            }
+            if (!rel || typeof rel !== "object") continue;
+            const ret = rel.retires && typeof rel.retires === "object" ? rel.retires : {};
+            const dejaL = new Set(Array.isArray(ret.licences) ? ret.licences : []);
+            const dejaK = new Set(Array.isArray(ret.cles) ? ret.cles : []);
+            const enMoinsL = [...lx].filter((x) => !dejaL.has(x));
+            const enPlusL = [...dejaL].filter((x) => !lx.has(x));
+            const enMoinsK = [...kx].filter((x) => !dejaK.has(x));
+            const enPlusK = [...dejaK].filter((x) => !kx.has(x));
+            if (!enMoinsL.length && !enPlusL.length && !enMoinsK.length && !enPlusK.length) continue;
+            if (!brut) brut = donnees(this, now, true);
+            const avant = {};
+            for (const nom of Object.keys(LIBELLES_NIVEAUX)) if (rel[nom] && typeof rel[nom].total === "number") avant[nom] = rel[nom].total;
+            this.partDansReleve(brut, rel, r.heure, new Set(enMoinsL), new Set(enMoinsK), -1);
+            this.partDansReleve(brut, rel, r.heure, new Set(enPlusL), new Set(enPlusK), 1);
+            if (lx.size || kx.size) rel.retires = { licences: [...lx].sort(), cles: [...kx].sort() };
+            else delete rel.retires;
+            this.x("UPDATE stats_quotidien SET donnees = ? WHERE jour = ?", JSON.stringify(rel), r.jour);
+            for (const [nom, v] of Object.entries(avant))
+                if (rel[nom].total !== v)
+                    dire("releves", LIBELLES_NIVEAUX[nom] + ", relevé du " + r.jour.slice(8, 10) + "/" + r.jour.slice(5, 7) + " : " + v + " → " + rel[nom].total, {
+                        mesure: nom,
+                        jour: r.jour,
+                        avant: v,
+                        apres: rel[nom].total,
+                    });
+        }
+    },
+
+    // La part de ces licences et de ces PC dans un releve pris a l'instant T, retiree (signe -1) ou remise (+1).
+    partDansReleve(brut, rel, T, licences, cles, signe) {
+        if (!licences.size && !cles.size) return;
+        const ajouter = (nom, n, parts) => {
+            const m = rel[nom];
+            if (!m || typeof m.total !== "number") return;
+            m.total = Math.max(0, m.total + signe * n);
+            if (!m.parts || typeof m.parts !== "object") return;
+            for (const [par, cle] of Object.entries(parts)) {
+                const pp = m.parts[par];
+                if (!pp || typeof pp !== "object") continue;
+                const v = Math.max(0, (Number(pp[cle]) || 0) + signe * n);
+                if (v) pp[cle] = v;
+                else delete pp[cle];
+            }
+        };
+        const dans = (iv) => iv.debut <= T && iv.fin > T;
+        for (const l of brut.licences()) {
+            if (!licences.has(l.id) || !dans({ debut: l.creee, fin: l.fin })) continue;
+            ajouter("licences_actives", 1, { offre: l.k.offre, admin: l.k.admin, type: l.k.type });
+            if (l.type === "flottante") ajouter("jetons_plafond", l.postes, {});
+        }
+        for (const a of brut.activations()) if (licences.has(a.licence) && dans({ debut: a.activee, fin: a.fin })) ajouter("pc_actifs", 1, { offre: a.k.offre, admin: a.k.admin, type: a.k.type, logiciel: a.k.logiciel });
+        if (cles.size) {
+            for (const s of this.segmentsVersions(brut, false)) if (cles.has(s.cle) && dans(s)) ajouter("pc_vus", 1, { logiciel: s.k.logiciel, version: s.k.version });
+            for (const s of this.segmentsVersions(brut, true)) if (cles.has(s.cle) && dans(s)) ajouter("pc_a_jour", 1, { logiciel: s.k.logiciel });
+        }
+    },
+
+    // Les compteurs : les jetons d'une licence qui n'existe plus, les appels d'un admin sorti de la liste, le pic des
+    // jetons d'un jour plus grand que la somme des pics de ses licences (ce qui reste).
+    async corrigerCompteurs(now, dire) {
+        const st = this.etatStats();
+        const d = donnees(this, now);
+        const connues = new Set(this.lignes("SELECT id FROM licences").map((r) => r.id));
+        const parLicence = new Map();
+        for (const r of this.lignes("SELECT jour, cle, n FROM stats_compteurs WHERE mesure = 'jetons_pic_licence'")) {
+            if (!connues.has(r.cle) || d.exclu(r.cle, "")) parLicence.set(r.cle, (parLicence.get(r.cle) || 0) + 1);
+        }
+        for (const [licence, n] of parLicence) {
+            this.x("DELETE FROM stats_compteurs WHERE mesure = 'jetons_pic_licence' AND cle = ?", licence);
+            dire("compteurs", "Jetons de la licence " + licence + " (qui n'existe plus) : " + n + (n > 1 ? " jours retirés" : " jour retiré"));
+        }
+        const ids = await this.idsAdminsConnus();
+        const parAdmin = new Map();
+        for (const r of this.lignes("SELECT jour, cle FROM stats_compteurs WHERE mesure = 'admin_appels'")) {
+            const id = r.cle.slice(0, r.cle.indexOf("|"));
+            if (!ids.has(id)) {
+                if (!parAdmin.has(id)) parAdmin.set(id, new Set());
+                parAdmin.get(id).add(r.jour);
+            }
+        }
+        for (const [id, jours] of parAdmin) {
+            this.x("DELETE FROM stats_compteurs WHERE mesure = 'admin_appels' AND cle LIKE ?", id + "|%");
+            dire("compteurs", "Appels de " + id + " (plus dans la liste des admins) : " + jours.size + (jours.size > 1 ? " jours retirés" : " jour retiré"));
+        }
+        // ce qui est en memoire suit
+        for (const [k, c] of st.compteurs) {
+            if (c.mesure === "jetons_pic_licence" && parLicence.has(c.cle)) st.compteurs.delete(k);
+            if (c.mesure === "admin_appels" && parAdmin.has(c.cle.slice(0, c.cle.indexOf("|")))) st.compteurs.delete(k);
+        }
+        // le pic des jetons d'un jour : jamais plus que la somme des pics de ses licences (un jour qui en a)
+        const somme = new Map();
+        for (const r of this.lignes("SELECT jour, SUM(n) AS n FROM stats_compteurs WHERE mesure = 'jetons_pic_licence' GROUP BY jour")) somme.set(r.jour, r.n);
+        for (const r of this.lignes("SELECT jour, n FROM stats_compteurs WHERE mesure = 'jetons_pic' AND cle = '' ORDER BY jour")) {
+            const plafond = somme.get(r.jour) || 0; // les pics de ses licences (aucune : elles n'existent plus)
+            if (r.n <= plafond) continue;
+            this.x("UPDATE stats_compteurs SET n = ? WHERE mesure = 'jetons_pic' AND cle = '' AND jour = ?", plafond, r.jour);
+            const m = st.compteurs.get(r.jour + "\u0000jetons_pic\u0000");
+            if (m) m.n = Math.min(m.n, plafond);
+            dire("compteurs", "Pic des jetons, " + r.jour.slice(8, 10) + "/" + r.jour.slice(5, 7) + " : " + r.n + " → " + plafond, { mesure: "jetons_pic", jour: r.jour, avant: r.n, apres: plafond });
+        }
     },
 };
 

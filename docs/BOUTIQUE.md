@@ -410,7 +410,8 @@ demande sans paiement** (le même objet, sans Stripe) ; **chaque ligne se valide
 ### Les états
 - La commande (`etat`) : `a_payer` → `payee` (le webhook) ; ou `a_valider` (une demande) ; puis `livree` quand toutes
   ses lignes sont finies (au moins une livrée) ou `refusee` (toutes refusées) ; `expiree`, `annulee`, `echec_paiement`,
-  `remboursee` comme avant (les lignes en attente suivent).
+  `remboursee` comme avant (les lignes en attente suivent). 1.48.1 : `remboursee` aussi quand **toutes** ses lignes ont
+  été remboursées une à une ; une commande dont un seul article est remboursé garde son état (`livree`, `payee`…).
 - **Chaque ligne** (`etat`) : `a_payer`, `payee`, `a_valider`, `a_revoir` (la livraison a échoué : l'Admin dit pourquoi),
   `livree` (avec `licence`), `refusee` (avec `erreur` : la raison), `remboursee`, `expiree`, `annulee`, `echec_paiement`.
 - Une ligne (JSON) : `{"ligne":1,"article","genre","edition"|"option"+"jours","libelle","montant","etat","licence"?,
@@ -440,7 +441,31 @@ demande sans paiement** (le même objet, sans Stripe) ; **chaque ligne se valide
   (avec `raison`). 200 `{"numero","ligne","etat","etat_commande"}` ; 409 `etat` (`{"etat","licence"}`) si la ligne
   n'est pas à valider (une seconde livraison : refusée), 409 `prise` (prise par un autre Admin).
 - Les anciennes routes `livree` / `a-revoir` marchent pour une commande payée d'une ligne (les Admins 1.46/1.47).
+- **1.48.1 : rembourser UN article** - `POST /admin/commandes/rembourser {"numero","ligne"}` (l'admin+, comme toute la
+  commande) : la commande payée (`payee`, `livree` ou `a_revoir`, pas une demande), la ligne `payee`, `a_revoir`,
+  `livree` ou `refusee` ; Stripe rembourse **le montant de cette ligne** sur le même paiement (`POST /v1/refunds`
+  `payment_intent`, `amount` en centimes, `metadata[commande]`, `metadata[ligne]` ; la clé d'idempotence
+  `remboursement-<numero>-ligne-<ligne>`) ; dès que Stripe l'accepte, la ligne passe `remboursee` (le webhook
+  `charge.refunded` d'un remboursement partiel ne dit pas quelle ligne : il ne change rien, comme avant) ; les autres
+  lignes ne bougent pas ; la commande suit ses lignes (toutes remboursées : `remboursee`). 200
+  `{"numero","ligne","remboursement","montant","etat":"remboursee","etat_commande"}` ; **409 `etat`** : la ligne déjà
+  remboursée (jamais un second remboursement), une ligne ou une commande sans paiement, ou le remboursement de toute la
+  commande déjà demandé ; 404 `ligne`. Comme pour toute la commande, la licence ou l'option livrée par cette ligne
+  **n'est pas révoquée d'office** (l'Admin le dit ; l'éditeur décide). Sans `ligne` : toute la commande, comme avant
+  (les Admins 1.46 à 1.48.0 ; après des articles remboursés, Stripe rend le reste). L'Admin ne demande un article seul
+  qu'à un service 1.48.1 ou plus (un service plus ancien rembourserait toute la commande).
 - **Livrer seul** : l'Admin ouvert livre les lignes `payee` d'elle-même ; une ligne `a_valider` (une demande) attend
   « Délivrer » ; **Refuser** dit la raison. Une option `avec_ligne` attend que sa ligne de licence soit livrée.
 - La table `commande_lignes` (`numero`, `ligne`, …) est dans la sauvegarde de secours ; le schéma reste 5.
-- Les anciennes demandes (`POST /v1/demandes`, les Studios 1.47 et avant) gardent leur page « Demandes en ligne ».
+- 1.48.1 : **plus de page « Demandes en ligne »** - les demandes de l'assistant « Demander ma licence » (`POST
+  /v1/demandes` : le profil, les PC, la durée, l'offre ; les Studios 1.47 et avant aussi) sont des rangées de
+  « Commandes et demandes » (type « Demande de licence », état « à valider »), à côté des achats et des demandes du
+  panier, avec la même barre (la puce « Type » : Achat, Demande, Demande de licence), le même clic droit et le même
+  volet. « Délivrer… » y lance l'acceptation d'avant (l'assistant de licence, sa confirmation, la signature, le dépôt,
+  le journal) ; « Délivrer en ligne… », « Refuser… » (la raison) et « Renvoyer la réponse » aussi ; le droit
+  « demandes » comme avant. Rien ne change sur le service pour cela (l'Admin réunit les deux listes). Les anciens liens
+  (le tableau de bord, le journal, la fiche d'un client, les avis) mènent à « Commandes et demandes », filtrée sur les
+  demandes de licence ; le menu compte les deux.
+- 1.48.1 : « Rembourser… » sur une ligne (le volet, le clic droit) rembourse **cet article** (la question nomme
+  l'article et son montant TTC) ; « Rembourser la commande… » toute la commande. Le journal des admins : une ligne par
+  article remboursé.

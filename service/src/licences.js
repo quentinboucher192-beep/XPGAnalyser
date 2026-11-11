@@ -270,6 +270,7 @@ const ROUTES = {
     "GET /admin/stats/mises-a-jour": { f: "misesAJourStats", signe: "admin" },
     "GET /admin/stats/admins": { f: "adminsStats", signe: "admin" },
     "POST /admin/stats/releve": { f: "releveStats", signe: "plus", derogation: true },
+    "POST /admin/stats/reevaluer": { f: "reevaluerStats", signe: "admin" }, // 1.48.1 : la coherence (stats.js)
     "GET /admin/globe": { f: "globeStats", signe: "admin" },
     "GET /admin/globe/direct": { f: "globeDirect", signe: "admin" },
     // 1.47.0 : la derogation << Gerer le service >> (derogations.js, docs/ADMINS.md § 11)

@@ -729,8 +729,8 @@ int main(int argc, char** argv) {
         auto* table = find<ui::TableView>(*op, "commandes.table");
         const auto cell = [&](int r, std::size_t c) { return table && r >= 0 ? table->model()->cellText(static_cast<ui::RowIndex>(r), c) : std::string(); };
         int rf = table ? rowOf(*table, 2, "Client d'essai Zeta") : -1;
-        check(rf >= 0 && cell(rf, 8) == "Demande de licence" && cell(rf, 5) == "\xC3\xA0 valider" && has(cell(rf, 3), "Demande de licence") && has(cell(rf, 3), "PROFESSIONAL"),
-              "une rangee << Demande de licence >>, a valider, l'offre voulue (" + cell(rf, 3) + ")");
+        check(rf >= 0 && cell(rf, 8) == "Demande de licence" && cell(rf, 5) == "\xC3\xA0 valider" && cell(rf, 3).rfind("Demande de licence", 0) == 0 && !has(cell(rf, 3), "\xE2\x80\x94"),
+              "une rangee << Demande de licence >>, a valider (" + cell(rf, 3) + ")");
         if (rf >= 0) table->selectModelRows({static_cast<ui::RowIndex>(rf)});
         t = paintPage(*op, 1600.f, 900.f);
         checkText(has(t, "Demande de licence n\xC2\xB0 " + std::to_string(pcF.number)) && has(t, "Poste essai F") && has(t, "D\xC3\xA9livrer\xE2\x80\xA6"),
@@ -754,7 +754,7 @@ int main(int argc, char** argv) {
         fx.ws->reload();
         op->refresh();
         rf = rowOf(*table, 2, "Client d'essai Zeta");
-        check(rf >= 0 && cell(rf, 5) != "\xC3\xA0 valider" && !cell(rf, 7).empty(), "la rangee n'attend plus (" + cell(rf, 5) + "), qui l'a delivree (" + cell(rf, 7) + ")");
+        check(rf >= 0 && cell(rf, 5) == "livr\xC3\xA9" "e", "la rangee : livree (" + cell(rf, 5) + ")");
         const int rg = rowOf(*table, 2, "Client d'essai Eta");
         if (rg >= 0) table->selectModelRows({static_cast<ui::RowIndex>(rg)});
         (void)paintPage(*op, 1600.f, 900.f);

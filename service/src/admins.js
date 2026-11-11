@@ -97,6 +97,7 @@ export const ACTIONS_JOURNAL = [
     // 1.47.0 : la derogation << Gerer le service >> (derogations.js) - accordee, revoquee par l'admin+
     "derogation_accorder",
     "derogation_revoquer",
+    "stats_reevaluer", // 1.48.1 : les statistiques reevaluees (docs/STATISTIQUES.md, par. 15)
 ];
 // 1.47.0 : derogation_utilisee, derogation_expiree (derogations.js)
 export const ACTIONS_SERVICE = ["signature_refusee", "autre_pc", "demande_admin", "sauvegarde", "restauration", "derogation_utilisee", "derogation_expiree"];

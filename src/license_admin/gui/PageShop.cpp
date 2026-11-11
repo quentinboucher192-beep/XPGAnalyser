@@ -1289,7 +1289,8 @@ private:
             x.option = e.option;
             x.days = e.optionDays;
             x.existingLicence = e.licenseId;
-            x.label = std::string(kKindLicence) + " : " + requestflow::wanted(ws(), e);
+            const std::string wanted = requestflow::wanted(ws(), e);
+            x.label = std::string(kKindLicence) + (wanted.empty() || wanted == "\xE2\x80\x94" ? std::string() : " : " + wanted);
             x.payment = false;
             x.currency = "eur";
             const auto st = requestState(e);
@@ -1301,12 +1302,21 @@ private:
                 if (const auto d = who_.last({"demande_accepter", "demande_refuser"}, "demande " + std::to_string(e.number))) by = d->who;
             rows.push_back({std::move(x), by, st.second, static_cast<int>(i)});
         }
-        std::stable_sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) { return a.o.created > b.o.created; });
+        // Les deux listes gardent leur ordre (les plus recentes d'abord) ; une demande de licence se place avant la premiere
+        // commande plus ancienne qu'elle.
+        const auto firstRequest = std::find_if(rows.begin(), rows.end(), [](const Row& x) { return x.req >= 0; });
+        std::vector<Row> merged;
+        merged.reserve(rows.size());
+        auto oi = rows.begin(), ri = firstRequest;
+        while (oi != firstRequest || ri != rows.end()) {
+            if (ri != rows.end() && (oi == firstRequest || ri->o.created > oi->o.created)) merged.push_back(std::move(*ri++));
+            else merged.push_back(std::move(*oi++));
+        }
         all_->rows.clear();
         all_->by.clear();
         all_->req.clear();
         all_->stateText.clear();
-        for (auto& r : rows) {
+        for (auto& r : merged) {
             all_->rows.push_back(std::move(r.o));
             all_->by.push_back(std::move(r.by));
             all_->req.push_back(r.req);

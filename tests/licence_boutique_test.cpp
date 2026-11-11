@@ -648,6 +648,31 @@ int main(int argc, char** argv) {
         check(refuse.status == 200 && r.ok && o && o->lines.size() == 1 && o->lines[0].state == shop::kRefused && has(o->lines[0].error, "Essai") &&
                   o->state == shop::kRefused,
               "l'\xC3\xA9" "diteur refuse la ligne : le Studio la voit refus\xC3\xA9" "e, avec sa raison (" + std::to_string(refuse.status) + " " + refuse.body.substr(0, 120) + ")");
+        // 1.48.1 : un panier paye, l'editeur rembourse UN article (la ligne 2) : Mes achats le dit << rembourse >>, l'autre ligne
+        // garde son etat (le faux Stripe, jamais le vrai)
+        f.lines = {pro, opt};
+        f.payment = true;
+        r = ls::placeOrder(f);
+        const std::uint64_t np = r.orderNumber;
+        const Http paid = stripeEvent(stripe.base(), kHook, "checkout.session.completed", sessionOf(stripe.base(), static_cast<long long>(np)));
+        const Http back = editor("POST", "/admin/commandes/rembourser", jsonBody({{"numero", np}, {"ligne", 2}}));
+        r = ls::refreshOrders();
+        rec = record();
+        o = orderIn(rec, np);
+        check(np > 0 && paid.v.integer("statut") == 200 && back.status == 200 && r.ok && o && o->lines.size() == 2 && o->lines[0].state == shop::kPaid &&
+                  o->lines[1].state == shop::kRefunded && o->state == shop::kPaid,
+              "un article rembours\xC3\xA9 : sa ligne << rembours\xC3\xA9" "e >>, l'autre reste pay\xC3\xA9" "e (" + std::to_string(back.status) + " " + back.body.substr(0, 120) + ")");
+        if (o) {
+            const auto v = app::licence::orderView(*o, lic::systemNow());
+            std::string facts, l1, l2;
+            for (const auto& [k, x] : v.facts) {
+                facts += k + " : " + x + "\n";
+                if (k == "Ligne 1") l1 = x;
+                if (k == "Ligne 2") l2 = x;
+            }
+            check(has(l2, "\xE2\x80\x94 rembours\xC3\xA9") && has(l1, "\xE2\x80\x94 pay\xC3\xA9" "e") && !has(l1, "rembours"),
+                  "Mes achats : la ligne 2 << rembours\xC3\xA9" "e >>, la ligne 1 << pay\xC3\xA9" "e >> (" + facts + ")");
+        }
     }
 
     std::printf("-- le service ne repond plus : une phrase, rien ne change\n");
@@ -660,7 +685,7 @@ int main(int argc, char** argv) {
         const auto r = ls::placeOrder(f);
         const auto o = ls::refreshOrders();
         check(!r.ok && !r.reached && has(r.message, "Hors ligne") && has(r.message, "rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9") && !o.ok && !o.reached &&
-                  record().orders.size() == 5,
+                  record().orders.size() == 6,   // 1.48.1 : + le panier dont un article est rembourse
               "hors ligne : << " + r.message + " >>");
         ls::setAddressForTests(address);
     }

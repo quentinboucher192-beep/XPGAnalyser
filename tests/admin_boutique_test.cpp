@@ -681,6 +681,59 @@ int main(int argc, char** argv) {
               "la demande finie : une ligne refusee (sa raison), une livree");
     }
 
+    // 1.48.1 : UN ARTICLE rembourse - un panier paye de deux lignes, livre ; l'Admin rembourse la ligne 2 seule : Stripe (le
+    // faux) rend son montant sur le meme paiement, la ligne 2 << remboursee >>, la ligne 1 reste << livree >> (la licence et
+    // l'option ne sont pas retirees d'office, comme pour toute la commande) ; deux fois : refuse ; le journal le dit.
+    std::printf("-- 1.48.1 : rembourser UN article (un panier de deux lignes payees)\n");
+    {
+        Pc pc4(root / "pc-4", "PC d'essai 4");
+        const Reply o = call(svc.url(), "POST", "/v1/boutique/commande",
+                             pc4.cart(*plus.signingKey(), "[{\"article\":\"ed:PROFESSIONAL\"},{\"article\":\"opt:ia_avancee:30\",\"avec_ligne\":1}]", true, "Atelier Exemple"),
+                             pc4.key.get());
+        const int n = static_cast<int>(o.value.integer("numero"));
+        check(o.status == 201 && stripe.event(svc.url(), kHook, "checkout.session.completed", stripe.sessionOf(n)).value.integer("statut") == 200, "un panier paye (2 lignes)");
+        gui::DeliveryReport rep;
+        const auto d = plus.deliverOrders(0, true, &rep);
+        plus.reload();
+        shop::OrdersView v;
+        check(d.ok && rep.delivered == 2 && plus.shopOrders(v).ok && orderOf(v, n) && orderOf(v, n)->state == "livree", "les deux lignes livrees (" + d.text() + ")");
+        const std::string lic4 = orderOf(v, n) ? orderOf(v, n)->lines[0].licence : std::string();
+        const auto rf = plus.refundLine(n, 2, "Option IA avanc\xC3\xA9" "e - 1 mois, 29,00 \xE2\x82\xAC");
+        check(rf.ok && has(rf.message, "Ligne 2") && has(rf.message, "29,00"), "Rembourser... (la ligne 2) : " + rf.text());
+        std::string params, idem;
+        {
+            const json::Value all = stripe.requests();
+            if (const json::Value* a = all.find("requetes"); a && a->isArray())
+                for (const auto& x : a->items()) {
+                    if (x.str("chemin") != "/v1/refunds") continue;
+                    params.clear();
+                    idem = x.str("idem");
+                    if (const json::Value* p = x.find("params"); p && p->isArray())
+                        for (const auto& kv : p->items())
+                            if (kv.isArray() && kv.items().size() == 2) params += kv.items()[0].asString() + "=" + kv.items()[1].asString() + ";";
+                }
+        }
+        check(has(params, "amount=2900;") && has(params, "payment_intent=pi_") && idem == "remboursement-" + std::to_string(n) + "-ligne-2",
+              "le faux Stripe : le montant de la ligne seulement, sur le meme paiement, une cle par ligne (" + params + " " + idem + ")");
+        check(plus.shopOrders(v).ok && orderOf(v, n) && orderOf(v, n)->state == "livree" && orderOf(v, n)->lines[0].state == "livree" &&
+                  orderOf(v, n)->lines[1].state == "remboursee",
+              "la ligne 2 remboursee, la ligne 1 reste livree, la commande livree");
+        const gui::LicenceEntry* L = plus.licence(lic4);
+        bool opt = false;
+        if (L)
+            for (const auto& x : L->licence.options) opt = opt || x.id == "ia_avancee";
+        check(L && opt, "la licence et son option restent (pas retirees d'office, comme pour toute la commande)");
+        const auto twice = plus.refundLine(n, 2);
+        check(!twice.ok && has(twice.message, "d\xC3\xA9j\xC3\xA0 rembours\xC3\xA9" "e"), "deux fois la meme ligne : refuse (" + twice.message + ")");
+        int added = 0;
+        (void)plus.fetchJournal(&added);
+        bool line = false;
+        for (const auto& row : plus.journalLines().rows)
+            if (row.line.parsed.action == "commande_rembourser" && has(row.line.parsed.summary, "la ligne 2") && has(row.line.parsed.summary, "n\xC2\xB0 " + std::to_string(n)))
+                line = true;
+        check(line, "le journal des admins : << a rembourse la ligne 2 ... de la commande n° N >>");
+    }
+
     std::printf("-- a revoir, << Livrer seul >> decoche, rembourser\n");
     Pc pc2(root / "pc-2", "PC d'essai 2");
     {
