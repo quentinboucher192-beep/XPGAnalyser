@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.48.0", "11/11/2026", "\xC3\xA0 venir"},
+    {"1.48.1", "11/11/2026", "\xC3\xA0 venir"},
+    {"1.48.0", "11/11/2026", "livr\xC3\xA9" "e le 11/11 \xC3\xA0 0 h 40"},
     {"1.47.0", "10/11/2026", "livr\xC3\xA9" "e le 10/11 \xC3\xA0 17 h 20"},
     {"1.46.0", "10/11/2026", "livr\xC3\xA9" "e le 10/11 \xC3\xA0 12 h 15"},
     {"1.45.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 23 h 44"},
@@ -192,6 +193,11 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.48.1 : un article rembourse seul
+        note("1.48.1", "Projet", Kind::Changed,
+         "Mes achats : l'\xC3\xA9" "diteur peut maintenant rembourser un seul article d'une commande ; cet article est marqu\xC3\xA9 \xC2\xAB rembours\xC3\xA9 "
+         "\xC2\xBB et les autres articles de la commande restent tels quels.",
+         "licence", ""),
         // 1.48.0 : le panier (Licence, Options, Panier ; payer tout, demander sans paiement)
         note("1.48.0", "Projet", Kind::New,
          "LE PANIER : la boutique de la fen\xC3\xAAtre Licence a trois onglets, Licence, Options et Panier. \xC2\xAB Acheter \xC2\xBB sur une offre "
