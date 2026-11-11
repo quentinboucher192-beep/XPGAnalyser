@@ -300,7 +300,7 @@ int main(int argc, char** argv) {
     std::printf("-- le service : vide, le journal reparti\n");
     {
         const auto l = ask(svc.url(), editor, "GET", "/admin/licences");
-        check(l.status == 200 && !has(l.body, "XPG-2026-RZ101"), "le service n'a plus de licence");
+        check(l.status == 200 && !has(l.body, "XPG-2026-RZ101"), "le service n'a plus de licence (" + std::to_string(l.status) + " " + l.error + " " + l.body.substr(0, 300) + ")");
         const auto a = ask(svc.url(), editor, "GET", "/v1/admins", false);
         check(a.status == 200 && has(a.body, "\"admins\":[]"), "la liste publique des admins : vide");
         check(ask(svc.url(), editor, "GET", "/v1/certificat", false).status == 200, "le certificat du service : garde");
