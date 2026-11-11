@@ -236,6 +236,7 @@ const ROUTES = {
     "GET /admin/admins": { f: "listerAdmins", signe: "admin" },
     "GET /admin/admins/demandes": { f: "listerDemandesAdmins", signe: "plus" },
     "POST /admin/admins/demande/refuser": { f: "refuserDemandeAdmin", signe: "plus" },
+    "POST /admin/admins/invitation": { f: "creerInvitationAdmin", signe: "plus" }, // 1.49.0 : l'invitation par codes (admins.js)
     "PUT /admin/trousseau": { f: "deposerTrousseau", signe: "plus" },
     "GET /admin/trousseau": { f: "lireTrousseau", signe: "admin" },
     "POST /admin/journal": { f: "ecrireJournal", signe: "admin" },

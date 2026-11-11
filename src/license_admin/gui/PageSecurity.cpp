@@ -821,7 +821,12 @@ void SecurityPage::rebuild() {
     const std::string protection = k.protectedHere ? std::string("DPAPI : chiffr\xC3\xA9" "e pour ton compte Windows, sur ce PC seulement")
                                                    : std::string("un fichier lisible par ce compte seulement (pas de DPAPI hors de Windows)");
     bl.card("La cl\xC3\xA9 de l'\xC3\xA9" "diteur", k.present ? (k.test ? ui::Tone::Warning : ui::Tone::Ok) : ui::Tone::Warning);
-    if (k.present) {
+    if (license_admin::classique()) {
+        // 1.49.0 (docs/ADMINS.md, par. 12) : XPG Admin ne cree, ne restaure ni ne lit jamais la cle de l'editeur.
+        bl.text("XPG Admin n'utilise jamais la cl\xC3\xA9 de l'\xC3\xA9" "diteur : elle reste sur le poste de l'admin+ (XPG License Manager Admin). Ici, ta "
+                "cl\xC3\xA9 d'admin signe ce que tes droits permettent.",
+                ui::Tone::Muted);
+    } else if (k.present) {
         bl.text("Elle signe toutes les licences, le registre des \xC3\xA9" "ditions et la liste des r\xC3\xA9vocations. Elle ne quitte jamais ce PC.");
         if (k.test)
             bl.heading("CL\xC3\x89 D'ESSAI : pour les essais seulement, jamais pour des clients. Les Studios livr\xC3\xA9s ne la reconnaissent pas.",
@@ -848,7 +853,9 @@ void SecurityPage::rebuild() {
     bl.row({folder_});
     bl.end();
 
-    if (!k.present) {
+    if (!k.present && license_admin::classique()) {
+        // 1.49.0 : ni << Creer la cle >> ni << Restaurer une sauvegarde >> dans XPG Admin
+    } else if (!k.present) {
         bl.card("Cr\xC3\xA9" "er la cl\xC3\xA9");
         bl.text("Une seule fois, sur le PC qui signera les licences. Elle est prot\xC3\xA9g\xC3\xA9" "e pour ce compte Windows : copi\xC3\xA9" "e sur un autre PC, elle "
                 "ne sert \xC3\xA0 rien. Juste apr\xC3\xA8s : sa sauvegarde.");
@@ -934,7 +941,7 @@ void SecurityPage::rebuild() {
                 "Ailleurs, la phrase suffit.");
         bl.end();
     }
-    if (ws().role() == Role::Plus || ws().role() == Role::None) {
+    if ((ws().role() == Role::Plus || ws().role() == Role::None) && !license_admin::classique()) {   // 1.49.0 : l'Admin+ seul
         bl.card("Restaurer une sauvegarde compl\xC3\xA8te");
         bl.text("Le service est tomb\xC3\xA9, ou ce PC remplace celui de l'admin+ : le fichier (.xpgsauve) et sa phrase redonnent le dossier du poste et la "
                 "cl\xC3\xA9 de l'\xC3\xA9" "diteur (prot\xC3\xA9g\xC3\xA9" "e pour CE compte). \xC2\xAB Remettre aussi le service \xC2\xBB remplit un nouveau d\xC3\xA9ploiement : il "

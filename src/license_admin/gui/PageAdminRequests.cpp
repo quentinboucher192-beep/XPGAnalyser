@@ -77,6 +77,11 @@ std::string padKey(long long v) {
 }
 std::string invitationText(const AdminInvitation* i) {
     if (!i) return "sans invitation";
+    if (!i->id.empty()) {   // 1.49.0 : l'invitation par codes (son id exact)
+        std::string t = i->id + " \xC2\xB7 invit\xC3\xA9 le " + dateFr(i->at);
+        if (!i->profile.empty()) t += " (" + i->profile + ")";
+        return t;
+    }
     std::string t = "invit\xC3\xA9 le " + dateFr(i->at);
     if (!i->profile.empty()) t += " (" + i->profile + ")";
     return t;
@@ -171,7 +176,8 @@ protected:
                 w->setBounds(b);
                 w->setVisibility(inside && b.y >= list_.y - 2.f && b.bottom() <= list_.bottom() + 2.f ? ui::Visibility::Visible : ui::Visibility::Hidden);
             };
-            put(r.check, {list_.x + 24.f, y + 98.f, 330.f, 26.f});
+            if (r.q.byCode()) put(r.code, {list_.x + 24.f, y + 96.f, 150.f, 32.f});   // 1.49.0 : les 6 chiffres
+            else put(r.check, {list_.x + 24.f, y + 98.f, 330.f, 26.f});
             const float rw = kit::buttonWidth(*r.remove, 110.f);
             put(r.remove, {list_.right() - 24.f - rw, y + 96.f, rw, 30.f});
             put(r.profile, {r.remove->bounds().x - 12.f - 240.f, y + 96.f, 240.f, 30.f});
@@ -194,8 +200,8 @@ protected:
                                                          " avec chacun ; la cl\xC3\xA9 de synchro d\xC3\xA9pos\xC3\xA9" "e pour chacun.",
                                        ui::Icon::User);
         kit::drawWrapped(r, p.x + 24.f, top + 12.f, p.w - 48.f,
-                         "Pour chaque demande : appelle la personne, lis-lui les 6 groupes, elle les compare \xC3\xA0 son \xC3\xA9" "cran ; si tout est pareil, coche "
-                         "\xC2\xAB J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte \xC2\xBB. Une case vide : rien n'est sign\xC3\xA9.",
+                         "Pour chaque demande : appelle la personne. Avec invitation, elle te dit les 6 chiffres de son Admin : tape-les. Sans, lis-lui les 6 "
+                         "groupes de l'empreinte et coche \xC2\xAB J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte \xC2\xBB. Faux ou vide : rien n'est sign\xC3\xA9.",
                          FontId{13}, c.textMuted, 18.f, 2);
         r.pushClip(list_);
         for (std::size_t i = 0; i < rows_.size(); ++i) {
@@ -204,7 +210,7 @@ protected:
             if (y + kRow < list_.y || y > list_.bottom()) continue;
             if (i > 0) r.fillRect({list_.x + 16.f, y, list_.w - 32.f, 1.f}, c.border);
             const float x = list_.x + 24.f, w = list_.w - 48.f;
-            const bool ok = row.check->isChecked();
+            const bool ok = rowReady(row);
             // la personne
             const FontId fn = gfx::semibold(FontId{15});
             r.drawText({x, y + 12.f}, fit(r, requestWho(row.q), fn, 260.f), fn, c.text);
@@ -213,9 +219,26 @@ protected:
             sub += " \xC2\xB7 re\xC3\xA7ue " + kit::whenFr(host_.workspace().now(), row.q.received);
             r.drawText({x + 270.f, y + 14.f}, fit(r, sub, FontId{13}, w - 270.f), FontId{13}, c.textMuted);
             // l'empreinte, en grand
-            paintGroups(r, th, {x, y + 42.f, std::min(470.f, w * 0.56f), 42.f}, row.q.fingerprint, gfx::semibold(FontId{19}), row.q.fingerprintMismatch);
             const float ix = x + std::min(470.f, w * 0.56f) + 18.f;
             const AdminInvitation* inv = invitationFor(invitations_, row.q);
+            if (row.q.byCode()) {
+                // 1.49.0 : une demande avec invitation - les 6 chiffres que dit le futur admin (son Admin les montre)
+                kit::drawWrapped(r, x, y + 44.f, std::min(470.f, w * 0.56f),
+                                 "Son Admin lui montre 6 chiffres : il te les dit, tu les tapes. Faux : rien n'est sign\xC3\xA9.", FontId{13}, c.text, 18.f, 2);
+                r.drawText({ix, y + 46.f},
+                           fit(r, "Invitation : " + row.q.invitationId + (row.q.invitationProfile.empty() ? std::string() : " (" + row.q.invitationProfile + ")"),
+                               FontId{13}, x + w - ix),
+                           FontId{13}, c.text);
+                if (row.wrong)
+                    r.drawText({row.code->bounds().right() + 12.f, row.code->bounds().y + 8.f},
+                               fit(r, "Ce code ne correspond pas \xC3\xA0 sa cl\xC3\xA9 : rien n'est sign\xC3\xA9.", FontId{13},
+                                   std::max(10.f, row.profile->bounds().x - row.code->bounds().right() - 24.f)),
+                               FontId{13}, c.error);
+                r.drawText({ix, y + 66.f}, ok ? std::string("\xE2\x9C\x93 6 chiffres tap\xC3\xA9s") : std::string("6 chiffres \xC3\xA0 taper"), FontId{13},
+                           ok ? c.ok : c.textMuted);
+                continue;
+            }
+            paintGroups(r, th, {x, y + 42.f, std::min(470.f, w * 0.56f), 42.f}, row.q.fingerprint, gfx::semibold(FontId{19}), row.q.fingerprintMismatch);
             r.drawText({ix, y + 46.f}, fit(r, inv ? "Invitation : " + invitationText(inv) : std::string("Sans invitation : v\xC3\xA9rifie bien qui c'est."), FontId{13}, x + w - ix),
                        FontId{13}, inv ? c.text : c.warning);
             if (row.q.fingerprintMismatch)
@@ -250,6 +273,8 @@ private:
     struct Row {
         AdminRequest   q;
         ui::Checkbox*  check{nullptr};
+        ui::InputText* code{nullptr};   // 1.49.0 : les 6 chiffres (une demande avec invitation)
+        bool           wrong{false};
         ui::DropDown*  profile{nullptr};
         ui::Button*    remove{nullptr};
         float          top{0.f};
@@ -260,6 +285,11 @@ private:
         Row row;
         const std::string n = std::to_string(i);
         row.check = &kit::adopt(*this, std::make_unique<ui::Checkbox>("J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte (lue au t\xC3\xA9l\xC3\xA9phone)", "demandes-admins.lot.verifie." + n));
+        row.code = &kit::adopt(*this, std::make_unique<ui::InputText>("demandes-admins.lot.code." + n));
+        row.code->setPlaceholder("123 456");
+        row.code->setMaxLength(9);
+        row.code->setVisibility(ui::Visibility::Collapsed);
+        if (q.byCode()) row.check->setVisibility(ui::Visibility::Collapsed);
         row.profile = &kit::adopt(*this, std::make_unique<ui::DropDown>("demandes-admins.lot.profil." + n));
         std::vector<ui::DropDown::Item> items;
         items.push_back({"Aucun droit (\xC3\xA0 r\xC3\xA9gler ensuite)", ""});
@@ -276,6 +306,11 @@ private:
         row.q = std::move(q);
         const std::string key = row.q.key;
         links_ += row.check->stateChanged->connect([this](ui::Checkbox::State) { sync(); });
+        links_ += row.code->textChanged->connect([this, key](const std::string&) {
+            for (auto& x : rows_)
+                if (x.q.key == key) x.wrong = false;
+            sync();
+        });
         links_ += row.remove->clicked->connect([this, key] { removeRow(key); });
         rows_.push_back(row);
     }
@@ -283,7 +318,8 @@ private:
     void removeRow(const std::string& key) {
         for (auto it = rows_.begin(); it != rows_.end(); ++it)
             if (it->q.key == key) {
-                for (ui::Widget* w : {static_cast<ui::Widget*>(it->check), static_cast<ui::Widget*>(it->profile), static_cast<ui::Widget*>(it->remove)})
+                for (ui::Widget* w : {static_cast<ui::Widget*>(it->check), static_cast<ui::Widget*>(it->code), static_cast<ui::Widget*>(it->profile),
+                                      static_cast<ui::Widget*>(it->remove)})
                     w->setVisibility(ui::Visibility::Collapsed);   // gardes (leurs connexions), plus montres
                 gone_.push_back(*it);
                 rows_.erase(it);
@@ -297,9 +333,16 @@ private:
         invalidateLayout();
     }
 
+    // 1.49.0 : une ligne prete - l'empreinte cochee (sans invitation), ou 6 chiffres tapes (avec ; verifies a la confirmation)
+    [[nodiscard]] static bool rowReady(const Row& r) {
+        if (!r.q.byCode()) return r.check->isChecked();
+        std::size_t d = 0;
+        for (const char ch : r.code->text()) d += (ch >= '0' && ch <= '9') ? 1 : 0;
+        return d == 6 && !r.wrong;
+    }
     [[nodiscard]] std::size_t checkedCount() const {
         std::size_t n = 0;
-        for (const auto& r : rows_) n += r.check->isChecked() ? 1 : 0;
+        for (const auto& r : rows_) n += rowReady(r) ? 1 : 0;
         return n;
     }
     [[nodiscard]] bool allChecked() const { return !rows_.empty() && checkedCount() == rows_.size(); }
@@ -309,8 +352,10 @@ private:
         if (n == rows_.size())
             return rows_.size() == 1 ? std::string("Empreinte v\xC3\xA9rifi\xC3\xA9" "e : pr\xC3\xAAt \xC3\xA0 signer.")
                                      : "Les " + std::to_string(n) + " empreintes sont v\xC3\xA9rifi\xC3\xA9" "es : pr\xC3\xAAt \xC3\xA0 signer.";
+        for (const auto& r : rows_)
+            if (r.wrong) return "Le code de " + requestWho(r.q) + " ne correspond pas \xC3\xA0 sa cl\xC3\xA9 : rien n'est sign\xC3\xA9. Fais-lui relire ses 6 chiffres.";
         return std::to_string(n) + " sur " + std::to_string(rows_.size()) + " v\xC3\xA9rifi\xC3\xA9" "e" + (n > 1 ? "s" : "") +
-               " : coche chaque empreinte (ou retire la demande du lot).";
+               " : coche chaque empreinte, ou tape les 6 chiffres (ou retire la demande du lot).";
     }
 
     void sync() {
@@ -318,7 +363,7 @@ private:
         const bool busy = host_.busy && host_.busy();
         ok_->setEnabled(allChecked() && !busy);
         ok_->setTooltip(allChecked() ? std::string("La cl\xC3\xA9 de l'\xC3\xA9" "diteur signe une liste des admins avec chacun.")
-                                     : std::string("Coche \xC2\xAB J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte \xC2\xBB pour chaque demande."));
+                                     : std::string("Coche \xC2\xAB J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte \xC2\xBB, ou tape les 6 chiffres, pour chaque demande."));
         invalidateLayout();
         invalidate();
     }
@@ -329,10 +374,18 @@ private:
             if (host_.flash) host_.flash(kBusy, Tone::Warning);
             return;
         }
+        // 1.49.0 : les 6 chiffres de chaque demande avec invitation, verifies ici (de sa cle) : un seul faux, rien n'est signe
+        bool wrong = false;
+        for (auto& r : rows_)
+            if (r.q.byCode() && !adm::confirmationMatches(r.q.key, r.code->text())) r.wrong = wrong = true;
+        if (wrong) {
+            sync();
+            return;
+        }
         std::vector<AdminAccept> items;
         for (const auto& r : rows_) {
             const ui::DropDown::Item* it = r.profile->selectedItem();
-            items.push_back({r.q.key, it ? it->value : std::string(), r.check->isChecked()});
+            items.push_back({r.q.key, it ? it->value : std::string(), !r.q.byCode() && r.check->isChecked(), r.q.byCode() ? r.code->text() : std::string()});
         }
         done_ = true;
         const Workspace* w = &host_.workspace();
@@ -693,8 +746,11 @@ private:
             std::string st = stateLabel(q);
             if (q.fingerprintMismatch) st += " \xE2\x80\x94 empreinte fausse";
             else if (!q.waiting() && q.changed) st += " " + dateFr(q.changed);
-            texts_.push_back({dateTimeFr(q.received), requestWho(q), q.email, q.pc, q.software, kit::shortFingerprint(q.fingerprint) + "\xE2\x80\xA6", invitationText(inv), st,
-                              stateLabel(q), inv ? "invit\xC3\xA9" : "sans invitation", q.key});
+            // 1.49.0 : une demande avec invitation par codes la dit (son id), meme notee sur un autre poste
+            const std::string invText = inv || !q.byCode() ? invitationText(inv)
+                                                           : q.invitationId + (q.invitationProfile.empty() ? std::string() : " (" + q.invitationProfile + ")");
+            texts_.push_back({dateTimeFr(q.received), requestWho(q), q.email, q.pc, q.software, kit::shortFingerprint(q.fingerprint) + "\xE2\x80\xA6", invText, st,
+                              stateLabel(q), inv || q.byCode() ? "invit\xC3\xA9" : "sans invitation", q.key});
         }
         bar_->refreshCounts();
     }
@@ -937,11 +993,13 @@ private:
         card->addBox(std::move(ask));
         ui::UnfoldCard::Box inv;
         inv.title = "L'INVITATION";
+        if (q.byCode())   // 1.49.0 : l'invitation par codes que la demande a servie (le service le dit), et les 6 chiffres a taper
+            inv.lines.push_back({.icon = ui::Icon::Lock, .text = "invitation **" + q.invitationId + "** \xC2\xB7 \xC2\xAB Accepter\xE2\x80\xA6 \xC2\xBB demande les 6 chiffres de son Admin", .tone = ui::Tone::Ok, .check = true});
         if (const AdminInvitation* i = invitationFor(invitations_, q)) {
             inv.lines.push_back({.icon = ui::Icon::Mail, .text = "invit\xC3\xA9 " + kit::whenFr(now, i->at) + (i->via.empty() ? std::string() : " (" + i->via + ")"), .tone = ui::Tone::Ok, .check = true});
             if (!i->name.empty() || !i->email.empty()) inv.lines.push_back({.icon = ui::Icon::User, .text = i->name + (i->email.empty() ? std::string() : " \xC2\xB7 " + i->email)});
             inv.lines.push_back({.icon = ui::Icon::Layers, .text = i->profile.empty() ? std::string("aucun profil pr\xC3\xA9vu") : "profil pr\xC3\xA9vu : **" + i->profile + "**"});
-        } else {
+        } else if (!q.byCode()) {
             inv.lines.push_back({.icon = ui::Icon::Warning, .text = "**sans invitation** : v\xC3\xA9rifie bien qui c'est avant d'accepter", .tone = ui::Tone::Warning});
         }
         card->addBox(std::move(inv));

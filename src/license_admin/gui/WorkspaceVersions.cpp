@@ -910,7 +910,7 @@ bool adminInstaller(online::Client& c, const detail::Caller& caller, const std::
                     return true;
                 }
     if (trimmed(fallbackPath).empty())
-        return fail(why, "aucune version publi\xC3\xA9" "e n'a l'installateur de l'Admin sur le service : choisis le fichier (XPG-License-Admin-Setup-....exe)");
+        return fail(why, "aucune version publi\xC3\xA9" "e n'a l'installateur de l'Admin sur le service : choisis le fichier (XPG-Admin-Setup-....exe, l'Admin des admins)");
     std::string vw;
     const std::string version = Workspace::readInstallerVersion(fallbackPath, &vw);
     Uploaded up;
@@ -1413,7 +1413,13 @@ OpResult Workspace::attachFile(const std::string& path, adm::MessageFile& out, c
     return r;
 }
 
-OpResult Workspace::sendAdminInstaller(const std::string& device, const std::string& adminName, const std::string& fallbackPath, const Progress& progress) const {
+// 1.49.0 (docs/ADMINS.md, par. 12) : la phrase du code d'invitation, dans le message qui part avec l'installateur.
+static std::string invitationSentence(const std::string& code) {
+    return "Ton code d'invitation : " + code + " (Ã  saisir dans l'installateur, valable 48 h)";
+}
+
+OpResult Workspace::sendAdminInstaller(const std::string& device, const std::string& adminName, const std::string& fallbackPath, const Progress& progress,
+                                       const std::string& invitationCode) const {
     std::string why;
     detail::Caller caller;
     if (!detail::loadCaller(folder_, caller, &why)) return OpResult::fail(why);
@@ -1427,16 +1433,22 @@ OpResult Workspace::sendAdminInstaller(const std::string& device, const std::str
         if (!drawToken(*c, f.id, kAttachSeconds, false, f.token, nullptr, &why)) return OpResult::fail(why);
     }
     const std::string name = trimmed(adminName);
+    const std::string code = adm::normalizeInvitationCode(invitationCode);
+    // 1.49.0 : avec un code d'invitation, l'installateur XPG Admin le demande ; l'Admin montre ensuite 6 chiffres a dire.
     const std::string text = (name.empty() ? std::string("Bonjour,") : "Bonjour " + clip(name, 60) + ",") +
-                             "\n\nL'admin+ t'invite \xC3\xA0 devenir admin des licences. Installe XPG License Manager Admin (le fichier joint), "
-                             "puis choisis \xC2\xAB Demander \xC3\xA0 devenir admin \xC2\xBB et lis ton empreinte \xC3\xA0 l'admin+ au t\xC3\xA9l\xC3\xA9phone.\n\n"
+                             (code.empty() ? std::string("\n\nL'admin+ t'invite \xC3\xA0 devenir admin des licences. Installe XPG License Manager Admin (le fichier joint), "
+                                                         "puis choisis \xC2\xAB Demander \xC3\xA0 devenir admin \xC2\xBB et lis ton empreinte \xC3\xA0 l'admin+ au t\xC3\xA9l\xC3\xA9phone.\n\n")
+                                           : "\n\nL'admin+ t'invite \xC3\xA0 devenir admin des licences. Installe XPG Admin (le fichier joint).\n\n" +
+                                                 invitationSentence(code) +
+                                                 ".\n\nAu premier lancement, l'Admin te montre un code de 6 chiffres : dis-le \xC3\xA0 l'admin+ au t\xC3\xA9l\xC3\xA9phone.\n\n") +
                              "Le lien du fichier vaut 48 heures.";
-    OpResult r = sendMessageToPc(device, "Installer XPG License Manager Admin", text, {f}, "admin");
+    OpResult r = sendMessageToPc(device, code.empty() ? "Installer XPG License Manager Admin" : "Installer XPG Admin", text, {f}, "admin");
     if (r.ok) r.details.insert(r.details.begin(), "Fichier : " + whence + ".");
+    if (r.ok && !code.empty()) r.details.push_back(invitationSentence(code) + " : dans le message.");
     return r;
 }
 
-OpResult Workspace::adminInstallerLink(const std::string& fallbackPath, std::string& url, const Progress& progress) const {
+OpResult Workspace::adminInstallerLink(const std::string& fallbackPath, std::string& url, const Progress& progress, const std::string& invitationCode) const {
     url.clear();
     std::string why;
     detail::Caller caller;
@@ -1453,6 +1465,7 @@ OpResult Workspace::adminInstallerLink(const std::string& fallbackPath, std::str
     OpResult r = OpResult::done("Lien vers " + f.name + " : valable jusqu'au " + dateTimeFr(exp) + ", pour un seul t\xC3\xA9l\xC3\xA9" "chargement.");
     r.details.push_back("Fichier : " + whence + ".");
     r.details.push_back("Envoie-le au futur admin (un courriel) : il l'ouvre dans son navigateur.");
+    if (const std::string code = adm::normalizeInvitationCode(invitationCode); !code.empty()) r.details.push_back(invitationSentence(code) + ".");
     // 1.47.0 (docs/ADMINS.md, par. 11) : la connexion au service (le certificat verifie, signe par la cle de l'editeur ; rien
     // de secret), un second lien : enregistree a cote de l'installateur, l'Admin installe demarre connecte a ce service.
     const std::string conn = deploy::joinPath(folder_, connexion::kFileName);
@@ -2046,6 +2059,7 @@ OpResult Workspace::describeBackup(const std::string& path, BackupInfo* info) {
 OpResult Workspace::restoreBackup(const std::string& path, const std::string& passphrase, const RestoreOptions& options, RestoreReport* report) const {
     RestoreReport rep;
     if (report) *report = rep;
+    if (license_admin::classique()) return OpResult::fail(kClassicRefusal);   // 1.49.0 : la sauvegarde complete porte la cle de l'editeur
     if (!crypto::init()) return OpResult::fail("libsodium ne d\xC3\xA9marre pas");
     std::string text, why;
     if (!readText(path, text, &why, 4096 + kMaxBackupFile)) return OpResult::fail(why);

@@ -108,6 +108,9 @@ inline constexpr const char* kAdminTokenFile = "jeton-admin.xpgjet";
 struct Offer {
     ls::UpdateOffer                 offer;
     bool                            adminPc{false};        // un jeton d'admin cru ET un installateur de l'Admin dans la version
+    // 1.49.0 : la sorte de l'Admin de ce PC - "admin" (XPG Admin, les admins) ou "admin_plus" (l'Admin+ : le jeton est signe
+    // par une cle de l'editeur) ; chacun ne recoit que la sienne (docs/ADMINS.md, par. 12).
+    std::string                     adminKind{"admin"};
     licensing::admins::AdminToken   token;                 // adminPc : le jeton (sa version, son nom)
     bool                            adminOutdated{false};  // l'Admin de ce PC est plus ancien que la version
     std::string                     pcName;                // le nom de ce PC

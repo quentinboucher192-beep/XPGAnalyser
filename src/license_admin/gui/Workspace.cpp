@@ -158,6 +158,10 @@ void Workspace::loadKey() {
     signing_.reset();
     key_.protectedHere = crypto::protectedHere();
     key_.path = publisherKeyPath(folder_);
+    if (license_admin::classique()) {   // 1.49.0 : XPG Admin ne lit jamais la cle de l'editeur (docs/ADMINS.md, par. 12)
+        key_.problem = "XPG Admin n'utilise jamais la cl\xC3\xA9 de l'\xC3\xA9" "diteur (elle reste chez l'admin+)";
+        return;
+    }
     std::error_code ec;
     if (!fs::exists(P(key_.path), ec)) {
         key_.problem = "pas encore de cl\xC3\xA9 de l'\xC3\xA9" "diteur sur ce poste";
@@ -389,6 +393,7 @@ Dashboard Workspace::dashboard() const {
 
 // ------------------------------------------------------------------------------------------------------ la cle
 OpResult Workspace::createKey(const std::string& name, bool test) {
+    if (license_admin::classique()) return OpResult::fail(kClassicRefusal);   // 1.49.0
     if (adminKey_.present)   // 1.44.0 : un admin (ou en attente) ne devient pas l'admin+ d'une autre cle de l'editeur
         return OpResult::fail("ce poste a d\xC3\xA9j\xC3\xA0 une cl\xC3\xA9 d'admin (" + adminKey_.id +
                               ") : il signe avec elle ce que ses droits permettent ; la cl\xC3\xA9 de l'\xC3\xA9" "diteur reste sur le poste de l'admin+");
@@ -452,6 +457,7 @@ OpResult Workspace::checkBackup(const std::string& path, const std::string& phra
 }
 
 OpResult Workspace::restoreKey(const std::string& path, const std::string& phrase) {
+    if (license_admin::classique()) return OpResult::fail(kClassicRefusal);   // 1.49.0
     std::string text, why;
     if (!readText(path, text, &why)) return OpResult::fail(why);
     auto k = restoreKeyBackup(folder_, text, phrase, &why);

@@ -66,6 +66,7 @@ constexpr const char* kAdminsFile = "admins.xpgadm";
 constexpr const char* kAdminsSeenFile = "admins-vus.jsonl";
 constexpr const char* kEditorKeysFile = "cles-editeur.json";
 constexpr const char* kAdminRequestFile = "demande-admin.json";
+constexpr const char* kInvitationFile = "invitation.txt";   // 1.49.0 : le code d'invitation pose par l'installateur XPG Admin
 constexpr const char* kOutboxFile = "journal-a-envoyer.jsonl";
 constexpr const char* kJournalFile = "journal-admins.jsonl";
 constexpr const char* kJournalStateFile = "journal-admins-etat.json";
@@ -78,6 +79,18 @@ constexpr std::size_t kJournalPage = 500;   // GET /admin/journal : 500 lignes a
 
 // ---- les fichiers ----
 fs::path P(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+
+// 1.49.0 (docs/ADMINS.md, par. 12) : l'invitation qu'une demande a servie (GET /admin/admins/demandes : << invitation >>) et
+// les 6 chiffres de confirmation, calcules ICI de la cle de la demande (jamais lus du service).
+void readInvitationOf(const Value& o, AdminRequest& q) {
+    q.confirmation = adm::confirmationCode(q.key);
+    const Value* i = o.find("invitation");
+    if (!i || !i->isObject() || i->str("id").empty()) return;
+    q.invitationId = i->str("id").substr(0, 40);
+    q.invitationName = i->str("nom").substr(0, 120);
+    q.invitationProfile = i->str("profil").substr(0, 120);
+    q.invited = static_cast<Seconds>(i->integer("invitee"));
+}
 std::string U(const fs::path& p) {
     const auto u = p.u8string();
     return std::string(u.begin(), u.end());
@@ -293,6 +306,8 @@ std::string rightSentence(std::string_view right) {
     return "tu n'as pas le droit " + cite(adm::rightLabel(right)) + " : demande-le \xC3\xA0 l'admin+";
 }
 const char* kPlusOnly = "r\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+ (le poste qui a la cl\xC3\xA9 de l'\xC3\xA9" "diteur)";
+// 1.49.0 : les 6 chiffres tapes ne sont pas ceux de la cle de la demande.
+const char* kWrongConfirmation = "ce code de confirmation ne correspond pas \xC3\xA0 sa cl\xC3\xA9 : rien n'est sign\xC3\xA9. Fais-lui relire les 6 chiffres que montre son Admin ; s'ils diff\xC3\xA8rent encore, refuse la demande";
 const char* kPendingWhy = "ta demande pour devenir admin attend l'acceptation de l'admin+";
 const char* kRetiredWhy = "ton acc\xC3\xA8s d'admin a \xC3\xA9t\xC3\xA9 retir\xC3\xA9 : ta cl\xC3\xA9 ne signe plus rien";   // 1.44.0 : sans genre
 
@@ -661,7 +676,7 @@ bool Caller::can(std::string_view right) const {
 bool loadCaller(const std::string& folder, Caller& out, std::string* why) {
     out = Caller{};
     std::string w;
-    if (isFile(publisherKeyPath(folder))) {
+    if (!license_admin::classique() && isFile(publisherKeyPath(folder))) {   // 1.49.0 : XPG Admin, jamais la cle de l'editeur
         out.key = loadPublisherKey(folder, &w);
         if (!out.key) return fail(why, "la cl\xC3\xA9 de l'\xC3\xA9" "diteur ne se relit pas (elle signe chaque appel au service) : " + w);
         out.role = Role::Plus;
@@ -685,7 +700,7 @@ bool loadCaller(const std::string& folder, Caller& out, std::string* why) {
 
 std::optional<OpResult> callerDenied(const Caller& c, std::string_view right) {
     if (c.role == Role::Plus) return std::nullopt;
-    if (right.empty()) return OpResult::fail(kPlusOnly);
+    if (right.empty()) return OpResult::fail(license_admin::classique() ? kClassicRefusal : kPlusOnly);   // 1.49.0 : XPG Admin le dit
     switch (c.role) {
         case Role::Admin: return c.can(right) ? std::nullopt : std::optional<OpResult>(OpResult::fail(rightSentence(right)));
         case Role::Pending: return OpResult::fail(kPendingWhy);
@@ -936,8 +951,38 @@ std::string Workspace::withAdminList(const std::string& signedText) const {
 }
 
 // ============================================================================================ devenir admin
-OpResult Workspace::requestAdmin(const std::string& nameIn, const std::string& emailIn, std::string* fingerprint) const {
-    if (fingerprint) fingerprint->clear();
+OpResult Workspace::requestAdmin(const std::string& name, const std::string& email, std::string* fingerprint) const {
+    OpResult r = requestAdminInvited(name, email, {}, nullptr);
+    if (fingerprint) *fingerprint = r.ok ? r.output : std::string();
+    return r;
+}
+
+// 1.49.0 (docs/ADMINS.md, par. 12) : le code d'invitation pose par l'installateur (invitation.txt, une ligne).
+std::string Workspace::pendingInvitationCode() const {
+    std::string text;
+    if (!isFile(at(folder_, kInvitationFile)) || !readText(at(folder_, kInvitationFile), text, nullptr) || text.size() > 400) return {};
+    const auto lines = linesOf(text);
+    return lines.empty() ? std::string() : adm::normalizeInvitationCode(lines.front());
+}
+
+std::string Workspace::pendingConfirmation() const {
+    std::string text;
+    Value note;
+    if (!isFile(at(folder_, kAdminRequestFile)) || !readText(at(folder_, kAdminRequestFile), text, nullptr) || !core::json::parse(text, note, nullptr) ||
+        !note.isObject() || note.str("invitation").empty())
+        return {};
+    // recalcule de la cle de ce poste (le fichier ne fait que dire << avec invitation >>)
+    return adminKey_.keyHex.empty() ? note.str("confirmation") : adm::confirmationCode(adminKey_.keyHex);
+}
+
+OpResult Workspace::requestAdminInvited(const std::string& nameIn, const std::string& emailIn, const std::string& invitationIn, bool* refused) const {
+    if (refused) *refused = false;
+    // 1.49.0 : le code d'invitation (s'il y en a un) se verifie ici avant de partir : un code mal ecrit se retape.
+    const std::string invitation = trimmed(invitationIn).empty() ? std::string() : adm::normalizeInvitationCode(invitationIn);
+    if (!trimmed(invitationIn).empty() && invitation.empty()) {
+        if (refused) *refused = true;
+        return OpResult::fail("ce code d'invitation n'est pas \xC3\xA9" "crit comme il faut : INV- puis 8 caract\xC3\xA8res (ex. INV-7K3Q-M9TX), comme dans le message de l'admin+");
+    }
     if (isFile(publisherKeyPath(folder_))) return OpResult::fail("ce poste a la cl\xC3\xA9 de l'\xC3\xA9" "diteur : il est l'admin+, il fait d\xC3\xA9j\xC3\xA0 tout");
     const std::string name = trimmed(nameIn), email = trimmed(emailIn);
     if (name.empty() || name.size() > 60) return OpResult::fail("ton nom (60 caract\xC3\xA8res au plus) : l'admin+ le voit dans ta demande");
@@ -963,11 +1008,21 @@ OpResult Workspace::requestAdmin(const std::string& nameIn, const std::string& e
     body.set("pc", thisPc());
     body.set("poste", thisMachine());
     body.set("logiciel", std::string("XPG-License-Admin ") + kAppVersion);
+    if (!invitation.empty()) body.set("invitation", invitation);
     const online::Reply r = c->call("POST", "/v1/admins/demande", core::json::write(body, false));
+    // 1.49.0 : le service a repondu (accepte ou refuse) : invitation.txt a servi - efface (un code refuse se retape).
+    if (r.error.empty() && r.status > 0 && isFile(at(folder_, kInvitationFile))) {
+        std::error_code ec;
+        fs::remove(P(at(folder_, kInvitationFile)), ec);
+    }
+    if (r.error.empty() && r.status == 403 && r.code() == "invitation") {
+        if (refused) *refused = true;
+        const std::string said = r.json.isObject() ? r.json.str("message") : std::string();
+        return OpResult::fail(said.empty() ? std::string("le service refuse ce code d'invitation") : said);
+    }
     if (r.error.empty() && r.status == 409 && r.code() == "deja") {
-        if (fingerprint) *fingerprint = mine;
         OpResult res = OpResult::done("Ta cl\xC3\xA9 est d\xC3\xA9j\xC3\xA0 celle d'un admin de la liste : rel\xC3\xA8ve la liste des admins.");
-        res.output = mine;
+        res.output = invitation.empty() ? mine : adm::confirmationCode(key->publicKeyHex());
         return res;
     }
     if (r.status != 201 || !r.error.empty() || !r.json.isObject()) return OpResult::fail(c->explain(r, "d\xC3\xA9poser ta demande pour devenir admin"));
@@ -981,8 +1036,21 @@ OpResult Workspace::requestAdmin(const std::string& nameIn, const std::string& e
     note.set("courriel", email);
     note.set("empreinte", mine);
     note.set("envoyee", static_cast<std::int64_t>(now()));
+    const Value* inv = r.json.find("invitation");
+    const bool byCode = !invitation.empty() && inv && inv->isObject();
+    if (byCode) {
+        note.set("invitation", inv->str("id"));
+        note.set("confirmation", adm::confirmationCode(key->publicKeyHex()));
+    }
     (void)writeText(at(folder_, kAdminRequestFile), core::json::write(note, true) + "\n", nullptr);
-    if (fingerprint) *fingerprint = mine;
+    if (byCode) {
+        const std::string code = adm::confirmationCode(key->publicKeyHex());
+        OpResult res = OpResult::done("Demande envoy\xC3\xA9" "e \xC3\xA0 l'admin+ (invitation " + inv->str("id") + "). Dis ce code \xC3\xA0 ton admin+ : " + code);
+        res.details.push_back("Ta cl\xC3\xA9 d'admin est n\xC3\xA9" "e sur ce poste (" + key->keyId() + ") et ne le quitte jamais.");
+        res.details.push_back("L'admin+ tape ces 6 chiffres pour t'accepter ; d\xC3\xA8s qu'il l'a fait, l'Admin le voit tout seul.");
+        res.output = code;
+        return res;
+    }
     OpResult res = OpResult::done("Demande envoy\xC3\xA9" "e \xC3\xA0 l'admin+. Lis-lui ton empreinte au t\xC3\xA9l\xC3\xA9phone : " + mine);
     res.details.push_back("Ta cl\xC3\xA9 d'admin est n\xC3\xA9" "e sur ce poste (" + key->keyId() + ") et ne le quitte jamais.");
     res.details.push_back("D\xC3\xA8s que l'admin+ l'accepte, l'Admin le voit tout seul : tes droits, puis la cl\xC3\xA9 de synchro de l'archive.");
@@ -1012,6 +1080,50 @@ OpResult Workspace::adminRequestState(std::string& state) const {
     if (state == "refusee") return OpResult::done("Ta demande a \xC3\xA9t\xC3\xA9 refus\xC3\xA9" "e par l'admin+.");
     if (state == "retire") return OpResult::done("Tu as \xC3\xA9t\xC3\xA9 retir\xC3\xA9 de la liste des admins.");
     return OpResult::done("Ta demande attend l'acceptation de l'admin+.");
+}
+
+// 1.49.0 (docs/ADMINS.md, par. 12) : l'invitation par codes - creee sur le service (l'admin+), notee ici sans le code.
+OpResult Workspace::inviteAdmin(const std::string& nameIn, const std::string& emailIn, const std::string& profileIn, std::string& code,
+                                AdminInvitation* noted) const {
+    code.clear();
+    const std::string name = clip(trimmed(nameIn), 60), email = trimmed(emailIn), profile = clip(trimmed(profileIn), 60);
+    if (name.empty()) return OpResult::fail("son nom : il va avec l'invitation (l'admin+ le retrouve dans sa demande)");
+    if (!email.empty() && (email.size() > 120 || email.find('@') == std::string::npos || email.find(' ') != std::string::npos))
+        return OpResult::fail("son courriel n'est pas une adresse valable");
+    std::string why;
+    detail::Caller caller;
+    if (!detail::loadCaller(folder_, caller, &why)) return OpResult::fail(why);
+    if (const auto deny = detail::callerDenied(caller, {})) return *deny;
+    std::unique_ptr<online::Client> c;
+    if (!online::openClient(folder_, *caller.key, detail::optionsFor(caller, now()), c, &why)) return OpResult::fail(why);
+    Value body = Value::object();
+    body.set("nom", name);
+    body.set("courriel", email);
+    body.set("profil", profile);
+    const online::Reply r = c->call("POST", "/admin/admins/invitation", core::json::write(body, false));
+    if (r.status != 201 || !r.error.empty() || !r.json.isObject()) return OpResult::fail(c->explain(r, "cr\xC3\xA9" "er le code d'invitation"));
+    const std::string got = adm::normalizeInvitationCode(r.json.str("code"));
+    const std::string id = clip(r.json.str("id"), 40);
+    const Seconds expires = static_cast<Seconds>(r.json.integer("expire"));
+    if (got.empty() || got != r.json.str("code") || id.empty()) return OpResult::fail("le service rend un code d'invitation illisible");
+    code = got;
+    AdminInvitation inv{name, email, profile, "code", now(), id, expires};
+    (void)noteAdminInvitation(inv);
+    if (noted) *noted = inv;
+    Value d = Value::object();
+    d.set("nom", name);
+    if (!email.empty()) d.set("courriel", email);
+    d.set("profil", profile);
+    d.set("invitation", id);
+    d.set("expire", static_cast<std::int64_t>(expires));
+    (void)detail::queueJournal(folder_, *caller.key, now(), "admin_inviter", id, "a invit\xC3\xA9 " + name + " \xC3\xA0 devenir admin (code de 48 h)",
+                               core::json::write(d, false), "{}", "{}", nullptr);
+    (void)detail::flushJournalWith(folder_, *c);
+    OpResult res = OpResult::done("Code d'invitation pour " + name + " : " + code + " (valable 48 h, une seule fois).");
+    res.details.push_back("Il le saisit dans l'installateur XPG Admin ; son Admin te montrera ensuite 6 chiffres \xC3\xA0 taper dans Demandes d'admin.");
+    res.details.push_back("Le service n'en garde que l'empreinte : ce code ne se revoit plus.");
+    res.output = code;
+    return res;
 }
 
 OpResult Workspace::refreshAdminList(AdminRefresh* outRefresh) const {
@@ -1235,6 +1347,7 @@ OpResult Workspace::pendingAdminRequests(std::vector<AdminRequest>& out) const {
             q.machine = o.str("poste");
             q.software = o.str("logiciel");
             q.received = static_cast<Seconds>(o.integer("recue"));
+            readInvitationOf(o, q);
             out.push_back(std::move(q));
         }
     return OpResult::done(out.empty() ? std::string("Aucune demande d'admin en attente.")
@@ -1242,8 +1355,8 @@ OpResult Workspace::pendingAdminRequests(std::vector<AdminRequest>& out) const {
 }
 
 OpResult Workspace::acceptAdmin(const std::string& keyHex, const std::string& profileName, const std::vector<std::string>* rightsIn,
-                                bool fingerprintConfirmed) const {
-    if (!fingerprintConfirmed)
+                                bool fingerprintConfirmed, const std::string& confirmation) const {
+    if (!fingerprintConfirmed && trimmed(confirmation).empty())
         return OpResult::fail("coche \xC2\xAB J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte \xC2\xBB : lis-la au t\xC3\xA9l\xC3\xA9phone avec le futur admin avant de l'accepter");
     std::string why;
     detail::Caller caller;
@@ -1270,6 +1383,15 @@ OpResult Workspace::acceptAdmin(const std::string& keyHex, const std::string& pr
         for (const auto& o : d->items())
             if (o.isObject() && o.str("cle") == keyHex) found = &o;
     if (!found) return OpResult::fail("pas de demande d'admin en attente pour cette cl\xC3\xA9 (elle a \xC3\xA9t\xC3\xA9 refus\xC3\xA9" "e, ou d\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ?)");
+    // 1.49.0 : une demande avec invitation se confirme par ses 6 chiffres (a la place de l'empreinte) ; sans : l'empreinte.
+    const Value* invited = found->find("invitation");
+    if (invited && invited->isObject()) {
+        if (!adm::confirmationMatches(keyHex, confirmation))
+            return OpResult::fail(trimmed(confirmation).empty() ? std::string("tape les 6 chiffres que montre son Admin (le code de confirmation) ; rien n'est sign\xC3\xA9")
+                                                                : kWrongConfirmation);
+    } else if (!fingerprintConfirmed) {
+        return OpResult::fail("coche \xC2\xAB J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte \xC2\xBB : lis-la au t\xC3\xA9l\xC3\xA9phone avec le futur admin avant de l'accepter");
+    }
     crypto::PublicKey pk{};
     if (!keyFromHex(keyHex, pk)) return OpResult::fail("la cl\xC3\xA9 de la demande est illisible");
     adm::AdminList list;
@@ -1301,7 +1423,8 @@ OpResult Workspace::acceptAdmin(const std::string& keyHex, const std::string& pr
     if (!publishList(*c, folder_, *caller.key, list, now(), number, &why)) return OpResult::fail(why);
     OpResult r = OpResult::done(name + " est admin (liste des admins n\xC2\xB0 " + std::to_string(number) + ", " +
                                 (profile.empty() ? std::string("droits choisis") : "profil " + cite(profile)) + ").");
-    r.details.push_back("Empreinte v\xC3\xA9rifi\xC3\xA9" "e : " + adm::fingerprint(keyHex) + ".");
+    r.details.push_back(invited && invited->isObject() ? "Code de confirmation v\xC3\xA9rifi\xC3\xA9 : " + adm::confirmationCode(keyHex) + " (invitation " + invited->str("id") + ")."
+                                                       : "Empreinte v\xC3\xA9rifi\xC3\xA9" "e : " + adm::fingerprint(keyHex) + ".");
     r.details.push_back(rights.empty() ? std::string("Aucun droit pour l'instant.") : "Droits : " + std::to_string(rights.size()) + " sur 13.");
     if (archive::hasSyncKey(folder_)) {
         if (giveSyncKeyWith(*c, folder_, keyHex, &why)) r.details.push_back("Cl\xC3\xA9 de synchro d\xC3\xA9pos\xC3\xA9" "e dans son trousseau (scell\xC3\xA9" "e pour sa cl\xC3\xA9).");
@@ -1999,11 +2122,16 @@ AdminRequest requestOf(const Value& o) {
     q.state = o.str("etat", "attente");
     if (q.state != "acceptee" && q.state != "refusee") q.state = "attente";
     q.changed = static_cast<Seconds>(o.integer("maj", static_cast<std::int64_t>(q.received)));
+    readInvitationOf(o, q);
     return q;
 }
 } // namespace
 
 const AdminInvitation* invitationFor(const std::vector<AdminInvitation>& invitations, const AdminRequest& request) {
+    // 1.49.0 : la demande dit l'invitation qu'elle a servie (son id) : c'est elle
+    if (request.byCode())
+        for (const auto& i : invitations)
+            if (i.id == request.invitationId) return &i;
     const std::string email = lowerAscii(trimmed(request.email)), name = lowerAscii(trimmed(request.name));
     const AdminInvitation* best = nullptr;
     for (const auto& i : invitations) {
@@ -2038,7 +2166,7 @@ OpResult Workspace::acceptAdmins(const std::vector<AdminAccept>& items) const {
     for (const auto& it : items) {
         if (!licensing::isKeyHex(it.key)) return OpResult::fail("une demande n'a pas une cl\xC3\xA9 lisible");
         if (!seen.insert(it.key).second) return OpResult::fail("la m\xC3\xAA" "me demande est choisie deux fois");
-        if (!it.fingerprintChecked)
+        if (!it.fingerprintChecked && trimmed(it.confirmation).empty())
             return OpResult::fail("coche \xC2\xAB J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte \xC2\xBB pour chaque demande (" + adm::fingerprint(it.key) +
                                   " ne l'est pas) : lis-la au t\xC3\xA9l\xC3\xA9phone avec le futur admin ; rien n'est sign\xC3\xA9");
     }
@@ -2074,6 +2202,15 @@ OpResult Workspace::acceptAdmins(const std::vector<AdminAccept>& items) const {
             return OpResult::fail("la demande " + adm::fingerprint(it.key) + " n'attend plus (refus\xC3\xA9" "e, d\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ?) : rel\xC3\xA8ve la liste ; rien n'est sign\xC3\xA9");
         if (w->second.fingerprintMismatch)
             return OpResult::fail("le service rend pour " + cite(w->second.name) + " une empreinte qui n'est pas celle de sa cl\xC3\xA9 : ne l'accepte pas ; rien n'est sign\xC3\xA9");
+        // 1.49.0 : avec invitation, ses 6 chiffres ; sans, l'empreinte cochee
+        if (w->second.byCode()) {
+            if (!adm::confirmationMatches(it.key, it.confirmation))
+                return OpResult::fail(trimmed(it.confirmation).empty()
+                                          ? "tape les 6 chiffres que montre l'Admin de " + cite(w->second.name) + " ; rien n'est sign\xC3\xA9"
+                                          : "pour " + cite(w->second.name) + ", " + kWrongConfirmation);
+        } else if (!it.fingerprintChecked) {
+            return OpResult::fail("coche \xC2\xAB J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte \xC2\xBB de " + cite(w->second.name) + " (sans invitation) ; rien n'est sign\xC3\xA9");
+        }
     }
     adm::AdminList list;
     if (!baseList(*c, caller, list, &why)) return OpResult::fail(why);
@@ -2114,7 +2251,8 @@ OpResult Workspace::acceptAdmins(const std::vector<AdminAccept>& items) const {
     const bool sync = archive::hasSyncKey(folder_);
     for (std::size_t i = 0; i < items.size(); ++i) {
         const std::string& key = items[i].key;
-        std::string line = names[i] + " : empreinte v\xC3\xA9rifi\xC3\xA9" "e " + adm::fingerprint(key) + ", " +
+        std::string line = names[i] + (waiting[key].byCode() ? " : code de confirmation v\xC3\xA9rifi\xC3\xA9 " + adm::confirmationCode(key) + ", "
+                                                             : " : empreinte v\xC3\xA9rifi\xC3\xA9" "e " + adm::fingerprint(key) + ", ") +
                            (chosen[i].first.empty() ? std::string("aucun profil") : "profil " + cite(chosen[i].first)) + " (" +
                            std::to_string(chosen[i].second.size()) + " droits sur 13)";
         if (sync) line += giveSyncKeyWith(*c, folder_, key, &why) ? std::string(", cl\xC3\xA9 de synchro d\xC3\xA9pos\xC3\xA9" "e") : ", ATTENTION : la cl\xC3\xA9 de synchro n'est pas d\xC3\xA9pos\xC3\xA9" "e (" + why + ")";
@@ -2123,6 +2261,7 @@ OpResult Workspace::acceptAdmins(const std::vector<AdminAccept>& items) const {
         d.set("nom", names[i]);
         d.set("pc", waiting[key].pc);
         d.set("empreinte", adm::fingerprint(key));
+        if (waiting[key].byCode()) d.set("invitation", waiting[key].invitationId);
         d.set("profil", chosen[i].first);
         d.set("liste", number);
         d.set("ensemble", static_cast<int>(items.size()));
@@ -2193,7 +2332,7 @@ std::vector<AdminInvitation> Workspace::adminInvitations() const {
     if (const Value* a = v.find("invitations"); a && a->isArray())
         for (const auto& o : a->items())
             if (o.isObject()) out.push_back({clip(o.str("nom"), 60), clip(o.str("courriel"), 120), clip(o.str("profil"), 60), clip(o.str("par"), 20),
-                                             static_cast<Seconds>(o.integer("le"))});
+                                             static_cast<Seconds>(o.integer("le")), clip(o.str("id"), 40), static_cast<Seconds>(o.integer("expire"))});
     std::sort(out.begin(), out.end(), [](const AdminInvitation& a, const AdminInvitation& b) { return a.at > b.at; });
     return out;
 }
@@ -2219,6 +2358,8 @@ OpResult Workspace::noteAdminInvitation(const AdminInvitation& in) const {
         o.set("profil", x.profile);
         o.set("par", x.via);
         o.set("le", static_cast<std::int64_t>(x.at));
+        if (!x.id.empty()) o.set("id", x.id);
+        if (x.expires) o.set("expire", static_cast<std::int64_t>(x.expires));
         a.push(std::move(o));
     }
     v.set("invitations", std::move(a));

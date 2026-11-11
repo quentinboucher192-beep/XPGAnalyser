@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <set>
 
 namespace licensing::admins {
@@ -102,6 +103,7 @@ const std::vector<ActionType> kActions = {
     {"clients_exporter", "Exporter les clients (CSV)", "clients", Level::Medium, false, false},
     {"courriel", "\xC3\x89" "crire \xC3\xA0 un client", "clients", Level::Info, false, false},
     {"admin_ajouter", "Ajouter un admin", "admins", Level::Critical, true, false},
+    {"admin_inviter", "Inviter un admin (code d'invitation)", "admins", Level::High, false, false},   // 1.49.0
     {"admin_retirer", "Retirer un admin", "admins", Level::Critical, true, false},
     {"admin_droits", "Changer les droits d'un admin", "admins", Level::Critical, true, false},
     {"admin_profil", "Cr\xC3\xA9" "er, modifier un profil de droits", "admins", Level::High, false, false},
@@ -281,6 +283,52 @@ std::string fingerprint(std::string_view keyHex) {
         out += (c >= 'a' && c <= 'f') ? static_cast<char>(c - 'a' + 'A') : c;
     }
     return out;
+}
+
+// 1.49.0 : le code de confirmation (6 chiffres) - la meme formule que le service (service/src/admins.js).
+std::string confirmationCode(std::string_view keyHex) {
+    crypto::Bytes raw;
+    if (!crypto::unhex(keyHex, raw, 32)) return {};
+    std::string data = "xpg-confirmation-1";
+    data.append(reinterpret_cast<const char*>(raw.data()), raw.size());
+    const auto d = crypto::sha256(std::string_view(data));
+    std::uint64_t n = 0;
+    for (std::size_t i = 0; i < 8; ++i) n = (n << 8) | static_cast<std::uint64_t>(d[i]);
+    const unsigned v = static_cast<unsigned>(n % 1000000u);
+    char b[16];
+    std::snprintf(b, sizeof b, "%03u %03u", v / 1000u, v % 1000u);
+    return b;
+}
+
+bool confirmationMatches(std::string_view keyHex, std::string_view typed) {
+    std::string digits;
+    for (const char c : typed) {
+        if (c >= '0' && c <= '9') digits += c;
+        else if (c != ' ' && c != '\t' && c != '-' && c != '.') return false;
+    }
+    if (digits.size() != 6) return false;
+    std::string want = confirmationCode(keyHex);
+    if (want.empty()) return false;
+    want.erase(std::remove(want.begin(), want.end(), ' '), want.end());
+    return digits == want;
+}
+
+std::string normalizeInvitationCode(std::string_view typed) {
+    static const std::string kAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    std::string s;
+    for (char c : typed) {
+        if (c == ' ' || c == '-' || c == '\t' || c == '\r' || c == '\n' || c == '_') continue;
+        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+        s += c;
+    }
+    if (s.rfind("INV", 0) == 0 && s.size() == 11) s = s.substr(3);
+    if (s.size() != 8) return {};
+    for (auto& c : s) {
+        if (c == 'O') c = '0';
+        else if (c == 'I' || c == 'L') c = '1';
+        if (kAlphabet.find(c) == std::string::npos) return {};
+    }
+    return "INV-" + s.substr(0, 4) + "-" + s.substr(4);
 }
 
 std::string documentHash(std::string_view document) { return crypto::sha256Hex(document); }
@@ -509,7 +557,8 @@ bool parseFileManifest(std::string_view json, FileManifest& out, std::string* wh
     if (!getText(o, "nom", m.name, true, 120) || !safeFileName(m.name)) return fail(why, "le nom du fichier n'est pas valide");
     if (!getCount(o, "taille", m.size, true) || m.size == 0 || m.size > kMaxFileBytes) return fail(why, "la taille du fichier n'est pas valide");
     if (!getText(o, "sha256", m.sha256, true, 64) || !isHexLower(m.sha256, 64)) return fail(why, "l'empreinte du fichier n'est pas valide");
-    if (!getText(o, "sorte", m.kind, true, 10) || (m.kind != "admin" && m.kind != "studios" && m.kind != "autre"))
+    // 1.49.0 : << admin_plus >> - l'Admin+ (l'installateur de l'editeur), que le service ne donne qu'a la cle de l'editeur
+    if (!getText(o, "sorte", m.kind, true, 10) || (m.kind != "admin" && m.kind != "studios" && m.kind != "autre" && m.kind != "admin_plus"))
         return fail(why, "la sorte du fichier n'est pas valide");
     (void)getText(o, "version", m.version, false, 20);
     if (!getText(o, "acces", m.access, true, 10) || (m.access != "public" && m.access != "admins" && m.access != "jeton"))
@@ -566,7 +615,9 @@ std::string writeVersion(const VersionManifest& v) {
     o.set("publiee", static_cast<std::int64_t>(v.published));
     o.set("importante", v.important);
     o.set("notes", textList(v.notes));
-    Value arr = Value::array();
+    // 1.49.0 : les fichiers de l'Admin+ (sorte << admin_plus >>) dans << fichiers_admin_plus >> : un Studio d'avant (1.44 a
+    // 1.48) refuse une sorte qu'il ne connait pas dans << fichiers >>, et ne verrait plus aucune mise a jour.
+    Value arr = Value::array(), plus = Value::array();
     for (const auto& f : v.files) {
         Value x = Value::object();
         x.set("id", f.id);
@@ -575,9 +626,10 @@ std::string writeVersion(const VersionManifest& v) {
         x.set("sha256", f.sha256);
         x.set("sorte", f.kind);
         x.set("pour", f.audience);
-        arr.push(std::move(x));
+        (f.kind == "admin_plus" ? plus : arr).push(std::move(x));
     }
     o.set("fichiers", std::move(arr));
+    if (!plus.items().empty()) o.set("fichiers_admin_plus", std::move(plus));
     return core::json::write(o, false);
 }
 
@@ -595,15 +647,28 @@ bool parseVersion(std::string_view json, VersionManifest& out, std::string* why)
     if (!getTextList(o, "notes", v.notes, 40, 400)) return fail(why, "les notes de la version sont mal \xC3\xA9" "crites");
     const Value* arr = o.find("fichiers");
     if (!arr || !arr->isArray() || arr->items().empty() || arr->items().size() > 4) return fail(why, "la version n'a pas de fichier");
-    for (const auto& x : arr->items()) {
-        if (!x.isObject()) return fail(why, "un fichier de la version est mal \xC3\xA9" "crit");
+    // 1.49.0 : trois sortes - << studios >> (pour tous), << admin >> (XPG Admin, pour les admins), << admin_plus >> (l'Admin+,
+    // pour l'admin+ seul ; dans << fichiers_admin_plus >>, voir writeVersion). Un bloc d'avant reste valable.
+    const auto readFile = [&](const Value& x, bool plusList) {
+        if (!x.isObject()) return false;
         VersionFile f;
         if (!getText(x, "id", f.id, true, 32) || !isHexLower(f.id, 32) || !getText(x, "nom", f.name, true, 120) || !safeFileName(f.name)
             || !getCount(x, "taille", f.size, true) || f.size == 0 || f.size > kMaxFileBytes || !getText(x, "sha256", f.sha256, true, 64)
-            || !isHexLower(f.sha256, 64) || !getText(x, "sorte", f.kind, true, 10) || (f.kind != "studios" && f.kind != "admin")
-            || !getText(x, "pour", f.audience, true, 10) || (f.audience != "tous" && f.audience != "admins"))
-            return fail(why, "un fichier de la version est mal \xC3\xA9" "crit");
+            || !isHexLower(f.sha256, 64) || !getText(x, "sorte", f.kind, true, 10) || !getText(x, "pour", f.audience, true, 10))
+            return false;
+        const bool plus = f.kind == "admin_plus" && f.audience == "admin_plus";
+        const bool before = (f.kind == "studios" || f.kind == "admin") && (f.audience == "tous" || f.audience == "admins");   // comme avant
+        if (plusList ? !plus : !(plus || before))
+            return false;
         v.files.push_back(std::move(f));
+        return true;
+    };
+    for (const auto& x : arr->items())
+        if (!readFile(x, false)) return fail(why, "un fichier de la version est mal \xC3\xA9" "crit");
+    if (const Value* plus = o.find("fichiers_admin_plus"); plus) {
+        if (!plus->isArray() || plus->items().size() > 4) return fail(why, "les fichiers de l'admin+ de la version sont mal \xC3\xA9" "crits");
+        for (const auto& x : plus->items())
+            if (!readFile(x, true)) return fail(why, "un fichier de l'admin+ de la version est mal \xC3\xA9" "crit");
     }
     out = std::move(v);
     return true;

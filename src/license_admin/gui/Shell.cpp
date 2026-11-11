@@ -416,7 +416,7 @@ protected:
         ctx.r.fillRoundedRect({logo.x + 3.f, logo.y + 2.f, logo.w - 6.f, logo.h * 0.45f}, kNightWhite.withAlpha(22), 9.f);
         drawKey(ctx.r, {logo.x + 9.f, logo.y + 9.f, 20.f, 20.f}, kNightWhite);
         const FontId fn = gfx::semibold(kF15);
-        ctx.r.drawText({logo.right() + 12.f, logo.y + 1.f}, "XPG License Manager", fn, kNightWhite);
+        ctx.r.drawText({logo.right() + 12.f, logo.y + 1.f}, license_admin::classique() ? "XPG Admin" : "XPG License Manager", fn, kNightWhite);   // 1.49.0
         // 1.44.0 : qui est sur ce poste (la maquette : << Camille - admin+ >>) ; sans cle : l'outil de l'editeur.
         // Un nom trop long (une cle d'essai) se coupe ; le role reste lisible.
         const Workspace& w = shell_.workspace();
@@ -426,7 +426,8 @@ protected:
             case Role::Admin: name = w.me() ? w.me()->name : w.adminKey().name, role = " \xC2\xB7 admin"; break;
             case Role::Pending: name = w.adminKey().name.empty() ? std::string("Toi") : w.adminKey().name, role = " \xC2\xB7 en attente"; break;
             case Role::Retired: name = w.me() ? w.me()->name : w.adminKey().name, role = " \xC2\xB7 admin retir\xC3\xA9"; break;
-            case Role::None: name = "Admin \xC2\xB7 \xC3\x89" "diteur seulement"; break;
+            // 1.49.0 : sans cle, XPG Admin (l'Admin classique) dit qu'il attend une invitation
+            case Role::None: name = license_admin::classique() ? std::string("Admin \xC2\xB7 sur invitation") : std::string("Admin \xC2\xB7 \xC3\x89" "diteur seulement"); break;
         }
         const float room = b.right() - 14.f - (logo.right() + 12.f) - ctx.r.measure(role, kF12).width;
         ctx.r.drawText({logo.right() + 12.f, logo.y + 21.f}, fit(ctx.r, name, kF12, room) + role, kF12, kNightMuted);
@@ -545,7 +546,8 @@ public:
         const bool canSign = w.can("licence_creer") && w.hasRegistry();
         newLicence_->setEnabled(canSign);
         newLicence_->setTooltip(canSign ? std::string("L'assistant : le client, l'\xC3\xA9" "dition, les PC (ou une licence en ligne), la dur\xC3\xA9" "e, puis signer.")
-                                : role == Role::None ? std::string("Il faut d'abord la cl\xC3\xA9 de l'\xC3\xA9" "diteur (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9), ou devenir admin (Administrateurs).")
+                                : role == Role::None ? std::string(license_admin::classique() ? "Il faut d'abord devenir admin (Administrateurs : ton invitation)."   // 1.49.0
+                                                                                      : "Il faut d'abord la cl\xC3\xA9 de l'\xC3\xA9" "diteur (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9).")
                                 : !w.can("licence_creer") ? w.whyNot("licence_creer")
                                              : std::string("Il faut d'abord le registre sign\xC3\xA9 (\xC3\x89" "ditions ; un admin le re\xC3\xA7oit avec l'archive)."));
         if (shell_.busy()) {
@@ -1110,6 +1112,10 @@ void Shell::navigate(const std::string& requested) {
         return;
     }
     if (!pageAllowed(pageId)) {   // 1.44.0 : le journal des admins, les droits : l'admin+ seul
+        if (license_admin::classique()) {   // 1.49.0 : XPG Admin n'a pas ces pages (un lien, --page)
+            flash("\xC2\xAB " + std::string(entry(pageId)->label) + " \xC2\xBB n'est pas dans XPG Admin : c'est \xC3\xA0 l'admin+ (XPG License Manager Admin).", Tone::Warning);
+            return;
+        }
         flash("\xC2\xAB " + std::string(entry(pageId)->label) + " \xC2\xBB est r\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+ (le poste qui a la cl\xC3\xA9 de l'\xC3\xA9" "diteur).",
               Tone::Warning);
         return;
@@ -1121,7 +1127,7 @@ void Shell::navigate(const std::string& requested) {
 std::string Shell::pageTitle() const {
     if (const Page* p = page(current_)) return p->title();
     if (const NavEntry* e = entry(current_)) return e->label;
-    return kAppName;
+    return appName();
 }
 
 void Shell::refreshPages() {

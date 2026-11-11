@@ -428,15 +428,15 @@ private:
         const bool dark = ctx.theme.isDark();
         r.fillRoundedRect(b, c.panelBg, 14.f);
         r.strokeRect(b, c.border, 1.5f);
-        fileTile(r, {b.x + 18.f, b.y + 16.f, 52.f, 52.f}, data_.action == "admin" || f.kind == "admin" ? violet() : teal(),
-                 data_.action == "admin" || f.kind == "admin" ? ui::Icon::Lock : ui::Icon::Import);
+        fileTile(r, {b.x + 18.f, b.y + 16.f, 52.f, 52.f}, data_.action == "admin" || (f.kind == "admin" || f.kind == "admin_plus") ? violet() : teal(),
+                 data_.action == "admin" || (f.kind == "admin" || f.kind == "admin_plus") ? ui::Icon::Lock : ui::Icon::Import);
         const float nx = b.x + 84.f;
         float right = b.right() - 18.f;
         for (const auto& card : cards_)
             if (card.id == f.id && card.save) right = card.save->bounds().x - 12.f;
         r.drawText({nx, b.y + 20.f}, fit(r, f.name, kH3, right - nx), gfx::semibold(kH3), c.text);
         std::string cap = filedl::sizeText(f.size);
-        if (!f.version.empty()) cap += data_.action == "admin" || f.kind == "admin" ? " \xC2\xB7 l'Admin " + f.version : " \xC2\xB7 version " + f.version;
+        if (!f.version.empty()) cap += data_.action == "admin" || (f.kind == "admin" || f.kind == "admin_plus") ? " \xC2\xB7 l'Admin " + f.version : " \xC2\xB7 version " + f.version;
         if (f.name.size() > 4 && f.name.compare(f.name.size() - 4, 4, ".exe") == 0) cap += " \xC2\xB7 installateur Windows";
         r.drawText({nx, b.y + 44.f}, fit(r, cap, kCap, right - nx), kCap, c.textMuted);
         // les pastilles : seulement ce qui est vrai
@@ -655,7 +655,7 @@ protected:
         y += 22.f;
         bool allSigned = !files.empty(), allHashed = !files.empty();
         for (const auto& f : files) {
-            const bool admin = f.kind == "admin";
+            const bool admin = (f.kind == "admin" || f.kind == "admin_plus");
             const gfx::Rect row{x, y, w, 56.f};
             r.fillRoundedRect(row, admin ? tint(violet(), dark ? 30 : 10) : c.rowAltBg, 10.f);
             r.strokeRect(row, admin ? tint(violet(), 90) : c.border, 1.f);

@@ -366,8 +366,9 @@ public:
         links_ += noteRequests_->clicked->connect([this] { askRequests(); });
         links_ += sync_->clicked->connect([this] { host_.navigate("service"); });
 
-        createKey_ = addButton("Cr\xC3\xA9" "er la cl\xC3\xA9\xE2\x80\xA6", "tableau.creer-cle", ui::Button::Style::Primary, ui::Icon::Lock);
-        restore_ = addButton("Restaurer une sauvegarde\xE2\x80\xA6", "tableau.restaurer", ui::Button::Style::Default, ui::Icon::Open);
+        // 1.49.0 : les deux seuls gestes de l'Admin+ sans la cle de l'editeur (docs/ADMINS.md, par. 12)
+        createKey_ = addButton("Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur\xE2\x80\xA6", "tableau.creer-cle", ui::Button::Style::Primary, ui::Icon::Lock);
+        restore_ = addButton("Restaurer la cl\xC3\xA9 de l'\xC3\xA9" "diteur\xE2\x80\xA6", "tableau.restaurer", ui::Button::Style::Default, ui::Icon::Open);
         toEditions_ = addButton("Aller aux \xC3\xA9" "ditions", "tableau.aller-editions", ui::Button::Style::Primary, ui::Icon::GoTo);
         links_ += createKey_->clicked->connect([this] { host_.navigate("securite"); });
         links_ += restore_->clicked->connect([this] { host_.navigate("securite"); });
@@ -449,9 +450,14 @@ public:
         const Role role = w.role();
         if (role == Role::None) {
             // 1.44.0 : deux chemins - le premier PC (la cle de l'editeur, l'admin+) ou un admin que l'admin+ accepte.
+            // 1.49.0 (docs/ADMINS.md, par. 12) : XPG Admin n'a que le chemin de l'admin (l'invitation) ; l'Admin+ n'a que la cle
+            // de l'editeur (la creer, la restaurer), jamais << Demander a devenir admin >>.
             hintKind_ = 1;
-            hint_ = "Pour commencer : cr\xC3\xA9" "e la cl\xC3\xA9 de l'\xC3\xA9" "diteur (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Cr\xC3\xA9" "er la cl\xC3\xA9), ou restaure la sauvegarde d'une "
-                    "cl\xC3\xA9 existante. L'admin+ t'a fait installer l'Admin ? Demande \xC3\xA0 devenir admin. Sans cl\xC3\xA9, rien ne se signe.";
+            hint_ = license_admin::classique()
+                        ? std::string("Pas encore de cl\xC3\xA9 d'admin sur ce poste : l'admin+ t'a invit\xC3\xA9 ? Ta demande part avec ton code d'invitation "
+                                      "(Administrateurs), puis l'admin+ l'accepte. Sans cl\xC3\xA9, rien ne se signe.")
+                        : std::string("Ce programme est celui de l'admin+. Un admin installe XPG Admin, re\xC3\xA7u avec son invitation. Pour commencer : "
+                                      "cr\xC3\xA9" "e la cl\xC3\xA9 de l'\xC3\xA9" "diteur (le premier PC), ou restaure sa sauvegarde. Sans cl\xC3\xA9, rien ne se signe.");
         } else if (role == Role::Pending) {
             hintKind_ = 3;
             hint_ = "Ta demande pour devenir admin attend l'admin+ : il va t'appeler, lis-lui ton empreinte. En attendant, l'Admin ne peut rien signer.";
@@ -463,9 +469,10 @@ public:
             hint_ = role == Role::Admin ? "Il manque le registre (les offres) : il arrive avec l'archive de l'admin+ (Service en ligne \xE2\x80\xBA Recevoir l'archive)."
                                         : "Il manque le registre (les \xC3\xA9" "ditions et les fonctionnalit\xC3\xA9s) : signe-le dans \xC3\x89" "ditions avant la premi\xC3\xA8re licence.";
         }
-        createKey_->setVisibility(hintKind_ == 1 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
-        restore_->setVisibility(hintKind_ == 1 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
-        becomeAdmin_->setVisibility(hintKind_ == 1 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        const bool classic = license_admin::classique();   // 1.49.0
+        createKey_->setVisibility(hintKind_ == 1 && !classic ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        restore_->setVisibility(hintKind_ == 1 && !classic ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        becomeAdmin_->setVisibility(hintKind_ == 1 && classic ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         myFingerprint_->setVisibility(hintKind_ == 3 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         toService_->setVisibility(hintKind_ == 5 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         toEditions_->setVisibility(hintKind_ == 2 ? ui::Visibility::Visible : ui::Visibility::Collapsed);

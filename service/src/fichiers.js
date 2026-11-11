@@ -64,7 +64,8 @@ const MAX_FICHIERS_VERSION = 16;
 const DUREE_JETON_ADMIN = 31 * JOUR; // un jeton d'admin (30 jours) : pas plus loin que ca
 const MANQUANTS_MAX = 512; // les morceaux manquants rendus, au plus
 
-const SORTES = ["admin", "studios", "autre"];
+// 1.49.0 : << admin_plus >> - l'installateur de l'Admin+ : seule la cle de l'editeur le telecharge (docs/ADMINS.md, par. 12).
+const SORTES = ["admin", "studios", "autre", "admin_plus"];
 const ACCES = ["public", "admins", "jeton"];
 
 const ENTETES_OCTETS = { "Content-Type": "application/octet-stream", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
@@ -104,7 +105,7 @@ export function lireManifeste(json) {
     if (!nomSur(v.nom)) throw new DocumentIllisible(quoi + " : le nom est illisible (lettres, chiffres, . _ - et espaces ; 120 caractères au plus)");
     if (!entier(v.taille, 1, MAX_TAILLE_FICHIER)) throw new DocumentIllisible(quoi + " : la taille est illisible (1 octet à 200 Mio)");
     if (!estHex(v.sha256, 64)) throw new DocumentIllisible(quoi + " : l'empreinte SHA-256 est illisible");
-    if (!SORTES.includes(v.sorte)) throw new DocumentIllisible(quoi + " : la sorte est inconnue (admin, studios, autre)");
+    if (!SORTES.includes(v.sorte)) throw new DocumentIllisible(quoi + " : la sorte est inconnue (admin, studios, autre, admin_plus)");
     if (!ACCES.includes(v.acces)) throw new DocumentIllisible(quoi + " : l'accès est inconnu (public, admins, jeton)");
     if (v.morceau !== MORCEAU) throw new DocumentIllisible(quoi + " : un morceau fait " + MORCEAU + " octets");
     if (v.version !== undefined && v.version !== "" && !versionEnNombres(v.version)) throw new DocumentIllisible(quoi + " : la version est illisible (X.Y.Z)");
@@ -133,8 +134,15 @@ export function lireVersionDoc(json) {
     if (v.notes !== undefined && (!Array.isArray(v.notes) || v.notes.length > 100 || !v.notes.every((n) => typeof n === "string" && n.length <= 2000)))
         throw new DocumentIllisible(quoi + " : les notes sont illisibles");
     if (!Array.isArray(v.fichiers) || v.fichiers.length > MAX_FICHIERS_VERSION) throw new DocumentIllisible(quoi + " : la liste des fichiers est illisible");
+    // 1.49.0 : les fichiers de l'Admin+ (sorte << admin_plus >>) viennent aussi de << fichiers_admin_plus >> (un Studio d'avant
+    // refuse une sorte inconnue dans << fichiers >>) ; ils rejoignent la liste.
+    if (v.fichiers_admin_plus !== undefined && (!Array.isArray(v.fichiers_admin_plus) || v.fichiers_admin_plus.length > 4))
+        throw new DocumentIllisible(quoi + " : la liste des fichiers de l'admin+ est illisible");
+    const plus = v.fichiers_admin_plus || [];
+    if (plus.some((f) => !f || f.sorte !== "admin_plus")) throw new DocumentIllisible(quoi + " : « fichiers_admin_plus » ne porte que des fichiers de sorte admin_plus");
+    if (v.fichiers.length + plus.length > MAX_FICHIERS_VERSION) throw new DocumentIllisible(quoi + " : trop de fichiers");
     const ids = new Set();
-    const fichiers = v.fichiers.map((f, i) => {
+    const fichiers = [...v.fichiers, ...plus].map((f, i) => {
         const ou = quoi + " : le fichier n° " + (i + 1);
         if (!f || typeof f !== "object" || Array.isArray(f)) throw new DocumentIllisible(ou + " n'est pas un objet");
         if (!estHex(f.id, 32) || ids.has(f.id)) throw new DocumentIllisible(ou + " : son identifiant est illisible (ou deux fois)");
@@ -327,8 +335,10 @@ export const RoutesFichiers = {
         if (!entier(corps.duree, 60, max))
             throw mal("duree", corps.une_fois ? "Le champ « duree » doit être un nombre de secondes, de 60 à 172800 (48 h) pour un lien d'une seule fois."
                                               : "Le champ « duree » doit être un nombre de secondes, de 60 à 2592000 (30 jours).");
-        const f = this.ligne("SELECT complet FROM fichiers WHERE id = ?", corps.id);
+        const f = this.ligne("SELECT complet, sorte FROM fichiers WHERE id = ?", corps.id);
         if (!f || !f.complet) throw pasDeFichier();
+        // 1.49.0 : l'Admin+ ne s'envoie jamais (ni lien, ni fichier joint)
+        if (f.sorte === "admin_plus") throw new Erreur(403, "acces", "L'installateur de l'Admin+ ne s'envoie pas : il est à l'admin+ seul.");
         if (this.nombre("SELECT COUNT(*) AS n FROM fichiers_jetons WHERE expire >= ?", ctx.now) >= MAX_LIENS)
             throw new Erreur(507, "limite", "Trop de liens sont en cours : réessaie plus tard.");
         const jeton = hasardHex(16);
@@ -376,12 +386,29 @@ export const RoutesFichiers = {
         if (!editeur && (!a || a.retire)) throw refus("sa clé n'est pas celle d'un admin de la liste");
         const cle = unhex(j.cle);
         if (!(await verifierBloc(bloc, cle, await cleIdDe(cle)))) throw refus("il n'est pas signé par sa clé");
+        return j.cle; // 1.49.0 : la cle qui l'a signe (l'admin+ : une cle de l'editeur)
     },
 
     // Qui lit ce fichier ? Un appel signe par un admin ou l'editeur : tout ; ?jeton= : son fichier ; sinon l'acces du
     // manifeste (public ; admins : aussi le jeton d'un admin). Rend le lien (?jeton=) employe, ou null.
     async exigerAccesFichier(ctx, f) {
         const cle = ctx.request.headers.get("X-XPG-Cle");
+        // 1.49.0 : l'installateur de l'Admin+ - la cle de l'editeur seule (un appel signe par elle, ou un jeton d'admin qu'elle
+        // a signe : le Studio du PC de l'admin+) ; jamais un admin, un lien, un client.
+        if (f.sorte === "admin_plus") {
+            const refus = () => new Erreur(403, "acces", "Ce fichier est réservé à l'admin+ (la clé de l'éditeur).");
+            const editeurs = (await this.clesEditeur()).map((k) => k.hex);
+            if (cle) {
+                if (!editeurs.includes(cle)) throw refus();
+                ctx.appelant = await this.verifierAppel(ctx, "admin");
+                this.x("INSERT INTO nonces (nonce, vu) VALUES (?, ?)", ctx.appelant.nonce, ctx.now);
+                this.noterLogiciel(ctx);
+                return null;
+            }
+            const jeton = ctx.request.headers.get("X-XPG-Jeton");
+            if (!jeton || !editeurs.includes(await this.verifierJetonAdmin(jeton, ctx.now))) throw refus();
+            return null;
+        }
         if (cle && ((await this.clesEditeur()).some((k) => k.hex === cle) || this.admin(cle))) {
             ctx.appelant = await this.verifierAppel(ctx, "admin");
             this.x("INSERT INTO nonces (nonce, vu) VALUES (?, ?)", ctx.appelant.nonce, ctx.now);
@@ -426,6 +453,7 @@ export const RoutesFichiers = {
     async lienFichier(ctx) {
         const lien = await this.lien(ctx, null);
         const f = this.fichierComplet(lien.fichier);
+        if (f.sorte === "admin_plus") throw lienMort(); // 1.49.0 : jamais par un lien
         if (lien.une_fois) this.x("DELETE FROM fichiers_jetons WHERE hash = ?", lien.hash);
         let n = 0;
         const flux = new ReadableStream({

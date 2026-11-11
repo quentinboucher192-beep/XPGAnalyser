@@ -1272,9 +1272,14 @@ void ServicePage::rebuild() {
     else if (s.state.reached)
         bl.pair("Certificat", s.state.certProblem.empty() ? std::string("absent") : s.state.certProblem, ui::Tone::Error);
     certify_->setText(certOk ? "Renouveler le certificat\xE2\x80\xA6" : "Certifier la cl\xC3\xA9 du service\xE2\x80\xA6");
-    bl.row({certify_});
-    bl.note("Certifier lit d'abord la cl\xC3\xA9 du service et te montre son empreinte : compare-la avec le champ cle_service de "
-            "<adresse>/v1/etat ouvert dans ton navigateur. Rien n'est sign\xC3\xA9 sans ton accord.");
+    if (license_admin::classique()) {   // 1.49.0 : XPG Admin ne certifie jamais le service (la cle de l'editeur)
+        certify_->setVisibility(ui::Visibility::Collapsed);
+        bl.note("Seul l'admin+ certifie le service (XPG License Manager Admin, la cl\xC3\xA9 de l'\xC3\xA9" "diteur).");
+    } else {
+        bl.row({certify_});
+        bl.note("Certifier lit d'abord la cl\xC3\xA9 du service et te montre son empreinte : compare-la avec le champ cle_service de "
+                "<adresse>/v1/etat ouvert dans ton navigateur. Rien n'est sign\xC3\xA9 sans ton accord.");
+    }
     bl.end();
 
     fallbackBlocks(bl);   // 1.44.0

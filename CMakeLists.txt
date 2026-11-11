@@ -365,6 +365,19 @@ if(XPG_WITH_SDL AND TARGET xpg_admin_gui AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}
         configure_file(resources/windows/xpg_license_admin.rc.in ${CMAKE_CURRENT_BINARY_DIR}/xpg_license_manager_admin.rc @ONLY)
         target_sources(xpg_license_manager_admin PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/xpg_license_manager_admin.rc)
     endif()
+    # 1.49.0 : XPG Admin, l'Admin classique (les admins, recu avec une invitation) : le meme main et les memes
+    # bibliotheques ; XPG_ADMIN_CLASSIQUE fait appeler license_admin::setEdition(Classique) au lancement (docs/ADMINS.md,
+    # par. 12). Pas de console.
+    add_executable(xpg_admin_classique src/license_admin/gui/AdminGuiMain.cpp src/platform/FontAtlas.cpp ${SDL_SOURCES})
+    target_link_libraries(xpg_admin_classique PRIVATE xpg_admin_gui SDL3::SDL3)
+    target_compile_definitions(xpg_admin_classique PRIVATE XPG_WITH_SDL=1 XPG_ADMIN_CLASSIQUE=1)
+    set_target_properties(xpg_admin_classique PROPERTIES OUTPUT_NAME XPG-Admin)
+    if(WIN32)
+        set(XPG_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/logo/xpg_admin.ico")   # la cle sur une tuile violette
+        set(XPG_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/xpg_analyzer.manifest")
+        configure_file(resources/windows/xpg_admin.rc.in ${CMAKE_CURRENT_BINARY_DIR}/xpg_admin_classique.rc @ONLY)
+        target_sources(xpg_admin_classique PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/xpg_admin_classique.rc)
+    endif()
 endif()
 
 # --- lot 12 : le logo de l'executable Windows ---------------------------------

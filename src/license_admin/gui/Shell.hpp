@@ -90,7 +90,7 @@ public:
     explicit Shell(std::string folder = {}, std::function<Seconds()> clock = {});
     ~Shell() override;
 
-    [[nodiscard]] std::string title() const override { return kAppName; }
+    [[nodiscard]] std::string title() const override { return appName(); }
 
     // ---- ce que les pages recoivent ----
     [[nodiscard]] ShellHost host();

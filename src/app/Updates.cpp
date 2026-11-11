@@ -172,9 +172,23 @@ Offer makeOffer(const ls::UpdateOffer& u) {
     Offer o;
     o.offer = u;
     o.pcName = deploy::DevKey::computerName();
-    if (o.admin()) {
+    bool any = false;   // 1.49.0 : un installateur d'Admin (XPG Admin, l'Admin+) dans la version
+    for (const auto& f : u.files) any = any || f.kind == "admin" || f.kind == "admin_plus";
+    if (any) {
         const AdminToken t = readAdminToken();
+        // 1.49.0 : le jeton signe par une cle de l'editeur : le PC de l'admin+ - son Admin est l'Admin+ (admin_plus) ;
+        // sinon XPG Admin (admin). Un admin qui a l'Admin d'avant (1.48) recoit << admin >> : sa cle et ses donnees sont
+        // dans le meme dossier, rien a refaire.
         if (t.ok) {
+            crypto::PublicKey pk{};
+            crypto::Bytes raw;
+            if (crypto::unhex(t.token.key, raw, pk.size())) {
+                std::copy(raw.begin(), raw.end(), pk.begin());
+                for (const auto& k : lic::trustedPublisherKeys())
+                    if (k.key == pk) o.adminKind = "admin_plus";
+            }
+        }
+        if (t.ok && o.admin()) {
             o.adminPc = true;
             o.token = t.token;
             o.adminOutdated = t.token.version.empty() || adm::compareSemver(t.token.version, u.version) < 0;
@@ -535,7 +549,7 @@ const ls::AnnouncedFile* Offer::studios() const {
 }
 const ls::AnnouncedFile* Offer::admin() const {
     for (const auto& f : offer.files)
-        if (f.kind == "admin") return &f;
+        if (f.kind == adminKind) return &f;   // 1.49.0 : la sorte de CE PC (jamais celle de l'admin+ chez un admin)
     return nullptr;
 }
 std::vector<ls::AnnouncedFile> Offer::files() const {
@@ -647,7 +661,7 @@ bool beginInstall(App& app, bool all) {
                 return false;
             }
             filedl::Want w = wantOf(f);
-            if (f.kind == "admin") {
+            if (f.kind == "admin" || f.kind == "admin_plus") {   // 1.49.0 : l'Admin+ aussi (le jeton signe par la cle de l'editeur)
                 const AdminToken& t = token;
                 if (!t.ok) {
                     in.phase = Phase::Failed;
@@ -716,7 +730,7 @@ bool fetchNoticeFile(const std::string& noticeId, const std::string& fileId, std
         return false;
     }
     filedl::Want w = wantOf(*f);
-    if (f->kind == "admin" && f->token.empty()) w.adminToken = readAdminToken().base64;
+    if ((f->kind == "admin" || f->kind == "admin_plus") && f->token.empty()) w.adminToken = readAdminToken().base64;
     if (!filedl::start({w}, "fichier")) {
         if (why) *why = "un t\xC3\xA9l\xC3\xA9" "chargement est d\xC3\xA9j\xC3\xA0 en cours";
         return false;

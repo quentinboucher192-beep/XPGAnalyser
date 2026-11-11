@@ -290,14 +290,17 @@ private:
             case Role::Pending: return "Ta demande pour devenir admin attend l'admin+ : il lit ton empreinte au t\xC3\xA9l\xC3\xA9phone, puis l'accepte.";
             case Role::None: break;
         }
-        return "Pas encore de cl\xC3\xA9 sur ce poste : demande \xC3\xA0 devenir admin, ou cr\xC3\xA9" "e la cl\xC3\xA9 de l'\xC3\xA9" "diteur si tu es l'admin+.";
+        if (license_admin::classique()) return "Pas encore de cl\xC3\xA9 d'admin sur ce poste : ta demande part avec ton code d'invitation, l'admin+ l'accepte.";
+        return "Ce programme est celui de l'admin+. Un admin installe XPG Admin, re\xC3\xA7u avec son invitation. Pas encore de cl\xC3\xA9 de l'\xC3\xA9" "diteur sur ce poste.";
     }
 
     [[nodiscard]] std::vector<ui::Button*> actions() const {
         switch (info_.role) {
             case Role::Plus: return {backup_};
             case Role::Pending: return {waiting_};
-            case Role::None: return {ask_, createKey_};
+            case Role::None:   // 1.49.0 : XPG Admin, devenir admin seulement ; l'Admin+, la cle de l'editeur seulement
+                if (license_admin::classique()) return {ask_};
+                return {createKey_};
             case Role::Admin:
             case Role::Retired: break;
         }
@@ -618,8 +621,10 @@ private:
         cardTitle(r, th, id_, "TON IDENTIFIANT");
         if (info_.keyHex.empty()) {
             kit::drawWrapped(r, id_.x + 20.f, id_.y + 48.f, id_.w - 40.f,
-                             "Pas encore de cl\xC3\xA9 sur ce poste. Demander \xC3\xA0 devenir admin la cr\xC3\xA9" "e (elle ne quitte jamais ce PC) ; l'admin+ cr\xC3\xA9" "e la cl\xC3\xA9 de l'\xC3\xA9" "diteur "
-                             "dans Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9.",
+                             license_admin::classique()   // 1.49.0
+                                 ? "Pas encore de cl\xC3\xA9 sur ce poste. Demander \xC3\xA0 devenir admin la cr\xC3\xA9" "e (elle ne quitte jamais ce PC)."
+                                 : "Pas encore de cl\xC3\xA9 sur ce poste. L'admin+ cr\xC3\xA9" "e la cl\xC3\xA9 de l'\xC3\xA9" "diteur dans Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 "
+                                   "(ou la restaure).",
                              FontId{14}, c.textMuted, 20.f, 4);
             return;
         }

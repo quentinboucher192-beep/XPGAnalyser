@@ -60,6 +60,7 @@
 #include "../Changes.hpp"   // 1.48.1 : << quelque chose a change >> (toutes les pages se relisent)
 #include "../ServiceConnection.hpp"   // 1.47.0 : la connexion au service qui voyage avec l'installateur
 #include "Derogation.hpp"             // 1.47.0 : la derogation << Gerer le service >>
+#include "../Edition.hpp"             // 1.49.0 : l'Admin+ ou l'Admin classique (XPG Admin)
 #include "../../core/Version.hpp"
 #include "../../licensing/Admins.hpp"
 #include "../../licensing/Documents.hpp"
@@ -79,6 +80,12 @@ namespace license_admin::gui {
 using licensing::Seconds;
 
 inline constexpr const char* kAppName = "XPG License Manager Admin";
+// 1.49.0 : le nom du programme qui tourne - << XPG Admin >> (l'Admin classique, license_admin::classique()) ou celui de
+// l'Admin+ (kAppName). La fenetre, le menu, l'aide.
+[[nodiscard]] inline const char* appName() noexcept { return license_admin::classique() ? "XPG Admin" : kAppName; }
+// La phrase de XPG Admin quand on lui demande ce qui est a l'admin+ (un lien, un essai) : il refuse et le dit.
+inline constexpr const char* kClassicRefusal =
+    "XPG Admin ne fait pas cela : c'est \xC3\xA0 l'admin+ (XPG License Manager Admin, sur le poste qui a la cl\xC3\xA9 de l'\xC3\xA9" "diteur)";
 // 1.33.0 : la premiere application (1.0.0) ; 1.35.0 : le service des licences (1.1.0) ; 1.40.0 : la version des Studios (son
 // installateur la porte : une seule version a dire)
 inline constexpr const char* kAppVersion = XPG_ANALYZER_VERSION;
@@ -282,19 +289,29 @@ struct AdminRequest {
     // 1.47.0 (adminRequests, toutes) : "attente", "acceptee", "refusee" ; son dernier changement (une close : 7 jours au plus).
     std::string state{"attente"};
     Seconds     changed{0};
+    // 1.49.0 (docs/ADMINS.md, par. 12) : l'invitation par codes que la demande a servie (le service le dit) ; vide : sans
+    // invitation (un Admin d'avant la 1.49 : l'empreinte au telephone). `confirmation` : les 6 chiffres que montre son
+    // Admin, calcules ICI de sa cle (licensing::admins::confirmationCode) - jamais lus du service.
+    std::string invitationId, invitationName, invitationProfile, confirmation;
+    Seconds     invited{0};
     [[nodiscard]] bool waiting() const noexcept { return state == "attente"; }
+    [[nodiscard]] bool byCode() const noexcept { return !invitationId.empty(); }
 };
 // 1.47.0 : une demande d'admin a accepter (<< Accepter 3 demandes... >>) : son profil, et << J'ai verifie l'empreinte >>.
 struct AdminAccept {
     std::string key;                     // la cle du demandeur (64 hexadecimaux)
     std::string profile;                 // le profil (ses droits) ; vide : aucun droit (la page propose celui de l'invitation, sinon LV1)
     bool        fingerprintChecked{false};   // lue au telephone : sans elle, rien n'est signe
+    // 1.49.0 : une demande avec invitation - les 6 chiffres tapes par l'admin+ (<< 123 456 >>) a la place de la case.
+    std::string confirmation;
 };
 // 1.47.0 : une invitation de l'admin+ (<< Ajouter un admin... >> ; invitations-admins.json, sur son poste) - le nom, le
 // courriel, le profil prevu, comment l'Admin est parti (<< studio >>, << lien >>), quand.
 struct AdminInvitation {
     std::string name, email, profile, via;
     Seconds     at{0};
+    std::string id;          // 1.49.0 : l'invitation du service (inv-...) ; vide : une d'avant
+    Seconds     expires{0};  // 1.49.0 : la fin du code (48 h)
 };
 // L'invitation qui va avec une demande (le meme courriel, sinon le meme nom ; la plus recente) ; nul : sans invitation.
 [[nodiscard]] const AdminInvitation* invitationFor(const std::vector<AdminInvitation>& invitations, const AdminRequest& request);
@@ -668,6 +685,18 @@ public:
     // Cree la cle d'admin s'il le faut, depose la demande (POST /v1/admins/demande, signee par elle) ; `fingerprint` :
     // l'empreinte a lire au telephone a l'admin+ (aussi dans le message).
     [[nodiscard]] OpResult requestAdmin(const std::string& name, const std::string& email, std::string* fingerprint = nullptr) const;
+    // 1.49.0 (docs/ADMINS.md, par. 12) : la meme, avec le code d'invitation (INV-XXXX-XXXX) - le service le verifie (403 :
+    // << Ce code d'invitation est inconnu. >>, << ... a expire (48 h). >>, << ... a deja servi. >> ; `refused` vrai : le
+    // code est a retaper). invitation.txt est efface des que le service a repondu. Reussi : `output` = les 6 chiffres
+    // (<< 123 456 >>) a dire a l'admin+.
+    [[nodiscard]] OpResult requestAdminInvited(const std::string& name, const std::string& email, const std::string& invitation,
+                                               bool* refused = nullptr) const;
+    // Le code d'invitation pose par l'installateur (%LOCALAPPDATA%\XPG\LicenseAdmin\invitation.txt : le dossier de
+    // l'Admin), remis en forme ; vide : pas de fichier (ou pas un code).
+    [[nodiscard]] std::string pendingInvitationCode() const;
+    // 1.49.0 : la demande envoyee avec une invitation (demande-admin.json) : les 6 chiffres a dire a l'admin+ ; vide : une
+    // demande sans invitation (l'empreinte).
+    [[nodiscard]] std::string pendingConfirmation() const;
     // Ou en est la demande (GET /v1/admins/demande) : "attente", "acceptee", "refusee", "retire".
     [[nodiscard]] OpResult adminRequestState(std::string& state) const;
     // Relever la liste des admins (GET /v1/admins) et la garder si elle est plus recente ; un admin accepte : les cles de
@@ -686,7 +715,12 @@ public:
     // `rights` s'ils sont donnes), le nom du profil note ; publiee ; la cle de synchro deposee dans son trousseau.
     // `fingerprintConfirmed` : << J'ai verifie l'empreinte >> (sinon refuse).
     [[nodiscard]] OpResult acceptAdmin(const std::string& keyHex, const std::string& profile, const std::vector<std::string>* rights = nullptr,
-                                       bool fingerprintConfirmed = true) const;
+                                       bool fingerprintConfirmed = true, const std::string& confirmation = {}) const;
+    // 1.49.0 (docs/ADMINS.md, par. 12) : creer une invitation par codes (POST /admin/admins/invitation ; l'admin+) - le code
+    // (INV-XXXX-XXXX, 48 h, une seule fois) rendu dans `code` (montre une fois, jamais garde), l'invitation notee
+    // (invitations-admins.json, sans le code), une ligne << admin_inviter >> au journal.
+    [[nodiscard]] OpResult inviteAdmin(const std::string& name, const std::string& email, const std::string& profile, std::string& code,
+                                       AdminInvitation* noted = nullptr) const;
     [[nodiscard]] OpResult refuseAdmin(const std::string& keyHex) const;
     // 1.47.0 : LES DEMANDES D'ADMIN EN LISTE (PageAdminRequests.cpp ; l'admin+). `all` : aussi les closes (acceptees,
     // refusees, 7 jours ; GET /admin/admins/demandes?toutes=1 - un service d'avant ne rend que celles en attente).
@@ -779,9 +813,12 @@ public:
     [[nodiscard]] OpResult attachFile(const std::string& path, licensing::admins::MessageFile& out, const Progress& progress = {}) const;
     // << Ajouter un admin >> : l'installateur de l'Admin de la derniere version publiee (sinon `fallbackPath`, depose pour
     // l'occasion), envoye dans les notifications du Studio de ce PC (l'action << admin >>) ; ou par un LIEN (48 h, une fois).
+    // 1.49.0 : `invitationCode` (s'il y en a un) va dans le message : << Ton code d'invitation : INV-... (a saisir dans
+    // l'installateur, valable 48 h) >>.
     [[nodiscard]] OpResult sendAdminInstaller(const std::string& device, const std::string& adminName, const std::string& fallbackPath,
-                                              const Progress& progress = {}) const;
-    [[nodiscard]] OpResult adminInstallerLink(const std::string& fallbackPath, std::string& url, const Progress& progress = {}) const;
+                                              const Progress& progress = {}, const std::string& invitationCode = {}) const;
+    [[nodiscard]] OpResult adminInstallerLink(const std::string& fallbackPath, std::string& url, const Progress& progress = {},
+                                              const std::string& invitationCode = {}) const;
 
     // ---- les versions ----
     // La version d'un installateur Windows (<< 1.44.1 >>) lue dans sa ressource VS_VERSIONINFO (ProductVersion, sinon

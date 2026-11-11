@@ -81,6 +81,7 @@ export const ACTIONS_JOURNAL = [
     "clients_exporter",
     "courriel",
     "admin_ajouter",
+    "admin_inviter", // 1.49.0 : une invitation par codes creee (POST /admin/admins/invitation)
     "admin_retirer",
     "admin_droits",
     "admin_profil",
@@ -122,6 +123,36 @@ const LIGNES_JOURNAL = 500; // une lecture, au plus
 const PARTIES_REGISTRE = { editions: "offres", options: "options", announcements: "annonces", annonces: "annonces" };
 const HORS_PARTIES = new Set(["format", "version", "number", "issued_at"]);
 export const DROITS_REGISTRE = ["offres", "options", "annonces"];
+
+// 1.49.0 : L'INVITATION PAR CODES (docs/ADMINS.md, par. 12). L'admin+ cree un code d'invitation (INV-XXXX-XXXX :
+// 8 caracteres de l'alphabet Crockford sans I L O U, 40 bits), valable 48 h, une seule fois ; le service n'en garde que
+// le SHA-256 (hexa), dans la config (une ligne JSON, comme la derogation : elle part avec la sauvegarde). La demande
+// d'admin qui le porte le sert (servie, la cle qui l'a servi) ; GET /admin/admins/demandes rend l'invitation de chaque
+// demande. Le code de confirmation (6 chiffres) ne passe jamais par le service : chaque Admin le calcule de la cle.
+const CONFIG_INVITATIONS = "admins_invitations";
+const DUREE_INVITATION = 48 * 3600;
+const MAX_INVITATIONS = 100; // gardees, au plus
+const GARDE_INVITATIONS = 30 * JOUR; // une invitation finie est oubliee 30 jours apres son expiration (sauf demande en attente)
+const ALPHABET_INVITATION = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+// Un code d'invitation remis en forme (<< INV-XXXX-XXXX >>) : minuscules, espaces, tirets toleres ; O lu 0, I et L lus 1.
+// null : pas un code.
+export function normaliserInvitation(v) {
+    if (typeof v !== "string" || v.length > 40) return null;
+    let s = v.replace(/[\s_-]/g, "").toUpperCase();
+    if (s.length === 11 && s.startsWith("INV")) s = s.slice(3);
+    if (s.length !== 8) return null;
+    s = s.replace(/O/g, "0").replace(/[IL]/g, "1");
+    for (const c of s) if (!ALPHABET_INVITATION.includes(c)) return null;
+    return "INV-" + s.slice(0, 4) + "-" + s.slice(4);
+}
+function tirerInvitation() {
+    const o = crypto.getRandomValues(new Uint8Array(8));
+    let s = "";
+    for (const b of o) s += ALPHABET_INVITATION[b & 31]; // 256 = 8 x 32 : uniforme
+    return "INV-" + s.slice(0, 4) + "-" + s.slice(4);
+}
+const refusInvitation = (phrase) => new Erreur(403, "invitation", phrase);
 
 // Un texte d'une ligne, sans caractere de controle, entre min et max caracteres.
 function texteLigne(v, min, max) {
@@ -208,6 +239,11 @@ function lireDemandeAdmin(corps) {
     const logiciel = corps.logiciel === undefined ? "" : corps.logiciel;
     if (!texteLigne(logiciel, 0, 40)) throw mal("logiciel", "Le champ « logiciel » doit faire 40 caractères au plus.");
     return { nom, courriel, pc, poste: corps.poste, logiciel };
+}
+
+// Ce que l'admin+ voit d'une invitation (jamais son empreinte).
+function invitationVue(i) {
+    return { id: i.id, nom: i.nom, courriel: i.courriel, profil: i.profil, invitee: i.cree, expire: i.expire, servie: i.servie_le };
 }
 
 function depuisDe(ctx) {
@@ -323,8 +359,27 @@ export const RoutesAdmins = {
         if ((await this.clesEditeur()).some((k) => k.hex === cle)) throw new Erreur(409, "deja", "Cette clé est celle de l'éditeur : elle fait déjà tout.");
         const a = this.admin(cle);
         if (a && !a.retire) throw new Erreur(409, "deja", "Cette clé est déjà celle d'un admin de la liste.");
+        // 1.49.0 : l'invitation (facultative : un Admin d'avant n'en a pas) - connue, pas servie (par une autre cle), pas expiree.
+        let invitations = null;
+        let inv = null;
+        if (corps.invitation !== undefined) {
+            if (typeof corps.invitation !== "string") throw mal("invitation", "Le champ « invitation » doit être le code d'invitation (INV-XXXX-XXXX).");
+            const code = normaliserInvitation(corps.invitation);
+            const hash = code ? await sha256Hex(enc.encode(code)) : "";
+            invitations = this.invitations(ctx.now);
+            inv = code ? invitations.find((i) => i.hash === hash) : null;
+            if (!inv) throw refusInvitation("Ce code d'invitation est inconnu.");
+            if (inv.servie && inv.demande !== cle) throw refusInvitation("Ce code d'invitation a déjà servi.");
+            if (!inv.servie && inv.expire < ctx.now) throw refusInvitation("Ce code d'invitation a expiré (48 h).");
+        }
         const attente = this.nombre("SELECT COUNT(*) AS n FROM admins_demandes WHERE etat = 'attente' AND cle != ?", cle);
         if (attente >= MAX_DEMANDES_ADMINS) throw new Erreur(507, "limite", "Trop de demandes d'admin attendent l'admin+ : réessaie plus tard.");
+        if (inv && !inv.servie) {
+            inv.servie = 1;
+            inv.demande = cle;
+            inv.servie_le = ctx.now;
+            this.ecrireInvitations(invitations);
+        }
         this.x(
             `INSERT INTO admins_demandes (cle, nom, courriel, pc, poste, logiciel, etat, recue, maj) VALUES (?, ?, ?, ?, ?, ?, 'attente', ?, ?)
              ON CONFLICT (cle) DO UPDATE SET nom = excluded.nom, courriel = excluded.courriel, pc = excluded.pc, poste = excluded.poste,
@@ -346,8 +401,9 @@ export const RoutesAdmins = {
             pc: d.pc,
             poste: d.poste,
             logiciel: d.logiciel,
+            ...(inv ? { invitation: inv.id } : {}),
         });
-        return reponseJson(201, { etat: "attente", empreinte });
+        return reponseJson(201, { etat: "attente", empreinte, ...(inv ? { invitation: { id: inv.id, nom: inv.nom, profil: inv.profil } } : {}) });
     },
 
     // GET /v1/admins/demande?cle=<la cle qui signe> : ou en est la demande de cette cle (attente, acceptee, refusee ;
@@ -369,6 +425,10 @@ export const RoutesAdmins = {
     // (la liste << Demandes d'admin >> de l'Admin) ; sans lui, comme avant (les seules en attente).
     async listerDemandesAdmins(ctx) {
         const toutes = ctx.url.searchParams.get("toutes") === "1";
+        // 1.49.0 : l'invitation servie par chaque cle (la plus recente)
+        const parCle = new Map();
+        for (const i of this.invitations(ctx.now))
+            if (i.servie && i.demande && (!parCle.has(i.demande) || i.servie_le >= parCle.get(i.demande).servie_le)) parCle.set(i.demande, i);
         const demandes = [];
         for (const r of this.lignes(
             toutes ? "SELECT * FROM admins_demandes ORDER BY recue, cle" : "SELECT * FROM admins_demandes WHERE etat = 'attente' ORDER BY recue, cle",
@@ -385,8 +445,57 @@ export const RoutesAdmins = {
                 recue: r.recue,
                 etat: r.etat,
                 maj: r.maj,
+                ...(parCle.has(r.cle) ? { invitation: invitationVue(parCle.get(r.cle)) } : {}),
             });
         return reponseJson(200, { demandes });
+    },
+
+    // ============================================================ 1.49.0 : les invitations ==
+    // Les invitations gardees (la config), sans celles finies depuis plus de 30 jours (sauf si leur demande attend).
+    invitations(now) {
+        let liste = [];
+        try {
+            const t = this.config(CONFIG_INVITATIONS);
+            if (t) liste = JSON.parse(t);
+        } catch {
+            liste = [];
+        }
+        if (!Array.isArray(liste)) liste = [];
+        return liste.filter(
+            (i) =>
+                i &&
+                typeof i.hash === "string" &&
+                (i.expire + GARDE_INVITATIONS >= now ||
+                    (i.servie && this.nombre("SELECT COUNT(*) AS n FROM admins_demandes WHERE cle = ? AND etat = 'attente'", i.demande) > 0)),
+        );
+    },
+    ecrireInvitations(liste) {
+        this.ecrireConfig(CONFIG_INVITATIONS, JSON.stringify(liste));
+    },
+
+    // POST /admin/admins/invitation (admin+) {"nom","courriel","profil"} -> 201 {"id","code","expire"} : un code
+    // d'invitation, 48 h, une seule fois. Le code n'est rendu qu'ici (le service n'en garde que le SHA-256).
+    async creerInvitationAdmin(ctx) {
+        const corps = this.corpsJson(ctx);
+        const nom = typeof corps.nom === "string" ? corps.nom.trim() : null;
+        if (!texteLigne(nom, 1, 60)) throw mal("nom", "Le champ « nom » doit être le nom du futur admin (1 à 60 caractères).");
+        const courriel = corps.courriel === undefined ? "" : typeof corps.courriel === "string" ? corps.courriel.trim() : null;
+        if (courriel === null || courriel.length > 120 || (courriel && !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(courriel)))
+            throw mal("courriel", "Le champ « courriel » doit être une adresse de courriel (120 caractères au plus), ou vide.");
+        const profil = corps.profil === undefined ? "" : corps.profil;
+        if (!texteLigne(profil, 0, 60)) throw mal("profil", "Le champ « profil » doit être le nom d'un profil (60 caractères au plus).");
+        const liste = this.invitations(ctx.now);
+        if (liste.length >= MAX_INVITATIONS) throw new Erreur(507, "limite", "Trop d'invitations sont gardées : réessaie dans quelques jours.");
+        let code = "";
+        let hash = "";
+        do {
+            code = tirerInvitation();
+            hash = await sha256Hex(enc.encode(code));
+        } while (liste.some((i) => i.hash === hash));
+        const inv = { id: "inv-" + hasardHex(8), hash, nom, courriel, profil, cree: ctx.now, expire: ctx.now + DUREE_INVITATION, servie: 0, demande: "", servie_le: 0 };
+        liste.push(inv);
+        this.ecrireInvitations(liste);
+        return reponseJson(201, { id: inv.id, code, expire: inv.expire });
     },
 
     // POST /admin/admins/demande/refuser (admin+) {"cle":"<64 hexa>"}.

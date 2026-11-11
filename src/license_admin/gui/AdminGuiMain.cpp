@@ -1,6 +1,8 @@
 // =============================================================================
 //  license_admin/gui/AdminGuiMain.cpp - 1.33.0 : XPG-License-Manager-Admin.exe,
 //  LA FENETRE de l'application de l'editeur (jamais livree a un client)
+//  1.49.0 : le meme fichier fait XPG-Admin.exe (XPG Admin, l'Admin classique ; XPG_ADMIN_CLASSIQUE) : son main dit
+//  license_admin::setEdition(Classique), et tout ce qui est a l'admin+ disparait (docs/ADMINS.md, par. 12).
 // -----------------------------------------------------------------------------
 //  SDL3, le meme rendu et les memes widgets que les Studios (ReportWindow.cpp en
 //  est le modele) : une fenetre 1400 x 900 (1100 x 700 au moins), la coquille
@@ -218,7 +220,7 @@ void usage(std::FILE* to) {
                  "  --glisser F           glisser ce fichier sur la fen\xC3\xAAtre (r\xC3\xA9p\xC3\xA9table ; ceux qui se suivent : un geste)\n"
                  "  --capture F.png       enregistrer l'image de la fen\xC3\xAAtre, puis quitter\n"
                  "  --apres S             la capture S secondes apr\xC3\xA8s la derni\xC3\xA8re action (d\xC3\xA9" "faut 1)\n",
-                 gui::kAppName, gui::kAppVersion);
+                 gui::appName(), gui::kAppVersion);
 }
 
 bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
@@ -412,6 +414,10 @@ bool savePng(gfx::IRenderer& renderer, const std::string& path, std::string& why
 
 int main(int argc, char** argv) {
     core::hardenLibrarySearch();   // aucune DLL du dossier courant ni du PATH
+#if defined(XPG_ADMIN_CLASSIQUE)
+    // 1.49.0 : XPG-Admin.exe, l'Admin classique (docs/ADMINS.md, par. 12) - il n'offre jamais ce qui est a l'admin+.
+    license_admin::setEdition(license_admin::Edition::Classique);
+#endif
     Options o;
     std::string why;
     if (!parse(utf8Args(argc, argv), o, why)) {
@@ -420,7 +426,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (o.version) {
-        std::printf("%s %s\n", gui::kAppName, gui::kAppVersion);
+        std::printf("%s %s\n", gui::appName(), gui::kAppVersion);
         return 0;
     }
     if (o.help) {
@@ -439,7 +445,7 @@ int main(int argc, char** argv) {
     SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON_SMALL, "1");
 #endif
     if (!SDL_Init(SDL_INIT_VIDEO)) {
-        std::fprintf(stderr, "%s : %s\n", gui::kAppName, SDL_GetError());
+        std::fprintf(stderr, "%s : %s\n", gui::appName(), SDL_GetError());
         return 2;
     }
     // 1.41.0 : LE NOUVEAU DESIGN - le theme XPG, en violet (la couleur de l'Admin), et la police Inter fournie a cote
@@ -465,16 +471,16 @@ int main(int argc, char** argv) {
             gfx::setInterfaceFontFolder(std::string(u8.begin(), u8.end()));
         }
     }
-    SDL_Window* window = SDL_CreateWindow(gui::kAppName, o.width, o.height, SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_RESIZABLE);
+    SDL_Window* window = SDL_CreateWindow(gui::appName(), o.width, o.height, SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_RESIZABLE);
     if (!window) {
-        std::fprintf(stderr, "%s : %s\n", gui::kAppName, SDL_GetError());
+        std::fprintf(stderr, "%s : %s\n", gui::appName(), SDL_GetError());
         SDL_Quit();
         return 2;
     }
     (void)SDL_SetWindowMinimumSize(window, std::min(1100, o.width), std::min(700, o.height));
     auto created = gfx::SdlRenderer::create(window);
     if (!created) {
-        std::fprintf(stderr, "%s : %s\n", gui::kAppName, created.error().message().c_str());
+        std::fprintf(stderr, "%s : %s\n", gui::appName(), created.error().message().c_str());
         SDL_DestroyWindow(window);
         SDL_Quit();
         return 2;
