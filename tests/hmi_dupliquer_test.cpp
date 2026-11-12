@@ -571,9 +571,9 @@ void cinqCents() {
     d->setGrouping(D::Grouping::Depth);
     // ---- la mesure ----
     std::printf("   mesure (Debug) : ouvrir %.0f ms, la grille 4 x 8 %.0f ms, une regle %.0f ms\n", tOpen, tGrid, tRule);
-    check(tOpen < 3000.0 && tGrid < 1500.0 && tRule < 1500.0,
+    check(tOpen < 2000.0 && tGrid < 600.0 && tRule < 600.0,
           "512 reperes x 31 copies : ouvrir " + std::to_string(static_cast<int>(tOpen)) + " ms, la grille " + std::to_string(static_cast<int>(tGrid))
-              + " ms, une regle " + std::to_string(static_cast<int>(tRule)) + " ms (bornes : 3 000, 1 500, 1 500 en Debug)");
+              + " ms, une regle " + std::to_string(static_cast<int>(tRule)) + " ms (bornes : 2 000, 600, 600 en Debug)");
     // ---- Dupliquer en UNE commande ----
     const std::size_t before = big.b.v().objects.size();
     core::CommandStack stack;

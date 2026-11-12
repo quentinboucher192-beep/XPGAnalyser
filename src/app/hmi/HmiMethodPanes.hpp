@@ -191,7 +191,7 @@ private:
     // 1.13.0 (relecture F2) : la liste montre une interface (le cadenas, Genre et Origine caches) ; ce que
     // l'utilisateur avait laisse de ces trois colonnes sur une structure, rendu au retour.
     bool               ifaceColumns_{false};
-    bool               keptColumns_[3]{true, true, true};
+    bool               keptColumns_[4]{true, true, true, true};   // 1.50.0 : et Tests
     core::ConnectionScope links_;
 };
 

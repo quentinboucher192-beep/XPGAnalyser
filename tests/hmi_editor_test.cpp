@@ -42575,8 +42575,9 @@ void correctifsF2_113() {
         // Parametres suit Methode (avant : a 392 px, hors de la liste large de 310 px).
         {
             const auto& cols = methods->methodTable().columns();
-            check(cols.size() == 6 && !cols[1].visible && !cols[2].visible && !cols[3].visible && cols[4].visible && cols[5].visible,
-                  "la liste des signatures : ni cadenas, ni Genre, ni Origine ; Param\xC3\xA8tres et Retour");
+            check(cols.size() == 7 && !cols[1].visible && !cols[2].visible && !cols[3].visible && cols[4].visible && cols[5].visible
+                      && !cols[6].visible,
+                  "la liste des signatures : ni cadenas, ni Genre, ni Origine, ni (1.50.0) Tests ; Param\xC3\xA8tres et Retour");
             float before = 0.f;   // la place de Parametres : les colonnes montrees avant elle (comme TableView::cellRect)
             for (std::size_t c = 0; c < 4 && c < cols.size(); ++c)
                 if (cols[c].visible) before += cols[c].width;
@@ -42597,8 +42598,8 @@ void correctifsF2_113() {
               "une structure : la section Op\xC3\xA9rateurs revient");
         {
             const auto& cols = methods->methodTable().columns();
-            check(cols.size() == 6 && cols[1].visible && cols[2].visible && !cols[3].visible && cols[4].visible,
-                  "T_Pompe ensuite : le cadenas et Genre reviennent ; Origine, masqu\xC3\xA9" "e par l'utilisateur avant l'interface, le reste");
+            check(cols.size() == 7 && cols[1].visible && cols[2].visible && !cols[3].visible && cols[4].visible && cols[6].visible,
+                  "T_Pompe ensuite : le cadenas, Genre et Tests reviennent ; Origine, masqu\xC3\xA9" "e par l'utilisateur avant l'interface, le reste");
         }
     }
 

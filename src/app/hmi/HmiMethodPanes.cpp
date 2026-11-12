@@ -494,9 +494,10 @@ void HmiMethodsPane::refresh() {
     // 1.13.0 (relecture F2) : une interface n'a ni visibilite, ni genre, ni origine ("signature", "propre" sur
     // chaque ligne) : ces trois colonnes se cachent, Parametres suit la signature dans la liste etroite (avant : a
     // 392 px, hors de vue). Une structure les retrouve telles que l'utilisateur les avait laissees.
+    // 1.50.0 : Tests aussi (une signature n'a pas de cas).
     if (iface != ifaceColumns_) {
-        const std::size_t hidden[3] = {ColVisibility, ColKind, ColOrigin};
-        for (std::size_t i = 0; i < 3; ++i) {
+        const std::size_t hidden[4] = {ColVisibility, ColKind, ColOrigin, ColTests};
+        for (std::size_t i = 0; i < 4; ++i) {
             if (iface) keptColumns_[i] = hidden[i] < table_->columns().size() && table_->columns()[hidden[i]].visible;
             table_->setColumnVisible(hidden[i], !iface && keptColumns_[i]);
         }

@@ -442,7 +442,7 @@ public:
         const auto& r = d_.listRows_[row];
         switch (c) {
         case 0: return r.text;
-        case 1: return r.where;
+        case 1: return r.group ? r.where : whereOf(r.marker);
         case 2: return r.rule;
         default: return r.last;
         }
@@ -477,12 +477,27 @@ public:
     [[nodiscard]] std::string rowTooltip(ui::RowIndex row) const override {
         if (row >= d_.listRows_.size()) return {};
         const auto& r = d_.listRows_[row];
-        std::string t = r.text + "\n" + r.where + "\n" + r.rule;
+        std::string t = r.text + "\n" + (r.group ? r.where : whereOf(r.marker)) + "\n" + r.rule;
         if (!r.last.empty()) t += "\n" + r.last;
         return t + "\nClic droit : Comme sa profondeur, Formule\xE2\x80\xA6, S\xC3\xA9rie (V1{n}), Tableau\xE2\x80\xA6, Coller (Excel), Garder, Vider.";
     }
 
 private:
+    // Ou est le repere : son premier endroit, nomme comme l'inspecteur - demande par les lignes DESSINEES seulement
+    // (les libelles d'un objet se relevent une fois, a la premiere ligne qui le montre).
+    std::string whereOf(std::size_t mi) const {
+        if (mi >= d_.scan_.markers.size()) return {};
+        const auto& m = d_.scan_.markers[mi];
+        if (m.spots.empty()) return {};
+        const auto& s = m.spots.front();
+        const hmi::View* v = d_.view();
+        auto it = d_.labels_.find(s.object);
+        if (it == d_.labels_.end())
+            it = d_.labels_.emplace(s.object, v ? inspectorLabels(*v, s.object, d_.spec_.doc ? &d_.spec_.doc->project : nullptr) : Labels{}).first;
+        std::string w = s.objectName + " \xC2\xB7 " + spotLabel(it->second, s.where);
+        if (m.spots.size() > 1) w += " (+" + std::to_string(m.spots.size() - 1) + ")";
+        return w;
+    }
     HmiDuplicateDialog& d_;
 };
 
@@ -1827,17 +1842,6 @@ void HmiDuplicateDialog::buildList() {
         return out;
     };
     const std::size_t lastRow = plan_.rows.empty() ? 0 : plan_.rows.size() - 1;
-    const hmi::View* v = view();
-    const hmi::Project* project = spec_.doc ? &spec_.doc->project : nullptr;
-    const auto whereOf = [&](const dup::MarkerInfo& m) {
-        if (m.spots.empty()) return std::string{};
-        const auto& s = m.spots.front();
-        auto it = labels_.find(s.object);   // 1.50.0 : une fois par objet, pour toute la vie de la fenetre
-        if (it == labels_.end()) it = labels_.emplace(s.object, v ? inspectorLabels(*v, s.object, project) : Labels{}).first;
-        std::string w = s.objectName + " \xC2\xB7 " + spotLabel(it->second, s.where);
-        if (m.spots.size() > 1) w += " (+" + std::to_string(m.spots.size() - 1) + ")";
-        return w;
-    };
     const auto keep = [&](std::size_t mi) {
         const auto& mm = model_.markers[mi];
         const std::string key = dup::markerKey(scan_.markers[mi].name);
@@ -1864,8 +1868,7 @@ void HmiDuplicateDialog::buildList() {
         ListRow r;
         r.key = dup::markerKey(scan_.markers[mi].name);
         r.marker = mi;
-        r.text = markerLabel(scan_.markers[mi].name);
-        r.where = whereOf(scan_.markers[mi]);
+        r.text = markerLabel(scan_.markers[mi].name);   // ou il est : demande par la table, ligne dessinee par ligne
         r.rule = ruleText(mi);
         r.own = rules_.ownOf(r.key).kind != dup::OwnKind::Group;
         if (lastRow > 0) {
