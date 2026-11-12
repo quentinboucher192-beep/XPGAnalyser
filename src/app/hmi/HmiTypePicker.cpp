@@ -53,7 +53,7 @@ std::string useLabel(unsigned use) {
 
 bool canReference(unsigned use) { return tf::referenceAllowed(use); }
 // 1.50.0 (planche 03) : la ligne Acces se montre la ou une forme ou un acces se choisit.
-constexpr float kAccessW = 130.f;
+constexpr float kAccessW[] = {130.f, 168.f, 182.f};   // Direct, REF_TO, POINTER TO (le mot et sa precision)
 
 // 1.12.14 : un type COMPOSE (un tableau, une liste, une MAP, un tuple... d'autre chose) - pas un nom.
 bool composedText(std::string_view t) {
@@ -427,11 +427,13 @@ protected:
         if (construct) {
             float ax = x0;
             for (const auto a : tf::kAccesses) {
-                accessBoxes_.push_back({gfx::Rect{ax, y + 34.f, kAccessW, 28.f}, a});
-                ax += kAccessW;
+                const float w = kAccessW[static_cast<std::size_t>(a)];
+                accessBoxes_.push_back({gfx::Rect{ax, y + 34.f, w, 28.f}, a});
+                ax += w;
             }
-            wholeBoxes_.push_back({gfx::Rect{ax + 130.f, y + 38.f, 128.f, 20.f}, false});
-            wholeBoxes_.push_back({gfx::Rect{ax + 262.f, y + 38.f, 90.f, 20.f}, true});
+            // la ligne sous l'Acces : « Le pointeur vise : (o) chaque element (o) le tout » (avec une forme)
+            wholeBoxes_.push_back({gfx::Rect{x0 + 136.f, y + 66.f, 128.f, 20.f}, false});
+            wholeBoxes_.push_back({gfx::Rect{x0 + 270.f, y + 66.f, 90.f, 20.f}, true});
         }
         // 1.12.14 : Composer l'element, au bout de la ligne (une forme permise ici, sinon rien).
         if (compose_) {
@@ -1036,25 +1038,27 @@ private:
                     r.drawText({b.x + 16.f + r.measure(word, kSmall).width, b.y + 7.f}, fit(r, std::string(tf::accessHint(a)), kSmall, b.w - 26.f - r.measure(word, kSmall).width),
                                kSmall, !allowed || !on ? c.textDisabled : chosen ? c.textInverted : c.textMuted);
                 }
-                // avec une forme : ce que le pointeur (la reference) vise
+                y += 32.f;
+                const std::string line = accessProblem(access_).empty() ? accessLine() : accessProblem(access_);
+                const float room = panel_.right() - 16.f - x0 - 96.f;
                 if (pointsShown() && wholeBoxes_.size() == 2) {
-                    const auto& first = wholeBoxes_.front().first;
+                    // avec une forme : ce que le pointeur (la reference) vise, puis la phrase de l'acces dessous
                     const std::string what = access_ == tf::Access::Pointer ? "Le pointeur vise :" : "La r\xC3\xA9" "f\xC3\xA9rence vise :";
-                    r.drawText({first.x - 122.f, first.y + 2.f}, fit(r, what, kSmall, 118.f), kSmall, c.text);
+                    r.drawText({x0 + 96.f, y + 2.f}, fit(r, what, kSmall, 128.f), kSmall, c.text);
                     for (const auto& [b, w] : wholeBoxes_) {
                         paintCheck(ctx, {b.x, b.y + 2.f, 16.f, 16.f}, whole_ == w, on);
                         r.drawText({b.x + 22.f, b.y + 2.f}, w ? "le tout" : "chaque \xC3\xA9l\xC3\xA9ment", kSmall, on ? c.text : c.textDisabled);
                     }
+                    r.drawText({x0 + 96.f, y + 18.f}, fit(r, line, kSmall, room), kSmall, c.textMuted);
+                } else {
+                    r.drawText({x0 + 96.f, y + 2.f}, fit(r, line, kSmall, room), kSmall, c.textMuted);
+                    // le choix grise : sa raison
+                    std::string greyed;
+                    for (const auto a : tf::kAccesses)
+                        if (!accessAllowed(a)) greyed = accessProblem(a);
+                    if (!greyed.empty() && access_ == tf::Access::Direct)
+                        r.drawText({x0 + 96.f, y + 18.f}, fit(r, greyed, kSmall, room), kSmall, c.textDisabled);
                 }
-                y += 32.f;
-                const std::string line = accessProblem(access_).empty() ? accessLine() : accessProblem(access_);
-                r.drawText({x0 + 96.f, y + 2.f}, fit(r, line, kSmall, panel_.right() - 16.f - x0 - 96.f), kSmall, c.textMuted);
-                // le choix grise : sa raison
-                std::string greyed;
-                for (const auto a : tf::kAccesses)
-                    if (!accessAllowed(a)) greyed = accessProblem(a);
-                if (!greyed.empty() && access_ == tf::Access::Direct)
-                    r.drawText({x0 + 96.f, y + 18.f}, fit(r, greyed, kSmall, panel_.right() - 16.f - x0 - 96.f), kSmall, c.textDisabled);
                 y += 38.f;
             }
         }

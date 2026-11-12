@@ -1096,6 +1096,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   dupliquer-grille I0 I1 [J0 J1 [K0 K1]]   1.50.0 : une grille i x j (x k) ; dupliquer-copies : une suite
     //   dupliquer-regle GROUPE fixe|varie|FORMULE 1.50.0 : la regle d'une profondeur ("Departs", "Adresses", "Textes"...)
     //   dupliquer-apart REPERE FORMULE [PROF]    1.50.0 : un repere a part ; FORMULE "-" : comme sa profondeur
+    //   dupliquer-exemple                        1.50.0 : (dans une vue ouverte) un depart fictif a reperes, tout choisi
     if (cmd.rfind("dupliquer-", 0) == 0) {
         auto* d = dynamic_cast<HmiDuplicateDialog*>(app_.menus().top());
         if (!d) { fail(cmd + " : la fen\xC3\xAAtre \xC2\xAB Dupliquer\xE2\x80\xA6 \xC2\xBB n'est pas ouverte (touche ctrl+maj+d)"); return Step::Yield; }
@@ -8766,6 +8767,50 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     const auto doc = app_.hmi();
     const auto* view = doc ? doc->project.view(editor->viewId()) : nullptr;
     if (!view) { fail("vue introuvable"); return Step::Next; }
+
+    // 1.50.0 (planche 04) : dupliquer-exemple - pour les captures de « Dupliquer... » : dans la vue ouverte, un depart
+    // FICTIF (Depart_0_0, Afficheur_P, Titre_0) dont les reperes ont trois profondeurs ($Armoires[0].Departs[0].Voies[5].Etat$,
+    // ...Mesures[0..3]...), des adresses ($%MW1000$, $%M200$) et un texte ($Titre 1.1$) ; les variables IHM Armoires
+    // (ARRAY[0..3]) et Compteur (%MW1037, une adresse deja prise). Tout est choisi ; une commande (Ctrl+Z la retire).
+    if (cmd == "dupliquer-exemple") {
+        std::vector<hmi::Id> made;
+        const bool ok = editor->canvas().edit("Exemple : un d\xC3\xA9part", [&made](hmi::Project& p, hmi::View& v) {
+            const auto variable = [&p](const std::string& name, const std::string& type, const std::string& address) {
+                for (const auto& x : p.programs.variables)
+                    if (x.name == name) return;
+                hmi::Variable var;
+                var.id = p.allocate();
+                var.name = name;
+                var.type = type;
+                var.address = address;
+                p.programs.variables.push_back(var);
+            };
+            variable("Armoires", "ARRAY[0..3] OF INT", {});
+            variable("Compteur", "INT", "%MW1037");
+            const auto object = [&](hmi::Kind k, const std::string& name, double x, double y) -> hmi::Object& {
+                const hmi::Id id = hmi::edit::add(p, v, k, x, y);
+                made.push_back(id);
+                auto* o = v.object(id);
+                o->name = name;
+                return *o;
+            };
+            auto& depart = object(hmi::Kind::Rectangle, "Depart_0_0", 40, 40);
+            depart.setExpr("fill", "$Armoires[0].Departs[0].Voies[5].Etat$ > 0");
+            for (const char* m : {"Courant", "Tension", "Seuil", "Alarme", "Defaut", "Marche"})
+                depart.setExpr(std::string("voie_") + m, std::string("$Armoires[0].Departs[0].Voies[5].") + m + "$");
+            for (int k = 0; k < 4; ++k)
+                depart.setExpr("mesure_" + std::to_string(k), "$Armoires[0].Departs[0].Mesures[" + std::to_string(k) + "].Valeur$");
+            depart.setExpr("armoire", "$Armoires[0].Nom$");
+            auto& adresse = object(hmi::Kind::Rectangle, "Afficheur_P", 40, 110);
+            adresse.setExpr("fill", "$%MW1000$ > 0");
+            adresse.setExpr("visible", "$%M200$");
+            auto& titre = object(hmi::Kind::Text, "Titre_0", 40, 170);
+            titre.set("text", "$Titre 1.1$");
+        });
+        if (!ok || made.empty()) { fail("dupliquer-exemple : la vue refuse"); return Step::Next; }
+        editor->canvas().setSelection(made);
+        return Step::Yield;
+    }
 
     // Lot 12 : palette-variable "Armoires[0]" [glisser X Y] - l'onglet Variables de
     // la bibliotheque : un clic sur la variable (puis vue-clic la pose), ou la

@@ -153,6 +153,7 @@ std::vector<IndexUse> indicesIn(std::string_view t, bool expression) {
         }
         if (!literal || parts.empty()) continue;
         const int dims = static_cast<int>(parts.size());
+        if (out.empty()) out.reserve(4);   // 1.50.0 : un chemin a trois profondeurs sans reallouer
         for (int k = 0; k < dims; ++k)
             out.push_back({std::string(path), parts[static_cast<std::size_t>(k)].value, parts[static_cast<std::size_t>(k)].at,
                            parts[static_cast<std::size_t>(k)].length, k, dims});

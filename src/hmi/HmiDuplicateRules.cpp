@@ -473,35 +473,100 @@ public:
     Evaluator(const Scan& s, const Model& m, const Rules& r) : s_(s), m_(m), r_(r) {}
 
     // La regle d'une profondeur pour un repere : la sienne (a part, cette profondeur) ou celle du groupe ; `id` : la cle du cache.
+    // 1.50.0 : rien n'est recopie (500 reperes x 3 profondeurs x 32 places : la regle se lit par adresse).
     struct Pick {
-        Rule rule;
-        long long id{0};
+        bool               formula{false};
+        const std::string* text{nullptr};
+        long long          id{0};
     };
-    Pick slotRule(std::size_t mi, std::size_t group, const Own& own) const {
-        const Group& g = m_.groups[group];
-        if (own.kind == OwnKind::Formula && own.group == g.key) return {{RuleKind::Formula, own.formula}, -1 - static_cast<long long>(mi)};
-        return {r_.rule(g), static_cast<long long>(group)};
+    Pick slotRule(std::size_t mi, std::size_t group, const Own& own) {
+        if (own.kind == OwnKind::Formula && own.group == m_.groups[group].key) return {true, &own.formula, -1 - static_cast<long long>(mi)};
+        const Rule& r = groupRule(group);
+        return {r.kind == RuleKind::Formula, &r.formula, static_cast<long long>(group)};
+    }
+    const Rule& groupRule(std::size_t group) {
+        if (rules_.empty()) {
+            rules_.reserve(m_.groups.size());
+            for (const auto& g : m_.groups) rules_.push_back(&r_.rule(g));
+        }
+        return *rules_[group];
+    }
+
+    // Les valeurs d'un indice a toutes les places (calculees une fois par regle et par valeur d'origine : les 448
+    // reperes de Departs[0] partagent la leur).
+    struct Series {
+        std::vector<long long> values;
+        std::string            why;
+        long long              bad{-1};   // la premiere place fausse
+    };
+    const Series& series(const Pick& pick, long long o, long long places) {
+        const auto key = std::make_pair(pick.id, o);
+        auto it = series_.find(key);
+        if (it != series_.end()) return it->second;
+        Series sr;
+        sr.values.assign(static_cast<std::size_t>(places), o);
+        if (pick.formula)
+            for (long long p = 0; p < places; ++p) {
+                std::string err;
+                long long v = o;
+                if (evalInteger(*pick.text, r_.counters, {placeAt(r_.counters, p), o}, v, &err)) sr.values[static_cast<std::size_t>(p)] = v;
+                else if (sr.bad < 0) {
+                    sr.bad = p;
+                    sr.why = err.empty() ? std::string("formule fausse") : err;
+                }
+            }
+        return series_.emplace(key, std::move(sr)).first->second;
     }
 
     // Un indice a la place `p` ; faux et `why` : la formule est fausse.
     bool index(const Pick& pick, long long o, long long p, long long& out, std::string* why) {
-        if (pick.rule.kind != RuleKind::Formula) {
+        if (!pick.formula) {
             out = o;
             return true;
         }
-        const auto key = std::make_tuple(pick.id, o, p);
-        if (const auto it = cache_.find(key); it != cache_.end()) {
-            out = it->second.first;
-            if (!it->second.second.empty() && why) *why = it->second.second;
-            return it->second.second.empty();
-        }
         std::string err;
         long long v = 0;
-        const bool ok = evalInteger(pick.rule.formula, r_.counters, {placeAt(r_.counters, p), o}, v, &err);
-        cache_.emplace(key, std::make_pair(v, ok ? std::string{} : (err.empty() ? std::string("formule fausse") : err)));
+        const bool ok = evalInteger(*pick.text, r_.counters, {placeAt(r_.counters, p), o}, v, &err);
         out = v;
-        if (!ok && why) *why = err;
+        if (!ok && why) *why = err.empty() ? std::string("formule fausse") : err;
         return ok;
+    }
+
+    // Un repere a indices a toutes les places : ses morceaux, chaque indice de sa suite. `why`, `bad` : la premiere faute.
+    void indexMarker(std::size_t mi, const Own& own, long long places, std::vector<std::string>& out, std::string& why, long long& bad,
+                     std::string& where) {
+        const auto& mk = s_.markers[mi];
+        const auto& mm = m_.markers[mi];
+        std::vector<const Series*> cols;
+        cols.reserve(mm.slots.size());
+        for (const auto& sl : mm.slots) {
+            const Pick pick = slotRule(mi, sl.group, own);
+            const Series& sr = series(pick, sl.use.value, places);
+            if (sr.bad >= 0 && (bad < 0 || sr.bad < bad)) {
+                bad = sr.bad;
+                why = sr.why;
+                // La regle de la profondeur (une faute pour tous ses reperes), ou celle du repere a part.
+                where = pick.id >= 0 ? m_.groups[sl.group].label : "$" + mk.name + "$";
+            }
+            cols.push_back(&sr);
+        }
+        out.resize(static_cast<std::size_t>(places));
+        for (long long p = 0; p < places; ++p) {
+            if (bad >= 0 && p >= bad) {   // une formule fausse : pas de valeur (la regle le dit)
+                out[static_cast<std::size_t>(p)].clear();
+                continue;
+            }
+            std::string& v = out[static_cast<std::size_t>(p)];
+            v.clear();
+            std::size_t from = 0;
+            for (std::size_t q = 0; q < mm.slots.size(); ++q) {
+                const auto& u = mm.slots[q].use;
+                v.append(mk.name, from, u.at - from);
+                v += std::to_string(cols[q]->values[static_cast<std::size_t>(p)]);
+                from = u.at + u.length;
+            }
+            v.append(mk.name, from, std::string::npos);
+        }
     }
 
     // La valeur d'un repere a la place `p` ; `keep` : le repere se garde (fixe) ; vide et `why` : une formule fausse.
@@ -516,22 +581,18 @@ public:
         if (mm.kind == GroupKind::Index) {
             std::string out;
             std::size_t from = 0;
-            bool moved = false;
             for (const auto& sl : mm.slots) {
                 const Pick pick = slotRule(mi, sl.group, own);
                 long long v = sl.use.value;
                 if (!index(pick, sl.use.value, p, v, why)) return {};
-                if (pick.rule.kind == RuleKind::Formula) moved = true;
                 out.append(mk.name, from, sl.use.at - from);
                 out += std::to_string(v);
                 from = sl.use.at + sl.use.length;
             }
             out.append(mk.name, from, std::string::npos);
-            (void)moved;
             return out;   // toutes fixes : le morceau lui-meme (la copie le garde, sans le compter)
         }
-        const Group& g = m_.groups[mm.group];
-        const Rule rule = own.kind == OwnKind::Formula ? Rule{RuleKind::Formula, own.formula} : r_.rule(g);
+        const Rule rule = own.kind == OwnKind::Formula ? Rule{RuleKind::Formula, own.formula} : groupRule(mm.group);
         if (rule.kind == RuleKind::Fixed) {
             keep = true;
             return {};
@@ -559,8 +620,9 @@ private:
     const Scan&  s_;
     const Model& m_;
     const Rules& r_;
-    std::map<std::tuple<long long, long long, long long>, std::pair<long long, std::string>> cache_;
-    std::map<std::pair<long long, long long>, std::pair<std::string, std::string>>         texts_;
+    std::map<std::pair<long long, long long>, Series>                               series_;
+    std::map<std::pair<long long, long long>, std::pair<std::string, std::string>> texts_;
+    std::vector<const Rule*>                                                         rules_;
 };
 
 void note(std::vector<RuleError>* errors, const std::string& where, const std::string& why, long long place) {
@@ -610,14 +672,17 @@ void computeRows(const Scan& s, const Model& m, const Rules& r, const std::vecto
         if (g.kind != GroupKind::Index || g.marked) continue;
         const Rule& rule = r.rule(g);
         if (rule.kind != RuleKind::Formula) continue;
-        const Evaluator::Pick pick{rule, static_cast<long long>(gi)};
+        const Evaluator::Pick pick{true, &rule.formula, static_cast<long long>(gi)};
         for (const std::size_t ii : g.indices) {
             const auto& info = s.indices[ii];
+            const auto& sr = ev.series(pick, info.value, static_cast<long long>(P));
+            const std::string key = info.key();
             for (std::size_t p = 1; p < P; ++p) {
-                long long v = info.value;
-                std::string why;
-                if (ev.index(pick, info.value, static_cast<long long>(p), v, &why)) plan.rows[p].indices[info.key()] = v;
-                else note(errors, g.label, why, static_cast<long long>(p));
+                if (sr.bad >= 0 && static_cast<long long>(p) >= sr.bad) {
+                    note(errors, g.label, sr.why, sr.bad);
+                    break;
+                }
+                plan.rows[p].indices[key] = sr.values[p];
             }
         }
     }
@@ -626,6 +691,19 @@ void computeRows(const Scan& s, const Model& m, const Rules& r, const std::vecto
         const std::string key = markerKey(s.markers[mi].name);
         const Own own = r.ownOf(key);
         if (own.kind == OwnKind::Cells) continue;   // ses cases : les regles n'y touchent pas
+        if (m.markers[mi].kind == GroupKind::Index && own.kind != OwnKind::Keep) {
+            // Toutes les places d'un coup : chaque indice a sa suite, calculee une fois.
+            std::vector<std::string> values;
+            std::string why, where;
+            long long bad = -1;
+            ev.indexMarker(mi, own, static_cast<long long>(P), values, why, bad, where);
+            if (bad >= 0) note(errors, where, why, bad);
+            for (std::size_t p = 0; p < P; ++p) {
+                if (values[p].empty()) plan.rows[p].markers.erase(key);
+                else plan.rows[p].markers[key] = std::move(values[p]);
+            }
+            continue;
+        }
         bool kept = false;
         for (std::size_t p = 0; p < P; ++p) {
             std::string why;
