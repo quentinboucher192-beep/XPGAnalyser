@@ -197,8 +197,11 @@ bool needed(const Project& p) {
     for (const auto& s : p.programs.scripts)
         if (s.lang == ScriptLang::ST) has(s.body);
     for (const auto& f : p.programs.functions) has(f.body);
-    for (const auto& t : p.programs.types)
+    for (const auto& t : p.programs.types) {
         for (const auto& o : t.operators) has(o.body);
+        if (t.kind == HmiTypeKind::Structure)
+            for (const auto& m : t.methods) has(m.body);   // 1.50.0 : une methode (un corps ecrit avant 1.50.0)
+    }
     for (const auto& v : p.views) {
         for (const auto& s : v.scripts)
             if (s.lang == ScriptLang::ST) has(s.body);
@@ -228,6 +231,12 @@ Plan plan(const Project& p, const std::function<bool(const Place&)>& only) {
         for (const auto& o : t.operators)
             take(o.body, o.decls, Host::Operator,
                  {Place::Kind::TypeOperator, kNoId, kNoId, t.id, o.id, {}, "op\xC3\xA9rateur " + operatorSignature(o) + " (type " + t.name + ")"});
+    // 1.50.0 : une methode d'un type IHM migre comme une fonction (ses VAR_INPUT : des parametres ; ses VAR : des locales).
+    for (const auto& t : p.programs.types)
+        if (t.kind == HmiTypeKind::Structure)
+            for (const auto& m : t.methods)
+                take(m.body, m.decls, Host::Function,
+                     {Place::Kind::TypeMethod, kNoId, kNoId, t.id, m.id, {}, "m\xC3\xA9thode " + t.name + "." + m.name});
     for (const auto& v : p.views) {
         for (const auto& s : v.scripts) {
             if (s.lang != ScriptLang::ST) continue;
@@ -339,6 +348,12 @@ std::size_t apply(Project& p, const Plan& plan) {
                         for (auto& o : t.operators)
                             if (o.id == at.id) put(o.decls, o.body, it);
                 break;
+            case Place::Kind::TypeMethod:             // 1.50.0
+                for (auto& t : p.programs.types)
+                    if (t.id == at.type)
+                        for (auto& m : t.methods)
+                            if (m.id == at.id) put(m.decls, m.body, it);
+                break;
             case Place::Kind::ViewConstants: break;   // 1.12.16 : pas de bloc VAR a migrer
             case Place::Kind::ViewScript:
             case Place::Kind::SymbolFunction:
@@ -365,6 +380,16 @@ std::size_t apply(Project& p, const Plan& plan) {
         }
     }
     return changed;
+}
+
+std::size_t migrateMethods(Project& p) {
+    bool any = false;
+    for (const auto& t : p.programs.types)
+        for (const auto& m : t.methods)
+            any = any || (m.body.find_first_of("Vv") != npos && !decl::extract(m.body).blocks.empty());
+    if (!any) return 0;
+    const Plan methods = plan(p, [](const Place& at) { return at.kind == Place::Kind::TypeMethod; });
+    return methods.items.empty() ? 0 : apply(p, methods);
 }
 
 std::string summary(const Plan& plan, bool before) {

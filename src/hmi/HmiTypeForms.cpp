@@ -267,10 +267,56 @@ std::vector<std::string> labels(unsigned use) {
 
 bool referenceAllowed(unsigned use) noexcept { return (use & (tr::UseDeclaration | tr::UseReturn)) != 0; }
 
+std::string_view accessLabel(Access a) noexcept {
+    switch (a) {
+        case Access::Direct: return "Direct";
+        case Access::Ref: return "REF_TO";
+        case Access::Pointer: return "POINTER TO";
+    }
+    return {};
+}
+std::string_view accessHint(Access a) noexcept {
+    switch (a) {
+        case Access::Direct: return "la valeur";
+        case Access::Ref: return "une r\xC3\xA9" "f\xC3\xA9rence";
+        case Access::Pointer: return "un pointeur";
+    }
+    return {};
+}
+std::string accessSummary(Access a, std::string_view element) {
+    const std::string e = element.empty() ? std::string("T") : std::string(element);
+    switch (a) {
+        case Access::Direct: return "La valeur elle-m\xC3\xAAme : x := \xE2\x80\xA6 ; x.Membre.";
+        case Access::Ref:
+            return "Une r\xC3\xA9" "f\xC3\xA9rence : r := REF(x); puis r^ ; NULL : elle ne vise rien. Comme " + e + "& en C++ (qui peut \xC3\xAAtre nulle).";
+        case Access::Pointer:
+            return "Un pointeur : p := ADR(x); puis p^ (lire, \xC3\xA9" "crire) ; NULL : il ne vise rien ; p = q compare ce qu'ils visent. Comme " + e
+                   + "* en C++. Il vit en m\xC3\xA9moire de l'IHM (pas de place dans un \xC3\xA9quipement).";
+    }
+    return {};
+}
+std::string accessRefusal(Access a, unsigned use, bool constant) {
+    if (a == Access::Direct) return {};
+    const std::string what(accessLabel(a));
+    if (constant) return what + " : une constante ne vise rien (NULL seul)";
+    if (referenceAllowed(use)) return {};
+    if (use & tr::UseVariable) return what + " : une variable IHM a une place dans l'\xC3\xA9quipement";
+    if (use & tr::UseParameter) return what + " : pas dans un param\xC3\xA8tre de popup ou de symbole";
+    if (use & tr::UseOperand) return what + " : un op\xC3\xA9rande est Simple seulement";
+    return what + " : seulement dans un code (une locale, un param\xC3\xA8tre de fonction) et un retour";
+}
+
 std::string compose(const Shape& s) {
     std::string e = trimmed(s.element);
     if (e.empty()) e = "INT";
-    if (s.reference) e = "REF_TO " + e;
+    // 1.50.0 : l'acces sur le tout (POINTER TO LIST OF Object) : la forme composee, puis l'acces devant.
+    if (s.whole && (s.reference || s.pointer) && s.form != Form::Simple) {
+        Shape inner = s;
+        inner.reference = inner.pointer = inner.whole = false;
+        return std::string(s.pointer ? "POINTER TO " : "REF_TO ") + compose(inner);
+    }
+    if (s.pointer) e = "POINTER TO " + e;
+    else if (s.reference) e = "REF_TO " + e;
     std::string p = trimmed(s.parameter);
     // Des bornes ecrites [0..9] (des types ecrits (A, B)) : sans le couple qui les entoure, et lui
     // seul (1.12.14 : TUPLE(INT, TUPLE(A, B)), LIST OF TUPLE(..), STRING[20] gardaient mal leur fin).
@@ -291,6 +337,37 @@ std::string compose(const Shape& s) {
 }
 
 Shape decompose(std::string_view type) {
+    // 1.50.0 (planche 03) : un acces sur le tout - POINTER TO LIST OF Object, REF_TO ARRAY[0..9] OF REAL : la forme du
+    // dessous, l'acces garde (`whole`) ; POINTER TO Object (sans forme) : l'acces de l'element, comme REF_TO T.
+    {
+        const std::string t0 = trimmed(type);
+        const std::string u0 = upperOf(t0);
+        std::size_t skip = 0;
+        bool pointer = false;
+        if (u0.rfind("POINTER TO ", 0) == 0) {
+            skip = 11;
+            pointer = true;
+        } else if (u0.rfind("POINTER OF ", 0) == 0) {          // la faute de frappe, lue comme POINTER TO
+            skip = 11;
+            pointer = true;
+        } else if (u0.rfind("REF_TO ", 0) == 0) {
+            skip = 7;
+        } else if (u0.rfind("REFERENCE TO ", 0) == 0) {
+            skip = 13;
+        }
+        if (skip) {
+            Shape inner = decompose(std::string_view(t0).substr(skip));
+            if (inner.form != Form::Simple && !inner.reference && !inner.pointer) {
+                inner.setAccess(pointer ? Access::Pointer : Access::Ref);
+                inner.whole = true;
+                return inner;
+            }
+            if (inner.form == Form::Simple && !inner.reference && !inner.pointer) {
+                inner.setAccess(pointer ? Access::Pointer : Access::Ref);
+                return inner;
+            }
+        }
+    }
     Shape s;
     std::string t = trimmed(type);
     s.element = t;
@@ -357,6 +434,9 @@ Shape decompose(std::string_view type) {
     if (upperOf(s.element).rfind("REF_TO ", 0) == 0) {
         s.reference = true;
         s.element = trimmed(std::string_view(s.element).substr(7));
+    } else if (upperOf(s.element).rfind("POINTER TO ", 0) == 0 || upperOf(s.element).rfind("POINTER OF ", 0) == 0) {   // 1.50.0
+        s.pointer = true;
+        s.element = trimmed(std::string_view(s.element).substr(11));
     }
     return s;
 }
@@ -372,7 +452,7 @@ std::vector<std::string> columnsOf(const Project& p, std::string_view type) {
         for (std::size_t i = 1; i <= n; ++i) out.push_back("Item" + std::to_string(i));
         return out;
     }
-    if (e.form == Form::Simple && !e.reference) {
+    if (e.form == Form::Simple && !e.reference && !e.pointer) {
         std::vector<std::string> out;
         // 1.12.7 (lot E) : un tableau de l'IHM deplie ses membres imbriques (Pompe.Debit, Mesures[0]), comme le
         // moteur (Runtime::tableRows) ; une LIST, un VECTOR montrent leurs membres directs.

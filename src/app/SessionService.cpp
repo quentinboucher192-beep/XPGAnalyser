@@ -259,7 +259,8 @@ SessionService::SessionService(App& app) : d_(std::make_unique<Impl>()), app_(ap
     sessionmarks::setRefusedNotice([this](const std::string& t) { app_.events().publish(StatusNotice{t, 5.0}); });
     // 1.45.0 : ce que l'interface demande (le panneau du bas, l'arbre du projet).
     sessionmarks::Hooks h;
-    h.say = [this](const std::string& t, const std::string& replyTo) { say(t, replyTo); };   // 1.50.0 : la reponse
+    h.say = [this](const std::string& t) { say(t); };
+    h.sayReply = [this](const std::string& t, const std::string& replyTo) { say(t, replyTo); };   // 1.50.0 : la reponse
     h.follow = [this](int n) { follow(n); };
     h.exportJournal = [this](std::string* why) { return exportJournal(why); };
     sessionmarks::setHooks(std::move(h));

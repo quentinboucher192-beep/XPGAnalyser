@@ -412,15 +412,25 @@ bool usedAsVariable(std::string_view text, const MarkerUse& m, bool expression) 
     return b >= 2 && text.substr(b - 2, 2) == ":=";
 }
 
-void collect(const Object& o, std::vector<MarkerInfo>& markers, std::vector<IndexInfo>* indices, const BoundsFn& bounds) {
+// 1.50.0 (planche 04, 500 reperes) : ou est deja chaque repere, chaque indice (sa cle -> son rang) ; sans : un parcours.
+struct Seen {
+    std::map<std::string, std::size_t> markers, indices;
+};
+
+void collect(const Object& o, std::vector<MarkerInfo>& markers, std::vector<IndexInfo>* indices, const BoundsFn& bounds, Seen* seen = nullptr) {
     fields(o, [&](const std::string& field, const std::string& where, bool expression) {
         if (field.empty()) return;
         Spot spot{o.id, o.name, where, field, expression};
         std::set<std::string> seenHere;
         for (const auto& m : markersIn(field, expression)) {
             const std::string key = markerKey(m.name);
-            auto it = std::find_if(markers.begin(), markers.end(), [&](const MarkerInfo& x) { return markerKey(x.name) == key; });
+            auto it = markers.end();
+            if (seen) {
+                if (const auto at = seen->markers.find(key); at != seen->markers.end()) it = markers.begin() + static_cast<std::ptrdiff_t>(at->second);
+            } else
+                it = std::find_if(markers.begin(), markers.end(), [&](const MarkerInfo& x) { return markerKey(x.name) == key; });
             if (it == markers.end()) {
+                if (seen) seen->markers.emplace(key, markers.size());
                 markers.push_back({m.name, 0, false, {}, {}});
                 it = markers.end() - 1;
             }
@@ -441,8 +451,13 @@ void collect(const Object& o, std::vector<MarkerInfo>& markers, std::vector<Inde
         std::set<std::string> idxHere;
         for (const auto& u : indicesIn(field, expression)) {
             const std::string key = indexKey(u.path, u.value, u.dim, u.dims);
-            auto it = std::find_if(indices->begin(), indices->end(), [&](const IndexInfo& x) { return x.key() == key; });
+            auto it = indices->end();
+            if (seen) {
+                if (const auto at = seen->indices.find(key); at != seen->indices.end()) it = indices->begin() + static_cast<std::ptrdiff_t>(at->second);
+            } else
+                it = std::find_if(indices->begin(), indices->end(), [&](const IndexInfo& x) { return x.key() == key; });
             if (it == indices->end()) {
+                if (seen) seen->indices.emplace(key, indices->size());
                 IndexInfo info;
                 info.path = u.path;
                 info.value = u.value;
@@ -484,10 +499,11 @@ Scan scan(const View& v, const std::vector<Id>& selection, const BoundsFn& bound
         for (Id d : v.descendantsOf(u)) inTree.insert(d);
     }
     // Dans l'ordre de dessin : l'ordre ou on les lit dans l'arbre.
+    Seen seen;   // 1.50.0 : 500 reperes sans parcourir la liste a chaque fois
     for (const auto& o : v.objects) {
         if (!inTree.count(o.id)) continue;
         s.objects.push_back(o.id);
-        collect(o, s.markers, &s.indices, bounds);
+        collect(o, s.markers, &s.indices, bounds, &seen);
     }
     s.box = edit::selectionBounds(v, s.units);
     return s;
@@ -871,15 +887,12 @@ bool followByDefault(const Scan& s) {
     return std::none_of(s.markers.begin(), s.markers.end(), [](const MarkerInfo& m) { return hasIndices(m.name); });
 }
 
-Plan defaultPlan(const View& v, const Scan& s, int copies) {
-    Plan p;
-    p.selection = s.units;
-    copies = std::max(0, copies);
-    p.rows.resize(static_cast<std::size_t>(copies) + 1);
+std::vector<std::string> seriesNames(const View& v, const Scan& s, int copies) {
+    std::vector<std::string> out(static_cast<std::size_t>(std::max(0, copies)) + 1);
     // Les noms : la serie de l'original (V_101 -> V_102, V_103...), libres dans la vue.
     if (!s.units.empty())
         if (const Object* o = v.object(s.units.front())) {
-            p.rows[0].name = o->name;
+            out[0] = o->name;
             std::set<std::string> taken;
             for (const auto& x : v.objects) taken.insert(upper(x.name));
             std::size_t end = o->name.size();
@@ -895,9 +908,21 @@ Plan defaultPlan(const View& v, const Scan& s, int copies) {
                     name = (digits.empty() ? o->name + "_" : stem) + num;
                 } while (taken.count(upper(name)));
                 taken.insert(upper(name));
-                p.rows[static_cast<std::size_t>(k)].name = name;
+                out[static_cast<std::size_t>(k)] = name;
             }
         }
+    return out;
+}
+
+Plan defaultPlan(const View& v, const Scan& s, int copies) {
+    Plan p;
+    p.selection = s.units;
+    copies = std::max(0, copies);
+    p.rows.resize(static_cast<std::size_t>(copies) + 1);
+    {
+        auto names = seriesNames(v, s, copies);
+        for (std::size_t k = 0; k < names.size(); ++k) p.rows[k].name = std::move(names[k]);
+    }
     // 1.11 (REP-4) : les indices hors repere se suivent si aucun repere ne porte
     // d'indice (comme en 1.10.2) ; sinon seul le marque varie. "Suivre V[0]" le change.
     if (followByDefault(s))
@@ -961,7 +986,7 @@ Validation validate(const View& v, const Scan& s, const Plan& plan, const Valida
     const auto keep = [&](const std::string& key) {
         return std::any_of(opt.keepColumns.begin(), opt.keepColumns.end(), [&](const std::string& k) { return markerKey(k) == key; });
     };
-    std::set<std::string> names;
+    std::set<std::string> names, planNames;   // 1.50.0 : les noms des lignes deja vues (avant : un parcours par ligne)
     for (const auto& o : v.objects) names.insert(upper(o.name));
     // 1.11.1 (REP-5, le `$` de fin oublie) : une expression dont un `$` reste seul a des reperes
     // faux ($V[1].Ouv+$V[2].Ouv$ y fait le repere "V[1].Ouv+", qui a pris le `$` du suivant) : la
@@ -983,13 +1008,22 @@ Validation validate(const View& v, const Scan& s, const Plan& plan, const Valida
         if (r == 0 && !plan.replaceOriginal) continue;   // l'original garde ses reperes
         // Le nom (une copie : libre dans la vue et parmi les autres lignes).
         if (r > 0 && !row.name.empty()) {
-            const bool taken = names.count(upper(row.name)) != 0 ||
-                               std::any_of(plan.rows.begin() + 1, plan.rows.begin() + static_cast<std::ptrdiff_t>(r),
-                                           [&](const Row& x) { return upper(x.name) == upper(row.name); });
+            const std::string up = upper(row.name);
+            const bool taken = names.count(up) != 0 || planNames.count(up) != 0;
             if (!edit::validName(row.name))
                 out.cells.push_back({rowNo, "Nom", CellState::BadName, row.name + " n'est pas un nom valide", {}, true});
-            else if (taken)
-                out.cells.push_back({rowNo, "Nom", CellState::BadName, row.name + " existe d\xC3\xA9j\xC3\xA0 dans la vue", {}, true});
+            else if (taken) {
+                // 1.50.0 (reponse 4 du 12/11) : un nom deja pris AVERTIT, il ne bloque plus - la copie prend le suivant
+                // libre (apply : Nom_2, Nom_3...).
+                std::string next;
+                for (int k = 2; k < 100000; ++k) {
+                    next = row.name + "_" + std::to_string(k);
+                    if (!names.count(upper(next)) && !planNames.count(upper(next))) break;
+                }
+                out.cells.push_back({rowNo, "Nom", CellState::BadName,
+                                     row.name + " existe d\xC3\xA9j\xC3\xA0 dans la vue : la copie s'appellera " + next, {}, false});
+            }
+            planNames.insert(up);
         }
         for (const auto& m : s.markers) {
             const std::string key = markerKey(m.name), column = "$" + m.name + "$";
@@ -1083,6 +1117,20 @@ Result apply(Project& p, View& v, const Plan& plan) {
     }
     // Les copies, ligne par ligne, chacune dans l'ordre de dessin d'origine.
     std::vector<Object> made;
+    // 1.50.0 : les noms pris (la vue et les copies deja faites), tels qu'ecrits et en majuscules - avant, la vue
+    // recopiee pour chaque nom libre (32 copies de 12 objets : 384 recopies de la vue).
+    std::set<std::string> exact, upperNames;
+    for (const auto& o : v.objects) {
+        exact.insert(o.name);
+        upperNames.insert(upper(o.name));
+    }
+    const auto freeName = [&](const std::string& base, int first) {
+        for (int i = first; i < 100000; ++i) {
+            std::string candidate = base + "_" + std::to_string(i);
+            if (!exact.count(candidate) && !upperNames.count(upper(candidate))) return candidate;
+        }
+        return base;
+    };
     for (int k = 1; k <= plan.copies(); ++k) {
         const Row& row = plan.rows[static_cast<std::size_t>(k)];
         std::map<Id, Id> renamed;
@@ -1112,16 +1160,22 @@ Result apply(Project& p, View& v, const Plan& plan) {
             c.setNumber("y", c.number("y") + off[static_cast<std::size_t>(k - 1)].dy);
             const bool root = std::find(unitIds.begin(), unitIds.end(), o.id) != unitIds.end();
             std::string wanted = (root && o.id == unitIds.front() && !row.name.empty()) ? row.name : std::string{};
-            if (!wanted.empty() && edit::validName(wanted) && !v.objectByName(wanted) &&
-                std::none_of(made.begin(), made.end(), [&](const Object& m) { return upper(m.name) == upper(wanted); }))
+            const bool wantedValid = !wanted.empty() && edit::validName(wanted);
+            if (wantedValid && !v.objectByName(wanted) && !upperNames.count(upper(wanted)))
                 c.name = wanted;
+            else if (wantedValid)
+                c.name = freeName(wanted, 2);   // 1.50.0 : un nom deja pris avertit ; la copie prend Nom_2 (le suivant libre)
             else {
-                // Libre parmi la vue ET les copies deja faites.
-                View probe;
-                probe.objects = v.objects;
-                probe.objects.insert(probe.objects.end(), made.begin(), made.end());
-                c.name = uniqueObjectName(probe, stemOf(o.name));
+                // Libre parmi la vue ET les copies deja faites (comme uniqueObjectName : Radical_1, _2...).
+                std::string candidate = stemOf(o.name);
+                for (int i = 1; i < 100000; ++i) {
+                    std::string x = candidate + "_" + std::to_string(i);
+                    if (!exact.count(x)) { candidate = std::move(x); break; }
+                }
+                c.name = candidate;
             }
+            exact.insert(c.name);
+            upperNames.insert(upper(c.name));
             if (root) r.created.push_back(c.id);
             made.push_back(std::move(c));
         }

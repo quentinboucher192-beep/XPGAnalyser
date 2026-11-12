@@ -69,7 +69,6 @@ namespace app {
 
 class HmiOperatorsPane;   // 1.10 (chantier S2) : HmiOperatorPanes.hpp
 class HmiMethodsPane;     // 1.13.0 (J1b) : HmiMethodPanes.hpp
-class HmiMethodDialog;
 class HmiEnumValuesPane;  // 1.10 (chantier U) : HmiEnumPanes.hpp
 class HmiEnumCreatePanel;
 class HmiEnumDialog;
@@ -380,7 +379,6 @@ public:
     //  type > Interface... (I_Interface, une signature d'exemple) ; la page d'une interface : ses signatures,
     //  l'apercu de sa declaration et "Types qui l'implementent". Chaque geste : une commande (Ctrl+Z).
     [[nodiscard]] HmiMethodsPane*  methods() noexcept { return methods_; }
-    [[nodiscard]] HmiMethodDialog* methodDialog() noexcept { return methodDialog_; }
     bool setMemberPrivate(hmi::Id type, std::size_t index, bool isPrivate, std::string* why = nullptr);
     // "" ou "(aucun)" : plus de parent. Refuse : un type inconnu, hors structure, un cycle.
     bool setTypeBase(hmi::Id type, const std::string& base, std::string* why = nullptr);
@@ -633,7 +631,6 @@ private:
     ui::PopupMenu*    typeMenu_{nullptr};          // le clic droit sur la liste des types
     HmiOperatorsPane* operators_{nullptr};   // 1.10 (chantier S2) : la section Operateurs du type
     HmiMethodsPane*   methods_{nullptr};     // 1.13.0 (J1b) : la section Methodes du type
-    HmiMethodDialog*  methodDialog_{nullptr};   // 1.13.0 (J1b) : la fenetre "Ajouter une methode..."
     ui::StatusBar*    status_{nullptr};
     std::shared_ptr<ui::ITableModel> typeModel_, memberModel_;
     std::vector<hmi::Id> typeOrder_;

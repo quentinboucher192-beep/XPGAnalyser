@@ -1,4 +1,5 @@
 #include "HmiStore.hpp"
+#include "HmiMigrate.hpp"   // 1.50.0 : les methodes d'avant 1.50.0, migrees a l'ouverture
 #include "HmiNotify.hpp"   // 1.14.0 (relecture M4b) : maskSecret (le mot de passe d'un Enregistreur)
 #include "HmiLibrary.hpp"   // 1.13.0 (lot J8) : les bibliotheques reliees (le cache, la resolution)
 #include "HmiKeys.hpp"            // 1.11.23 : la touche d'un raccourci
@@ -2921,6 +2922,10 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
     };
     testIds(p.programs.functions);
     for (const auto& v : p.views) testIds(v.functions);
+    for (const auto& ty : p.programs.types) {                   // 1.50.0 : les methodes et leurs cas aussi
+        for (const auto& m : ty.methods) highest = std::max(highest, m.id);
+        testIds(ty.methods);
+    }
     // Un index edite a la main ne doit pas faire reattribuer un identifiant
     // deja pris : le compteur repart au-dessus du plus grand vu.
     if (p.nextId <= highest) p.nextId = highest + 1;
@@ -2952,6 +2957,11 @@ core::Result<Project> load(const std::string& projectFolder, LoadReport* report)
         return ok;
     }, report);
     if (p) loadTrash(*p, root, report);   // 1.26.1 : la corbeille du projet (ihm/supprimes/)
+    // 1.50.0 : A L'OUVERTURE, LES METHODES D'AVANT 1.50.0 (planche 01) - leurs blocs VAR ecrits dans le corps passent dans
+    // leurs onglets (Locales, Constantes, Parametres), comme le bandeau " Migrer " des fonctions : le moteur relit les memes
+    // declarations (decl::codeOf), le fichier s'ecrit au meme format (declaration sous methode_type). Un corps illisible
+    // reste tel quel. Seulement ici (le dossier ouvert) : un paquet, une version, une archive lus gardent leur texte.
+    if (p) (void)migrate::migrateMethods(*p);
     // 1.13.0 (lot J8) : chaque bibliotheque reliee, cherchee (relatif au projet, dossiers partages, absolu), lue et
     // comparee a la version demandee - toujours re-resolue a l'ouverture (le cache ne sert que si le fichier manque).
     if (p) biblio::resolve(*p, projectFolder);

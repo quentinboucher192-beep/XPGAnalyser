@@ -670,6 +670,7 @@ void LineList::openMenu(int row, gfx::Point at) {
 }
 
 void LineList::runMenu(int action) {
+    if (menu_ && menu_->isOpen()) menu_->close();   // un choix ferme le menu (meme rendu par programme)
     int i = -1;
     if (!menuKey_.empty())
         for (std::size_t k = 0; k < rows_.size(); ++k)

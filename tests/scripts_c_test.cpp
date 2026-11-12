@@ -1,12 +1,23 @@
 // =============================================================================
 //  tests/scripts_c_test.cpp - 1.50.0 : les scripts C et C++ compiles et executes
 // -----------------------------------------------------------------------------
+//  Un script C ou C++ (general, OnOpen, OnCycle...) est traduit ligne pour ligne
+//  dans le ST de l'IHM puis execute par le moteur des scripts (HmiScriptC.hpp).
+//  Ces essais : la traduction (autant de lignes que le texte C), Compiler (F7 :
+//  checkScript, l'etat de compilation, une faute a sa ligne), l'execution (un
+//  script general, un OnCycle de vue, des fonctions et main(), les variables
+//  globales gardees), le sous-ensemble (boucles, switch, tableaux, pointeurs,
+//  references, printf, std::...), et les refus dits a leur ligne.
+//
 //  SCRC_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
+#include "../src/hmi/HmiBuildState.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/hmi/HmiScript.hpp"
+#include "../src/hmi/HmiScriptC.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -41,7 +52,25 @@ Variable& addVar(Project& p, const std::string& n, const std::string& t, const s
     return p.programs.variables.back();
 }
 
-std::string run(Project& p, ScriptLang lang, const std::string& body, std::string* err = nullptr, const std::string& readVar = "R") {
+std::string errorsOf(const std::vector<ScriptDiagnostic>& d, int* line = nullptr) {
+    std::string out;
+    for (const auto& x : d)
+        if (x.severity == ScriptDiagnostic::Severity::Error) {
+            if (line && out.empty()) *line = x.line;
+            out += (out.empty() ? "" : " | ") + std::to_string(x.line) + ": " + x.message;
+        }
+    return out;
+}
+
+std::size_t lineCount(const std::string& s) { return static_cast<std::size_t>(std::count(s.begin(), s.end(), '\n')) + 1; }
+
+// Un script general "Essai" (C ou C++) appele `times` fois ; la valeur de `readVar` ensuite ("#" : illisible).
+struct Run {
+    std::string value, error, st;
+    bool        journal{false};
+};
+Run run(Project p, ScriptLang lang, const std::string& body, const std::string& readVar = "R", int times = 1,
+        const std::string& journalText = {}) {
     Script s;
     s.id = p.allocate();
     s.name = "Essai";
@@ -56,65 +85,282 @@ std::string run(Project& p, ScriptLang lang, const std::string& body, std::strin
     rt.bind(&p, nullptr);
     rt.start(0.0);
     rt.tick(0.1);
-    std::string e;
-    const bool ok = rt.callScript("Essai", 0.2, &e);
-    if (err) *err = ok ? std::string{} : e;
+    Run r;
+    for (int k = 0; k < times; ++k) {
+        std::string e;
+        if (!rt.callScript("Essai", 0.2 + k * 0.1, &e) && r.error.empty()) r.error = e.empty() ? std::string("(echec sans raison)") : e;
+    }
     sim::Value out;
-    return rt.environment().read(readVar, out) ? shown(out) : std::string("#");
+    r.value = rt.environment().read(readVar, out) ? shown(out) : std::string("#");
+    if (!journalText.empty())
+        for (const auto& e : rt.journal())
+            if (e.message.find(journalText) != std::string::npos) r.journal = true;
+    r.st = cscript::translate(body, lang).st;
+    return r;
 }
 
-void sonde() {
-    struct T { const char* type; const char* body; };
-    const T cases[] = {
-        {"BOOL", "R := 1;"},
-        {"BOOL", "VAR_TEMP b : BOOL; END_VAR b := 1; R := b;"},
-        {"DINT", "R := TO_DINT(2.7);"},
-        {"DINT", "R := TO_DINT(-2.7);"},
-        {"DINT", "R := TRUNC(-2.7);"},
-        {"DINT", "R := 7 / 2;"},
-        {"REAL", "R := 7 / 2;"},
-        {"REAL", "VAR_TEMP x : REAL; END_VAR x := 7; R := x / 2;"},
-        {"DINT", "FUNCTION F(VAR_IN_OUT a : DINT) a := a + 5; END_FUNCTION VAR_TEMP z : DINT; END_VAR z := 1; F(z); R := z;"},
-        {"DINT", "FUNCTION G() R := 42; END_FUNCTION G();"},
-        {"DINT", "FUNCTION H() : DINT RETURN 41; END_FUNCTION R := H() + 1;"},
-        {"DINT", "VAR_TEMP t : ARRAY[0..2] OF DINT; s : DINT; END_VAR t[0] := 1; t[1] := 2; t[2] := 3; FOR EACH v IN t DO s := s + v; END_FOR; R := s;"},
-        {"DINT", "R := TRUE ? 3 : 4;"},
-        {"DINT", "VAR g : DINT := 10; END_VAR FUNCTION K() : DINT RETURN g + 1; END_FUNCTION R := K();"},
-        {"BOOL", "R := TO_BOOL(5);"},
-        {"BOOL", "IF 5 THEN R := TRUE; END_IF;"},
-        {"DINT", "VAR_TEMP i : DINT; END_VAR WHILE i < 10 DO i := i + 1; IF i < 5 THEN CONTINUE; END_IF; R := R + 1; END_WHILE;"},
-        {"STRING", "R := 'a' + TO_STRING(5) + 'b';"},
-        {"DINT", "R := 16#FF + 8#17 + 2#101;"},
-        {"REAL", "R := 1.0E3;"},
-        {"DINT", "IHM_JOURNAL('x {R}'); R := 3;"},
-        {"DINT", "VAR_TEMP i : DINT; END_VAR i := 3; i += 2; i -= 1; i *= 3; i /= 2; R := i;"},
-        {"DINT", "R := SHL(1, 4) + SHR(64, 2);"},
-        {"DINT", "R := 17 MOD 5;"},
-        {"DINT", "R := 5 AND 3;"},
-        {"DINT", "R := NOT 0;"},
-        {"DINT", "VAR_TEMP m : ARRAY[0..2] OF ARRAY[0..3] OF DINT; END_VAR m[1][2] := 7; R := m[1][2];"},
-        {"DINT", "VAR_TEMP m : ARRAY[0..2, 0..3] OF DINT; END_VAR m[1, 2] := 7; R := m[1][2];"},
-        {"DINT", "VAR_TEMP m : ARRAY[0..2] OF ARRAY[0..3] OF DINT; END_VAR m[1, 2] := 7; R := m[1][2];"},
-        {"DINT", "FUNCTION F(x : DINT) : DINT VAR k : DINT; END_VAR k := x * 2; RETURN k; END_FUNCTION R := F(4);"},
-        {"LREAL", "R := SQRT(16.0) + ABS(-2) + EXPT(2.0, 3);"},
-        {"DINT", "VAR_TEMP time_c : DINT; END_VAR time_c := 4; R := time_c;"},
-        {"DINT", "VAR_TEMP x : SINT; END_VAR x := 65; R := x;"},
-        {"DINT", "R := MIN(3, 2) + MAX(1, 9);"},
+std::string obs(const Run& r) { return r.value + (r.error.empty() ? std::string{} : " / " + r.error) + "\n" + r.st; }
+
+// ---- la traduction : autant de lignes, la faute a sa ligne -------------------------------------
+void traduction() {
+    std::printf("-- la traduction : ligne pour ligne\n");
+    const std::string c = "/* un script C */\n#include <math.h>\nint i;\nfor (i = 0; i < 3; i++) {\n    Compteur += i;\n}\n\nNiveau = sqrt(16.0);\n";
+    const auto t = cscript::translate(c, ScriptLang::C);
+    check(t.ok() && lineCount(t.st) == lineCount(c), "C : traduit, autant de lignes que le texte (" + std::to_string(lineCount(t.st)) + ")\n" + t.st);
+    check(t.st.find("WHILE") != std::string::npos && t.st.find("SQRT(16.0)") != std::string::npos, "for -> WHILE, sqrt -> SQRT\n" + t.st);
+    // une faute de syntaxe a sa ligne : x = ; a la ligne 3
+    for (const ScriptLang lang : {ScriptLang::C, ScriptLang::Cpp}) {
+        const std::string name = lang == ScriptLang::C ? "C" : "C++";
+        const auto bad = cscript::translate("int a = 1;\na = a + 1;\nCompteur = ;\na = 2;\n", lang);
+        check(!bad.ok() && bad.errors.front().line == 3, name + " : 'Compteur = ;' : faute ligne 3 ("
+                                                             + (bad.ok() ? std::string("aucune") : std::to_string(bad.errors.front().line) + " " + bad.errors.front().message) + ")");
+        const auto missing = cscript::translate("int a = 1;\nif (a > 0) {\n    a = 2;\n\na = 3;\n", lang);
+        check(!missing.ok(), name + " : une accolade jamais fermee : refuse (" + (missing.ok() ? std::string("?") : missing.errors.front().message) + ")");
+        const auto semi = cscript::translate("int a = 1\na = 2;\n", lang);
+        check(!semi.ok() && semi.errors.front().line <= 2 && semi.errors.front().message.find("';'") != std::string::npos,
+              name + " : un ; oublie dit (" + (semi.ok() ? std::string("?") : std::to_string(semi.errors.front().line) + " " + semi.errors.front().message) + ")");
+    }
+    // Compiler (F7) : checkScript, l'etat de compilation
+    {
+        int line = 0;
+        const auto d = checkScript(ScriptLang::C, "int a = 0;\na = 1;\nwhile (a < 3 {\n  a++;\n}\n", "Essai");
+        const std::string e = errorsOf(d, &line);
+        check(!e.empty() && line == 3, "Compiler : while (a < 3 { -> faute ligne 3 (" + e + ")");
+        check(!d.empty() && d.back().severity == ScriptDiagnostic::Severity::Info && d.back().message.find("compil") != std::string::npos,
+              "Compiler : une note dit compile pour le moteur (" + (d.empty() ? std::string("?") : d.back().message) + ")");
+        const auto ok = checkScript(ScriptLang::Cpp, "int a = 0;\nfor (int k = 0; k < 4; ++k) a += k;\n", "Essai");
+        check(errorsOf(ok).empty(), "Compiler : un C++ juste, aucune faute (" + errorsOf(ok) + ")");
+        Script s;
+        s.id = 7;
+        s.name = "Calcul";
+        s.lang = ScriptLang::C;
+        s.body = "int a = 0;\na = a + 1;\n";
+        const auto st = build::ofScript(s, {});
+        check(st.compile == build::Compile::Ok && st.generate == build::Generate::Yes, "l'etat : C sans faute -> compile, genere (" + st.reason + ")");
+        s.body = "int a = 0;\n\na = a +;\n";
+        const auto st2 = build::ofScript(s, {});
+        check(st2.compile == build::Compile::Error && st2.firstLine == 3, "l'etat : C en faute -> erreur ligne 3 (" + st2.reason + ")");
+        // une faute que le moteur trouve (un type inconnu) : a la ligne de la declaration, pas en tete
+        int l2 = 0;
+        const auto unknown = checkScript(ScriptLang::C, "int a = 0;\na = 1;\nT_Inconnu x;\n", "Essai", [](std::string_view) { return false; });
+        const std::string eu = errorsOf(unknown, &l2);
+        check(!eu.empty() && l2 == 3, "un type inconnu (T_Inconnu x;) : dit a sa ligne 3 (" + eu + ")");
+    }
+}
+
+// ---- l'execution : un script general, un OnCycle ----------------------------------------------
+void execution() {
+    std::printf("-- l'execution : une variable IHM changee\n");
+    {
+        Project p;
+        addVar(p, "R", "DINT", "5");
+        addVar(p, "Etat", "BOOL", "FALSE");
+        const Run r = run(p, ScriptLang::C, "/* script C */\nR = R + 1;\nif (R > 5) {\n    Etat = true;\n}\n", "R");
+        check(r.value == "6" && r.error.empty(), "C : R = R + 1 -> 6 : " + obs(r));
+        const Run e = run(p, ScriptLang::C, "R = R + 1;\nif (R > 5) Etat = 1;\n", "Etat");
+        check(e.value == "TRUE", "C : Etat = 1 (un BOOL) -> TRUE : " + obs(e));
+    }
+    {
+        Project p;
+        addVar(p, "R", "REAL", "0");
+        const Run r = run(p, ScriptLang::Cpp,
+                          "// script C++\n#include <cmath>\nusing namespace std;\nauto n = 4;\nREAL total = 0.0f;\nfor (int k = 1; k <= n; ++k) {\n"
+                          "    total += static_cast<float>(k);\n}\nR = std::sqrt(total * 10.0);\n",
+                          "R");
+        check(r.value == "10" && r.error.empty(), "C++ : auto, REAL, for, static_cast, std::sqrt -> 10 : " + obs(r));
+    }
+    // un OnCycle de vue en C : il tourne a chaque cycle et lit / ecrit les variables
+    {
+        Project p;
+        addVar(p, "Cycles", "DINT", "0");
+        addVar(p, "Double", "DINT", "0");
+        View v = makeView(p, "Vue_A");
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = "A_cycle";
+        sc.lang = ScriptLang::C;
+        sc.event = "OnCycle";
+        sc.body = "Cycles++;\nDouble = Cycles * 2;\n";
+        v.scripts.push_back(sc);
+        Script cpp;
+        cpp.id = p.allocate();
+        cpp.name = "A_ouverture";
+        cpp.lang = ScriptLang::Cpp;
+        cpp.event = "OnOpen";
+        cpp.body = "void OnOpen() {\n    Cycles = 100;\n}\n";
+        v.scripts.push_back(cpp);
+        p.views = {v};
+        p.config.startView = v.id;
+        Runtime rt;
+        rt.bind(&p, nullptr);
+        rt.start(0.0);
+        for (int i = 0; i <= 10; ++i) rt.tick(i * 0.1);
+        const auto* c = rt.variable("Cycles");
+        const auto* d = rt.variable("Double");
+        const long long n = c ? c->asInteger() : -1;
+        check(n > 100 && n <= 111, "OnOpen (C++, sa fonction OnOpen() appelee) puis OnCycle (C) a chaque cycle : Cycles = " + std::to_string(n));
+        check(d && d->asInteger() == n * 2, "OnCycle : Double = Cycles * 2 (" + std::string(d ? shown(*d) : "#") + ")");
+    }
+    // une erreur d'execution : a la ligne du texte C
+    {
+        Project p;
+        addVar(p, "R", "DINT", "0");
+        const Run r = run(p, ScriptLang::C, "int z = 0;\nR = 1;\nR = 10 / z;\n", "R");
+        check(r.error.find("ligne 3") != std::string::npos && r.error.find("z\xC3\xA9ro") != std::string::npos, "C : division par zero, ligne 3 : " + obs(r));
+        const Run u = run(p, ScriptLang::C, "R = 1;\nInconnue = 2;\n", "R");
+        check(u.error.find("ligne 2") != std::string::npos, "C : une variable inconnue ecrite, ligne 2 : " + obs(u));
+    }
+}
+
+// ---- le sous-ensemble ----------------------------------------------------------------------------
+void sousEnsemble() {
+    std::printf("-- le sous-ensemble du C et du C++\n");
+    struct Case {
+        ScriptLang  lang;
+        const char* type;
+        const char* body;
+        const char* want;
+        const char* what;
+    };
+    const ScriptLang C = ScriptLang::C, Cpp = ScriptLang::Cpp;
+    const Case cases[] = {
+        {C, "DINT", "int s = 0, i = 0;\nwhile (i < 5) { s += i; i++; }\nR = s;", "10", "while"},
+        {C, "DINT", "int s = 0, i = 0;\ndo { s += 2; i++; } while (i < 3);\nR = s;", "6", "do ... while"},
+        {C, "DINT", "int s = 0;\nfor (int i = 0; i < 10; i++) {\n  if (i % 2) continue;\n  if (i > 6) break;\n  s += i;\n}\nR = s;", "12",
+         "for avec continue (le pas fait) et break"},
+        {C, "DINT", "int m = 2;\nswitch (m) {\n  case 1: R = 10; break;\n  case 2:\n  case 3: R = 20; break;\n  default: R = 30;\n}\n", "20",
+         "switch : deux case, default"},
+        {C, "DINT", "int m = 9;\nswitch (m) {\n  case 1: R = 10; break;\n  default: R = 30; break;\n}\n", "30", "switch : default"},
+        {C, "DINT", "int t[5] = {1, 2, 3, 4, 5};\nint s = 0;\nfor (int i = 0; i < 5; i++) s += t[i];\nR = s;", "15", "un tableau local et sa liste"},
+        {C, "DINT", "#define N 3\nint m[N][2];\nfor (int i = 0; i < N; i++) { m[i][0] = i; m[i][1] = i * 10; }\nR = m[2][1] + m[1][0];", "21",
+         "#define, un tableau de tableaux local m[i][j]"},
+        {C, "DINT", "void ajoute(int *p, int n) {\n  *p = *p + n;\n}\nint x = 1;\najoute(&x, 4);\nR = x;", "5", "un parametre pointeur (&x, *p)"},
+        {Cpp, "DINT", "void ajoute(int& r, int n) { r += n; }\nint x = 1;\najoute(x, 6);\nR = x;", "7", "C++ : une reference"},
+        {C, "DINT", "int carre(int v) { return v * v; }\nR = carre(4) + carre(2);", "20", "une fonction du script"},
+        {C, "DINT", "R = (5 > 3 ? 1 : 2) + (7 & 3) + (1 << 4) + (~0 & 1) + 17 % 5;", "23", "?: & << ~ %"},
+        {C, "DINT", "int a = 3, b = 0;\nif (a && !b) R = 1; else R = 2;", "1", "&& ! sur des entiers"},
+        {C, "DINT", "R = (int)2.7 + (int)(-2.7);", "0", "(int) tronque vers zero"},
+        {C, "LREAL", "R = (double)7 / 2;", "3.5", "(double) puis division"},
+        {C, "DINT", "R = 7 / 2;", "3", "division entiere"},
+        {C, "DINT", "R = 0x1F + 010 + 'A';", "104", "hexadecimal, octal, caractere"},
+        {C, "DINT", "int a = 5;\na <<= 2;\na |= 1;\na ^= 3;\na %= 7;\nR = a;", "1", "<<= |= ^= %= (5 << 2 = 20, | 1 = 21, ^ 3 = 22, % 7 = 1)"},
+        {C, "DINT", "int a, b;\na = b = 4;\nR = a + b;", "8", "a = b = 4"},
+        {C, "STRING", "const char* nom = \"Pompe\";\nR = nom;", "Pompe", "un texte const char*"},
+        {Cpp, "STRING", "std::string s = \"Cuve \";\ns = s + std::to_string(3);\nR = s;", "Cuve 3", "C++ : std::string, std::to_string"},
+        {Cpp, "DINT", "int t[4] = {1, 2, 3, 4};\nint s = 0;\nfor (int v : t) s += v;\nR = s;", "10", "C++ : for (int v : t)"},
+        {Cpp, "DINT", "R = std::max(3, 9) - std::min(4, 2) + std::abs(-1);", "8", "C++ : std::max, std::min, std::abs"},
+        {C, "DINT", "static int n = 0;\nn++;\nR = n;", "3", "static : gardee d'une execution a l'autre (3 appels)"},
+        {C, "DINT", "int compteur = 10;\nvoid main(void) {\n  compteur++;\n  R = compteur;\n}\n", "13",
+         "un fichier C : main() appelee, sa globale gardee (3 appels)"},
+        {C, "DINT", "int n = 0;\nn++;\nR = n;", "1", "une variable du script repart a chaque execution (3 appels)"},
+        {C, "DINT", "R = 0;\n{\n  int i = 5;\n  R += i;\n}\n{\n  int i = 7;\n  R += i;\n}\n", "12", "deux blocs, deux i"},
+        {C, "DINT", "int i = 1;\n{\n  int i = 2;\n  R = i;\n}\nR = R * 10 + i;", "21", "un i qui en cache un autre"},
+        {C, "DINT", "int end = 4;\nint mod = 3;\nR = end * mod;", "12", "des noms reserves en ST (end, mod)"},
+        {Cpp, "DINT", "int x = 0;\nx++;\n++x;\nx--;\nR = x;", "1", "++ et -- sur leur ligne"},
+        {C, "BOOL", "R = !(3 < 2) && (1 || 0);", "TRUE", "un BOOL calcule"},
     };
     for (const auto& c : cases) {
         Project p;
         addVar(p, "R", c.type, "");
-        std::string err;
-        const std::string got = run(p, ScriptLang::ST, c.body, &err);
-        std::printf("%-6s %-110s -> %s %s\n", c.type, c.body, got.c_str(), err.c_str());
+        const int times = std::string(c.what).find("3 appels") != std::string::npos ? 3 : 1;
+        const Run r = run(p, c.lang, c.body, "R", times);
+        check(r.value == c.want && r.error.empty(), std::string(c.lang == C ? "C" : "C++") + " : " + c.what + " -> " + c.want + " : " + obs(r));
     }
+    // printf : au journal
+    {
+        Project p;
+        addVar(p, "R", "DINT", "0");
+        const Run r = run(p, ScriptLang::C, "int n = 42;\nprintf(\"Niveau %d atteint\\n\", n);\nR = 1;\n", "R", 1, "Niveau 42 atteint");
+        check(r.journal && r.error.empty(), "printf -> le journal (Niveau 42 atteint) : " + obs(r));
+    }
+    // les variables IHM : un tableau a deux dimensions lu m[i][j], une structure
+    {
+        Project p;
+        addVar(p, "M", "ARRAY[0..2, 0..3] OF DINT", "");
+        addVar(p, "T", "ARRAY[0..2] OF ARRAY[0..3] OF DINT", "");
+        addVar(p, "R", "DINT", "0");
+        const Run r = run(p, ScriptLang::C, "M[1][2] = 7;\nT[2][3] = 5;\nR = M[1][2] * 10 + T[2][3];\n", "R");
+        check(r.value == "75" && r.error.empty(), "C : M[1][2] (deux dimensions) et T[2][3] (tableau de tableaux) -> 75 : " + obs(r));
+    }
+    // une enumeration du projet : T_MODE::Auto (C++), Auto (C)
+    {
+        Project p;
+        HmiType mode;
+        mode.id = p.allocate();
+        mode.name = "T_MODE";
+        mode.kind = HmiTypeKind::Enumeration;
+        mode.values = {HmiEnumValue{"Arret", 0, "Arr\xC3\xAAt", {}}, HmiEnumValue{"Auto", 1, "Auto", {}}};
+        p.programs.types.push_back(mode);
+        addVar(p, "Mode", "T_MODE", "");
+        addVar(p, "R", "DINT", "0");
+        const Run cpp = run(p, ScriptLang::Cpp, "Mode = T_MODE::Auto;\nif (Mode == T_MODE::Auto) R = 1;\n", "R");
+        check(cpp.value == "1" && cpp.error.empty(), "C++ : T_MODE::Auto : " + obs(cpp));
+        const Run c = run(p, ScriptLang::C, "Mode = Auto;\nswitch (Mode) { case Auto: R = 2; break; case Arret: R = 3; break; }\n", "R");
+        check(c.value == "2" && c.error.empty(), "C : Auto, case Auto : " + obs(c));
+    }
+}
+
+// ---- les refus : a leur ligne, en francais ---------------------------------------------------------
+void refus() {
+    std::printf("-- ce qui n'est pas pris en charge : dit a sa ligne\n");
+    struct Case {
+        ScriptLang  lang;
+        const char* body;
+        int         line;
+        const char* word;
+    };
+    const Case cases[] = {
+        {ScriptLang::C, "int a = 0;\nint *p = &a;\n", 2, "pointeur local"},
+        {ScriptLang::Cpp, "int a = 0;\nclass Pompe { };\n", 2, "classe"},
+        {ScriptLang::Cpp, "int a = 0;\nauto f = [](int x) { return x; };\n", 2, "lambda"},
+        {ScriptLang::C, "int a = 0;\na = 1;\nint *t = malloc(10);\n", 3, "pointeur local"},
+        {ScriptLang::C, "int a = 0;\na = b++ + 1;\n", 2, "propre ligne"},
+        {ScriptLang::C, "int a = 0;\nif (a = 1) a = 2;\n", 2, "affectation"},
+        {ScriptLang::Cpp, "#include <vector>\nstd::vector<int> v;\n", 2, "std::vector"},
+        {ScriptLang::Cpp, "#include <iostream>\nstd::cout << 1;\n", 2, "std::cout"},
+        {ScriptLang::C, "int a = 1;\nswitch (a) {\n  case 1: a = 2;\n  case 2: a = 3; break;\n}\n", 4, "break"},
+        {ScriptLang::C, "int a = 1;\ngoto fin;\n", 2, "goto"},
+        {ScriptLang::C, "int f(void) {\n  static int n;\n  return n;\n}\n", 2, "static"},
+    };
+    for (const auto& c : cases) {
+        const auto t = cscript::translate(c.body, c.lang);
+        const std::string what = t.ok() ? std::string("accepte\n") + t.st : std::to_string(t.errors.front().line) + " : " + t.errors.front().message;
+        check(!t.ok() && t.errors.front().line == c.line && t.errors.front().message.find(c.word) != std::string::npos,
+              std::string("refus ligne ") + std::to_string(c.line) + " (" + c.word + ") : " + what);
+    }
+    // les textes a l'ecran disent ce qui est pris
+    check(cscript::supportedSubset(ScriptLang::Cpp).find("pas de pointeur local") == std::string::npos
+              && cscript::supportedSubset(ScriptLang::Cpp).find("Pas de pointeur local") != std::string::npos
+              && cscript::supportedSubset(ScriptLang::Cpp).find("std::vector") != std::string::npos,
+          "le sous-ensemble dit (C++) : " + cscript::supportedSubset(ScriptLang::Cpp));
+    Project p;
+    addVar(p, "M", "ARRAY[0..3] OF ARRAY[0..15] OF BOOL", "");
+    const std::string hc = projectHeader(p, ScriptLang::C);
+    check(hc.find("compil") != std::string::npos && hc.find("non ex\xC3\xA9" "cut\xC3\xA9") == std::string::npos,
+          "l'en-tete du projet dit compile et execute");
+    check(hc.find("bool M[4][16];") != std::string::npos, "l'en-tete C : un tableau de tableaux, bool M[4][16]\n" + hc);
+    // la frappe : chaque debut d'un script ne fait jamais planter la traduction
+    const std::string all = "#define N 4\nint t[N][2] = {{1, 2}, {3, 4}};\nvoid f(int *p) { *p += 1; }\nint main(void) {\n  for (int i = 0; i < N; i++) {\n"
+                            "    switch (i) { case 0: f(&t[i][0]); break; default: break; }\n  }\n  printf(\"%d\\n\", t[0][0]);\n  return 0;\n}\n";
+    std::size_t prefixes = 0;
+    for (std::size_t n = 0; n <= all.size(); ++n) {
+        (void)cscript::translate(all.substr(0, n), ScriptLang::Cpp);
+        (void)checkScript(ScriptLang::C, all.substr(0, n), "Essai");
+        ++prefixes;
+    }
+    check(prefixes == all.size() + 1, "la frappe : " + std::to_string(prefixes) + " debuts traduits sans exception");
+    const auto whole = cscript::translate(all, ScriptLang::C);
+    check(whole.ok() && whole.entry == "main", "un fichier C complet : traduit, main() en point d'entree (" + (whole.ok() ? whole.entry : whole.errors.front().message) + ")");
 }
 
 } // namespace
 
 int main() {
     std::printf("scripts C et C++ : compiles et executes\n");
-    if (std::getenv("SCRC_SONDE")) sonde();
+    traduction();
+    execution();
+    sousEnsemble();
+    refus();
     std::printf("%d controles, %d echecs\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

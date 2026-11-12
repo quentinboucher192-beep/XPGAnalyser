@@ -11,12 +11,16 @@
 //    |                                  | editeur (marge des points)      |
 //    +------------------------------- etat -------------------------------+
 //
-//  "Ajouter une methode..." ouvre la fenetre HmiMethodDialog (nom, retour, parametres,
-//  Privee, Redefinissable (virtuelle)) ; Redefinir (sur une virtuelle heritee) cree la
-//  redefinition preremplie avec SUPER ; Dupliquer, Supprimer, Monter, Descendre ; le nom
-//  et les parametres se changent dans leur case. Chaque geste est une commande
-//  (hmi::changeProject) : Ctrl+Z le reprend. L'editeur est celui des scripts (colore,
-//  numerote, l'aide a la saisie qui connait SELF, les membres et les parametres) avec
+//  1.50.0 (planche 01) : UNE METHODE EST UNE FONCTION PORTEE PAR LE TYPE. "Ajouter une methode..." ouvre LA fenetre
+//  des fonctions (HmiNewFunctionDialog, son 5e proprietaire : le type ; newfunction::ask) - Nom, Generiques, Retour,
+//  Unite, Portee, Virtuelle, Description, "Elle s'ecrira FUNCTION PUBLIC VIRTUAL Demarrer : BOOL" -, "Creer" la pose en
+//  une commande et ouvre l'onglet Parametres. L'editeur a LES CINQ ONGLETS d'une fonction (makeFunctionTabs, le meme
+//  composant que le volet Fonctions) : Code (la legende SELF, le bandeau Migrer, le corps), Parametres (SELF en tete,
+//  grise et verrouille), Locales, Constantes, Tests (les cas partent d'une instance d'essai du type : HmiFunctionTests).
+//  Redefinir (sur une virtuelle heritee) cree la redefinition preremplie avec SUPER ; Dupliquer, Supprimer, Monter,
+//  Descendre, Lancer les tests ; le nom se change dans sa case. Chaque geste est une commande
+//  (hmi::changeProject) : Ctrl+Z le reprend. Le corps s'edite dans l'editeur des scripts (colore,
+//  numerote, l'aide a la saisie qui connait SELF, les membres, les parametres et les locales) avec
 //  la marge des points d'arret du debogueur (la cible : la methode) ; ses fautes
 //  (hmi::checkMethod) sont soulignees a la frappe, F7 les compte.
 //  Une INTERFACE montre ses signatures (sans corps) : "Ajouter une signature...".
@@ -25,6 +29,8 @@
 
 #include "HmiAssist.hpp"
 #include "HmiDebugSession.hpp"
+#include "HmiFunctionDialog.hpp"     // 1.50.0 : la fenetre des fonctions (Nouvelle methode du type)
+#include "HmiFunctionPanes.hpp"      // 1.50.0 : makeFunctionTabs, les cinq onglets partages
 #include "HmiPanels.hpp"
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiCommands.hpp"
@@ -36,76 +42,11 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace app {
-
-// ---- LA FENETRE "AJOUTER UNE METHODE..." --------------------------------------
-//  Posee par-dessus Types IHM : le nom, le retour (vide : une procedure ; le bouton
-//  "Choisir..." ouvre le selecteur de types), les parametres en une ligne
-//  ("Entree : REAL; VAR_IN_OUT Cible : T_Pompe"), les cases Privee et Redefinissable
-//  (virtuelle) ; la signature et ce qui ne va pas, en direct. "Creer la methode"
-//  (grise tant qu'il y a une faute) ou Annuler (Echap). L'hote fait la commande.
-class HmiMethodDialog final : public ui::Widget {
-public:
-    explicit HmiMethodDialog(std::string id);
-    // Ouvrir pour le type `type` (une structure : une methode ; une interface : une signature).
-    void open(const hmi::Project&, hmi::Id type);
-    void close();
-    [[nodiscard]] bool isOpen() const noexcept { return open_; }
-    void setName(const std::string&);
-    void setReturnType(const std::string&);
-    void setParams(const std::string&);
-    void setPrivate(bool);
-    void setVirtual(bool);
-    [[nodiscard]] std::string name() const;
-    [[nodiscard]] std::string returnType() const;
-    [[nodiscard]] std::string params() const;
-    [[nodiscard]] bool        isPrivate() const;
-    [[nodiscard]] bool        isVirtual() const;
-    [[nodiscard]] hmi::Id     type() const noexcept { return type_; }
-    [[nodiscard]] bool        forInterface() const noexcept { return interface_; }
-    // "T_Pompe.Demarrer(Consigne : REAL) : BOOL" ; ce qui ne va pas (vide : Creer permis).
-    [[nodiscard]] std::string signature() const;
-    [[nodiscard]] std::string problem() const;
-    [[nodiscard]] std::string title() const;
-    [[nodiscard]] ui::InputText& nameField() noexcept { return *name_; }
-    [[nodiscard]] ui::InputText& returnField() noexcept { return *return_; }
-    [[nodiscard]] ui::InputText& paramsField() noexcept { return *params_; }
-    [[nodiscard]] ui::Checkbox&  privateBox() noexcept { return *private_; }
-    [[nodiscard]] ui::Checkbox&  virtualBox() noexcept { return *virtual_; }
-    [[nodiscard]] ui::Button&    createButton() noexcept { return *create_; }
-    [[nodiscard]] ui::Button&    cancelButton() noexcept { return *cancel_; }
-    [[nodiscard]] ui::Button&    chooseButton() noexcept { return *choose_; }
-    [[nodiscard]] gfx::Rect boxRect() const;
-
-    // "Creer la methode" : l'hote lit les champs et fait la commande.
-    const core::SignalPtr<> created = core::Signal<>::create();
-    // "Choisir..." : le selecteur de types (l'hote le branche) ; nul : le champ seul.
-    std::function<void()> chooseReturn;
-
-protected:
-    void onLayout() override;
-    void onPaint(const ui::PaintContext&) override;
-    ui::EventResult onEvent(const ui::InputEvent&) override;
-
-private:
-    void sync();
-    const hmi::Project* project_{nullptr};
-    hmi::Id             type_{hmi::kNoId};
-    bool                interface_{false};
-    bool                open_{false};
-    ui::InputText*      name_{nullptr};
-    ui::InputText*      return_{nullptr};
-    ui::InputText*      params_{nullptr};
-    ui::Checkbox*       private_{nullptr};
-    ui::Checkbox*       virtual_{nullptr};
-    ui::Button*         choose_{nullptr};
-    ui::Button*         create_{nullptr};
-    ui::Button*         cancel_{nullptr};
-    core::ConnectionScope links_;
-};
 
 // ---- LA SECTION METHODES -------------------------------------------------------
 class HmiMethodsPane final : public ui::Widget {
@@ -135,8 +76,12 @@ public:
     void goTo(hmi::Id method, int line);
 
     // ---- les gestes (une commande chacun : Ctrl+Z) ; kNoId / faux et `why` si refuse ----
+    // `params` : une ligne "Consigne : REAL; VAR_IN_OUT Cible : T_Pompe" (les scripts, l'IA) ; vide : aucun.
     hmi::Id addMethod(const std::string& name, const std::string& returnType, const std::string& params, bool isPrivate,
                       bool isVirtual, std::string* why = nullptr);
+    // 1.50.0 : la reponse de la fenetre des fonctions - le nom, les generiques, le retour et son unite, la portee, la
+    // virtuelle, la description : UNE commande (un Ctrl+Z la retire), la methode choisie, l'onglet Parametres ouvert.
+    hmi::Id createMethod(const HmiNewFunctionDialog::Answer& answer, std::string* why = nullptr);
     bool    renameMethod(hmi::Id, const std::string& name, std::string* why = nullptr);
     hmi::Id duplicateMethod(hmi::Id, std::string* why = nullptr);
     bool    deleteMethod(hmi::Id, std::string* why = nullptr);
@@ -149,11 +94,33 @@ public:
     bool    setBody(hmi::Id, const std::string& body);
     // Redefinir une virtuelle heritee : une methode de meme signature, son corps prerempli avec SUPER.
     hmi::Id overrideMethod(hmi::Id inherited, std::string* why = nullptr);
-    // La fenetre : l'ouvrir (faux : aucun type), "Creer la methode" (kNoId et `why` : refuse).
+    // La fenetre des fonctions, sur ce type (newfunction::ask) : faux - aucun type, ou aucun hote pour l'ouvrir. Sa
+    // reponse passe par createMethod.
     bool    openAddDialog();
-    hmi::Id createFromDialog(std::string* why = nullptr);
-    void    setDialogWidget(HmiMethodDialog* d);
-    [[nodiscard]] HmiMethodDialog* dialog() const noexcept { return dialog_; }
+    // La fenetre telle qu'elle s'ouvrirait (le type, un nom libre) : les essais la posent eux-memes.
+    [[nodiscard]] HmiNewFunctionDialog::Spec addDialogSpec() const;
+
+    // ---- 1.50.0 : LES CINQ ONGLETS (ceux d'une fonction : makeFunctionTabs) ----
+    enum CodeTab : std::size_t { CodeTabCode = 0, CodeTabParameters = 1, CodeTabLocals = 2, CodeTabConstants = 3, CodeTabTests = 4 };
+    void showCodeTab(std::size_t tab);
+    [[nodiscard]] std::size_t currentCodeTab() const noexcept;
+    [[nodiscard]] HmiCodeTabs&          codeTabs() noexcept { return *codeTabs_; }
+    [[nodiscard]] HmiDeclGrid&          parametersGrid() noexcept { return *codeTabs_->grid(hmi::decledit::Tab::Parameters); }
+    [[nodiscard]] HmiDeclGrid&          localsGrid() noexcept { return *codeTabs_->grid(hmi::decledit::Tab::Variables); }
+    [[nodiscard]] HmiDeclGrid&          constantsGrid() noexcept { return *codeTabs_->grid(hmi::decledit::Tab::Constants); }
+    [[nodiscard]] HmiDeclBanner&        declBanner() noexcept { return *banner_; }
+    [[nodiscard]] HmiFunctionTestsPage& testsPage() noexcept { return *testsPage_; }
+    // La methode montree, comme un code (ses declarations) ; vide : aucune, ou heritee (elle se change dans son type).
+    [[nodiscard]] std::optional<hmi::decledit::Place> currentPlace() const;
+    bool migrateCurrent();                      // le bandeau " Migrer ce code " (une commande)
+    // Les tests : un cas montre (sa methode choisie, l'onglet Tests) ; " Lancer les tests " - tous les cas des methodes
+    // du type, leurs verdicts au panneau du bas ; rend le nombre de cas reussis.
+    bool showTestCase(hmi::Id test);
+    std::size_t runTests();
+    [[nodiscard]] const TestCampaign& lastCampaign() const noexcept { return campaign_; }
+    void setTestHosts(HmiFunctionTestsPage::Hosts h);
+    // Vit encore ? (une fenetre repond apres coup.)
+    [[nodiscard]] std::weak_ptr<int> aliveToken() const { return alive_; }
 
     // La legende au-dessus du corps : SELF, ses membres, le retour.
     [[nodiscard]] std::string legendText() const;
@@ -174,7 +141,7 @@ public:
     [[nodiscard]] const std::string&   lastMessage() const noexcept { return message_; }
 
     // Les actions de la barre (les essais, les scripts).
-    enum Action : int { AAdd = 1, AOverride, ADuplicate, ADelete, AUp, ADown, ACompile };
+    enum Action : int { AAdd = 1, AOverride, ADuplicate, ADelete, AUp, ADown, ACompile, ARunTests };
 
 protected:
     void onLayout() override;
@@ -206,7 +173,12 @@ private:
     ui::StatusBar*     legend_{nullptr};
     ui::MultiLineText* editor_{nullptr};
     ui::StatusBar*     status_{nullptr};
-    HmiMethodDialog*   dialog_{nullptr};
+    HmiCodeTabs*       codeTabs_{nullptr};         // 1.50.0 : Code | Parametres | Locales | Constantes | Tests
+    HmiDeclBanner*     banner_{nullptr};
+    HmiFunctionTestsPage* testsPage_{nullptr};
+    TestCampaign       campaign_;
+    std::shared_ptr<int> alive_{std::make_shared<int>(0)};
+    void refreshTabs();
     HmiBreakpointMargin margin_;
     assist::Sources    assist_;
     std::shared_ptr<ui::ITableModel> model_;

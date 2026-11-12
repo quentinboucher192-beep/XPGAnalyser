@@ -89,7 +89,8 @@ void discussion150(SoftRenderer& r) {
     // Ce que Lea envoie (le texte, le message auquel elle repond) : les crochets du service.
     std::vector<std::pair<std::string, std::string>> sent;
     sm::Hooks hooks;
-    hooks.say = [&sent](const std::string& t, const std::string& to) { sent.emplace_back(t, to); };
+    hooks.say = [&sent](const std::string& t) { sent.emplace_back(t, std::string{}); };
+    hooks.sayReply = [&sent](const std::string& t, const std::string& to) { sent.emplace_back(t, to); };
     sm::setHooks(hooks);
     sm::setActive(true);
     sm::setBoard(b);

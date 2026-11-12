@@ -1420,6 +1420,9 @@
     <ClCompile Include="src\app\hmi\HmiEditHistoryDialog.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiEditorStretch.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiEnumPanes.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1520,6 +1523,9 @@
       <Filter>app\hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\app\hmi\HmiSlavePanes.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiStretchDialog.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\app\hmi\HmiSymbolPopupsPane.cpp">
@@ -1673,6 +1679,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiDuplicate.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiDuplicateRules.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiEditHistory.cpp">
@@ -1847,6 +1856,12 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiRuntimeTable.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiScriptC.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiStretch.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiTrash.cpp">
@@ -3352,6 +3367,9 @@
     <ClInclude Include="src\app\hmi\HmiSimVarTree.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiStretchDialog.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiSymbolPopupsPane.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -3514,6 +3532,9 @@
     <ClInclude Include="src\hmi\HmiDuplicate.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiDuplicateRules.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiEditHistory.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
@@ -3613,6 +3634,9 @@
     <ClInclude Include="src\hmi\HmiRoles.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiScriptC.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiScriptCheck.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
@@ -3629,6 +3653,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiStandalone.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiStretch.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiSymbolArgCheck.hpp">

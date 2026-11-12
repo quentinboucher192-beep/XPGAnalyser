@@ -3765,9 +3765,8 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
             std::string why;
             if (createEnumerationFromPanel(&why) == kNoId) say("Refus\xC3\xA9 : " + why, true);
         });
-        // 1.13.0 (J1b) : la fenetre "Ajouter une methode..." (par-dessus tout le volet), ouverte par la section Methodes.
-        methodDialog_ = &static_cast<HmiMethodDialog&>(addChild(std::make_unique<HmiMethodDialog>(base + ".nouvelleMethode")));
-        if (methods_) methods_->setDialogWidget(methodDialog_);
+        // 1.50.0 (planche 01) : "Ajouter une methode..." ouvre la fenetre des fonctions (newfunction::ask, par l'ecran) -
+        // plus la fenetre propre aux methodes (HmiMethodDialog) posee ici.
         newMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(base + ".nouveauType")));
         links_ += newMenu_->itemChosen->connect([this](int a) {
             if (a == 1) tools_->triggered->emit(kMenuBase);           // Structure... : comme l'ancien + Type
@@ -6185,7 +6184,6 @@ void HmiTypesPane::onLayout() {
     // 1.10 (chantier U) : les fenetres sur tout le volet (1.13.1 : les valeurs d'une enumeration ont leur onglet).
     if (enumDialog_) enumDialog_->setBounds(b);
     if (create_) create_->setBounds(b);
-    if (methodDialog_) methodDialog_->setBounds(b);   // 1.13.0 (J1b) : la fenetre Ajouter une methode...
     if (newMenu_) newMenu_->setBounds(b);           // un menu sans bornes ne se dessine pas
 }
 

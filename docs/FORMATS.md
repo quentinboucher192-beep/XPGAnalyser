@@ -105,6 +105,7 @@ Règles d'écriture :
 - **Écriture « en escalier »** : un projet est écrit au plus petit format capable de porter ce qu'il contient (un projet sans espace de noms ni bibliothèque reliée s'écrit au format 32, et ainsi de suite).
 - **Un outil plus ancien refuse un format plus récent** plutôt que de le relire en perdant ce qu'il ne connaît pas.
 - Jalons principaux (commentaires de `HmiStore.hpp`) : 2 ressources ; 3 programmation générale ; 4 alarmes, recettes, sécurité ; 13 communication Modbus TCP, poste d'exploitation, accès web ; 14 équipements du réseau ; 15 types IHM ; 16 jumeaux simulés ; 19 dossiers ; 21 opérateurs et énumérations ; 22 groupes d'alarmes ; 23 déclarations des scripts ; 24 raccourcis des vues ; 25 gestes sur un tableau ; 26 constantes et fonctions des vues ; 27 types rappel ; 28 et 30 génériques ; 29 tests unitaires ; 31 types objets ; 32 unités de mesure ; 33 espaces de noms et bibliothèques reliées.
+- 1.50.0 : les méthodes des types IHM ont les onglets des fonctions (Paramètres, Locales, Constantes, Tests). À l'ouverture, les blocs `VAR … END_VAR` encore écrits dans le corps d'une méthode passent dans ses déclarations (lignes `declaration` sous `methode_type`, lues depuis le format 31, comme ses cas de test) : **le format ne change pas** et une version d'avant relit le projet ; un corps illisible reste tel quel (`hmi::migrate::migrateMethods`).
 - Le manifeste `project.xpgproj` porte son propre `formatVersion` (valeur `1`).
 
 ---

@@ -123,7 +123,7 @@ std::uint32_t HmiDebugSession::add(HmiDebugTarget code, std::uint32_t line, std:
     }
     if (const hmi::Project* p = projectOf(*this); p && code.script != hmi::kNoId)
         if (const hmi::Script* sc = p->script(code.script); sc && sc->lang != hmi::ScriptLang::ST) {
-            if (why) *why = std::string(hmi::scriptLangKey(sc->lang)) + " : non ex\xC3\xA9" "cut\xC3\xA9 en simulation (C/C++) - pas de point d'arr\xC3\xAAt ici.";
+            if (why) *why = std::string(hmi::scriptLangKey(sc->lang)) + " : ex\xC3\xA9" "cut\xC3\xA9 sans le d\xC3\xA9" "bogueur (C/C++) - pas de point d'arr\xC3\xAAt ici.";
             return 0;
         }
     if (const auto id = at(code, line)) return id;

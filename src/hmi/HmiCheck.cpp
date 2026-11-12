@@ -18,6 +18,7 @@
 #include "HmiLoginMenu.hpp"
 #include "HmiNavigation.hpp"
 #include "HmiScript.hpp"
+#include "HmiScriptC.hpp"     // 1.50.0 : les noms d'un script C ou C++ (sa traduction)
 #include "HmiWeb.hpp"        // 1.32.0 : le reglage du poste qui permet l'acces web
 #include "HmiDecl.hpp"         // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiCalc.hpp"         // 1.12.7 : les valeurs calculees au demarrage, les constantes qualifiees
@@ -1009,9 +1010,16 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
     };
     // Les scripts : les noms qu'ils lisent et ecrivent doivent exister.
     const auto names = [&](const Script& sc, Id view) {
-        if (sc.lang != ScriptLang::ST) return;
+        // 1.50.0 : un script C ou C++ - les noms de sa traduction (les memes lignes) : une variable IHM inconnue est dite
+        // a Compiler, comme en ST (la faute de syntaxe, elle, est deja dite par checkScript).
+        std::string translatedCode;
+        if (sc.lang != ScriptLang::ST) {
+            const auto tr = cscript::translated(sc.body, sc.lang, cscript::entryNamesOf(sc));
+            if (!tr.ok()) return;
+            translatedCode = tr.st;
+        }
         const View* owner = view != kNoId ? p.view(view) : nullptr;
-        const std::string code = decl::codeOf(sc);                    // 1.11.18 (lot 3) : ses declarations du modele
+        const std::string code = sc.lang != ScriptLang::ST ? translatedCode : decl::codeOf(sc);   // 1.11.18 (lot 3) : ses declarations du modele
         const auto dialect = scriptcheck::dialectDeclared(code);      // 1.10 : le dialecte IHM (S1) n'est pas inexistant
         for (const auto& u : scriptNames(code))
             if (!known(p, plc, u.name, owner) && !dialect.count(upperText(u.name)))

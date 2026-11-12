@@ -312,6 +312,8 @@ struct Plan {
 // copie k : shiftIndices(morceau, k)) ; les indices hors repere ne se suivent que
 // si followByDefault (sinon, ce qui n'est pas marque ne varie pas).
 [[nodiscard]] Plan defaultPlan(const View&, const Scan&, int copies);
+// 1.50.0 : les noms de defaultPlan seuls - l'original (ligne 0), puis la serie libre dans la vue (V_102, V_103...).
+[[nodiscard]] std::vector<std::string> seriesNames(const View&, const Scan&, int copies);
 // 1.10.4 (le cas du client) : l'objet suit V[0] ailleurs (Libelle, Ouverture...)
 // et SON repere de type variable est vide - la colonne se preremplit avec V[0],
 // V[1], V[2]... (ligne 0 : l'original). Le repere, le tableau, l'indice de

@@ -24,6 +24,8 @@
 #include "../hmi/HmiEditor.hpp"
 #include "../hmi/HmiFunctionPanes.hpp"
 #include "../hmi/HmiLive.hpp"               // 1.11.21 : les diagnostics en direct
+#include "../hmi/HmiMethodPanes.hpp"         // 1.50.0 : un cas de test d'une methode (son onglet Tests)
+#include "../hmi/HmiVariablePanes.hpp"       // 1.50.0 : HmiTypesPane (la page Types IHM)
 #include "../../hmi/HmiMethods.hpp"         // 1.13.0 : la Console mene a une methode (methodById)
 #include "../../hmi/HmiOperators.hpp"       // ... ou a un operateur (operatorById)
 #include "../hmi/HmiObjectAlarmPanes.hpp"   // 1.13.0 (lot J4b) : HmiSymbolTabs (un cas de test d'un symbole)
@@ -698,6 +700,13 @@ void MainAnalysisScreen::openHmiElement(const std::string& key) {
     else if (kind == "cas-test") {               // 1.13.0 (lot J4b) : un verdict - sa fonction, l'onglet Tests, le cas
         const auto owner = ownerOfTest(p, static_cast<hmi::Id>(id));
         if (!owner) return;
+        if (owner->type != hmi::kNoId) {          // 1.50.0 : un cas d'une methode - son type, Methodes, l'onglet Tests
+            if (auto* types = showHmiType(owner->type)) {
+                types->showTypeTab(HmiTypesPane::TabMethods);
+                if (auto* methods = types->methods()) (void)methods->showTestCase(static_cast<hmi::Id>(id));
+            }
+            return;
+        }
         HmiFunctionsPane* pane = nullptr;
         if (owner->view == hmi::kNoId) {
             openHmiFunctions(owner->function, 0);

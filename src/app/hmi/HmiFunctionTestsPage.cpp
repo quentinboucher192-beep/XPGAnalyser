@@ -9,6 +9,7 @@
 #include "../../hmi/HmiDecl.hpp"          // decl::codeOf : les parametres du modele
 #include "../../hmi/HmiExpr.hpp"          // Expression : une cible lisible
 #include "../../hmi/HmiHistory.hpp"       // wallStamp : la date du rapport
+#include "../../hmi/HmiMethods.hpp"       // 1.50.0 : les tests d'une methode d'un type IHM
 #include "../../hmi/HmiScript.hpp"        // splitDeclarations, LocalVar
 #include "../../hmi/HmiSymbols.hpp"       // cellValue (la regle des cases)
 #include "../../hmi/HmiTypes.hpp"         // 1.13.0 (D3b) : types::typeOfPath - le type d'une verif
@@ -75,7 +76,7 @@ const hmi::HmiFunction* functionIn(const hmi::Project& p, Id view, Id id) {
     if (view == kNoId) {
         for (const auto& f : p.programs.functions)
             if (f.id == id) return &f;
-        return nullptr;
+        return hmi::methodById(p, id);       // 1.50.0 : une methode d'un type IHM (l'onglet Tests des Methodes)
     }
     if (const auto* v = p.view(view))
         for (const auto& f : v->functions)
@@ -172,8 +173,21 @@ std::optional<TestOwner> ownerOfTest(const hmi::Project& p, Id test) {
         for (const auto& f : v.functions)
             for (const auto& t : f.tests)
                 if (t.id == test) return TestOwner{v.id, f.id};
+    for (const auto& ty : p.programs.types)             // 1.50.0 : une methode d'un type IHM
+        for (const auto& m : ty.methods)
+            for (const auto& t : m.tests)
+                if (t.id == test) return TestOwner{kNoId, m.id, ty.id};
     return std::nullopt;
 }
+
+namespace {
+// 1.50.0 : les lignes d'une methode menent a son type (type:N), pas a une fonction du projet ou d'un symbole.
+void methodLines(const hmi::Project& p, const hmi::HmiFunction& f, std::vector<TestLine>& lines) {
+    const hmi::HmiType* owner = nullptr;
+    if (lines.empty() || !hmi::methodById(p, f.id, &owner) || !owner) return;
+    lines.front().element = "type:" + std::to_string(owner->id);
+}
+} // namespace
 
 std::vector<TestLine> testLines(const hmi::HmiFunction& f, const hmi::FunctionTestReport& rep, std::string_view owner) {
     std::vector<TestLine> out;
@@ -231,7 +245,9 @@ void runOne(TestCampaign& c, const hmi::Project& p, const hmi::HmiFunction& f, I
     run.function = f;
     run.report = hmi::runFunctionTests(p, f, plc);
     testruns::record(p, f, run.report);
-    for (auto& l : testLines(f, run.report, owner)) c.lines.push_back(std::move(l));
+    auto lines = testLines(f, run.report, owner);
+    methodLines(p, f, lines);
+    for (auto& l : lines) c.lines.push_back(std::move(l));
     c.tally += testruns::tally(p, f);
     c.runs.push_back(std::move(run));
 }
@@ -243,6 +259,8 @@ TestCampaign runAllTests(const hmi::Project& p, sim::Environment* plc) {
     for (const auto& f : p.programs.functions) runOne(c, p, f, kNoId, {}, plc);
     for (const auto& v : p.views)
         for (const auto& f : v.functions) runOne(c, p, f, v.id, v.name, plc);
+    for (const auto& ty : p.programs.types)                       // 1.50.0 : les methodes des types IHM
+        for (const auto& m : ty.methods) runOne(c, p, m, kNoId, ty.name, plc);
     return c;
 }
 
@@ -523,7 +541,10 @@ const hmi::FunctionTest* HmiFunctionTestsPage::test(Id id) const {
 }
 
 std::string HmiFunctionTestsPage::ownerName() const {
-    if (view_ == kNoId) return {};
+    if (view_ == kNoId) {
+        const hmi::HmiType* owner = nullptr;              // 1.50.0 : une methode - son type (T_Pompe.Demarrer)
+        return function_ != kNoId && hmi::methodById(doc_->project, function_, &owner) && owner ? owner->name : std::string{};
+    }
     const auto* v = doc_->project.view(view_);
     return v ? v->name : std::string{};
 }
@@ -569,6 +590,10 @@ std::string HmiFunctionTestsPage::faultsOf(Id t) const {
 
 void HmiFunctionTestsPage::refresh() {
     const auto* f = fn();
+    // 1.50.0 (planche 01) : les cas d'une methode partent d'une instance d'essai du type - " SELF avant ".
+    const bool method = f && hmi::isTypeMethod(doc_->project, *f);
+    if (givensPanel_) givensPanel_->setTitle(method ? "SELF AVANT L'APPEL (UNE INSTANCE D'ESSAI DU TYPE)" : "POSER AVANT L'APPEL");
+    if (checksPanel_) checksPanel_->setTitle(method ? "V\xC3\x89RIFIER APR\xC3\x88S L'APPEL (SELF.X, JOURNAL)" : "V\xC3\x89RIFIER APR\xC3\x88S L'APPEL");
     order_.clear();
     faults_.clear();
     rows_->rows.clear();
@@ -580,7 +605,8 @@ void HmiFunctionTestsPage::refresh() {
         probe.config = doc_->project.config;
         probe.programs.variables = doc_->project.programs.variables;
         probe.programs.types = doc_->project.programs.types;
-        probe.programs.functions.push_back(*f);
+        // 1.50.0 : une methode est deja dans les types (Generer la lit sur son banc) ; une fonction s'ajoute.
+        if (!hmi::isTypeMethod(doc_->project, *f)) probe.programs.functions.push_back(*f);
         hmi::checkFunctionTests(probe, faults_);
         const std::size_t params = paramsOf(*f).size();
         for (const auto& t : f->tests) {
@@ -1118,21 +1144,46 @@ std::string targetProblem(const hmi::Project& p, const std::string& target, bool
     if (!p.variable(trim(root))) return "variable IHM inconnue \xC2\xAB " + trim(root) + " \xC2\xBB";
     return {};
 }
+
+// 1.50.0 : OU SE LISENT LES POSES ET LES VERIFS - le projet ; pour une methode d'un type IHM, son banc (l'instance
+// d'essai : SELF.Debit, THIS.Debit ou Debit seul y sont des chemins). Les messages redisent SELF.
+struct Space {
+    const hmi::Project* p{nullptr};
+    bool                method{false};
+    hmi::MethodBench    bench;
+    [[nodiscard]] const hmi::Project& project() const { return method ? bench.project : *p; }
+    [[nodiscard]] std::string read(const std::string& target) const { return method ? hmi::benchText(bench, target) : target; }
+    [[nodiscard]] std::string said(std::string text) const {
+        if (!method) return text;
+        for (std::size_t at = text.find(bench.self); at != std::string::npos; at = text.find(bench.self, at + 4))
+            text.replace(at, bench.self.size(), "SELF");
+        return text;
+    }
+};
+std::unique_ptr<Space> spaceOf(const hmi::Project& p, const hmi::HmiFunction* f) {
+    auto sp = std::make_unique<Space>();
+    sp->p = &p;
+    sp->method = f && hmi::isTypeMethod(p, *f) && hmi::methodBench(p, *f, sp->bench);
+    return sp;
+}
 } // namespace
 
 bool HmiFunctionTestsPage::addGiven(Id tid, const std::string& rawTarget, const std::string& rawValue, std::string* why) {
     const std::string target = trim(rawTarget), typedValue = trim(rawValue);
-    if (const std::string bad = targetProblem(doc_->project, target, false); !bad.empty()) {
-        if (why) *why = bad;
+    const auto sp = spaceOf(doc_->project, fn());           // 1.50.0 : une methode - SELF.Debit sur son banc
+    const hmi::Project& q = sp->project();
+    const std::string read = sp->read(target);
+    if (const std::string bad = targetProblem(q, read, false); !bad.empty()) {
+        if (why) *why = sp->said(bad);
         return false;
     }
     std::string value = typedValue;
-    if (const auto* v = doc_->project.variable(target)) {
-        if (const auto cell = hmi::cellValue(&doc_->project, v->type, value); !cell.ok()) {
+    if (const auto* v = q.variable(read)) {
+        if (const auto cell = hmi::cellValue(&q, v->type, value); !cell.ok()) {
             if (why) *why = target + " : " + cell.why;
             return false;
         }
-        value = keptCell(doc_->project, v->type, value);
+        value = keptCell(q, v->type, value);
     }
     const auto* t = test(tid);
     const bool ok = change("Poser " + target + " (cas " + (t ? t->name : std::string{}) + ")", [target, value](hmi::FunctionTest& x, std::string*) {
@@ -1151,16 +1202,19 @@ bool HmiFunctionTestsPage::setGiven(Id tid, std::size_t index, const std::string
     }
     const std::string target = trim(rawTarget);
     std::string value = trim(rawValue);
-    if (const std::string bad = targetProblem(doc_->project, target, false); !bad.empty()) {
-        if (why) *why = bad;
+    const auto sp = spaceOf(doc_->project, fn());           // 1.50.0 : une methode - SELF.Debit sur son banc
+    const hmi::Project& q = sp->project();
+    const std::string read = sp->read(target);
+    if (const std::string bad = targetProblem(q, read, false); !bad.empty()) {
+        if (why) *why = sp->said(bad);
         return false;
     }
-    if (const auto* v = doc_->project.variable(target)) {
-        if (const auto cell = hmi::cellValue(&doc_->project, v->type, value); !cell.ok()) {
+    if (const auto* v = q.variable(read)) {
+        if (const auto cell = hmi::cellValue(&q, v->type, value); !cell.ok()) {
             if (why) *why = target + " : " + cell.why;
             return false;
         }
-        value = keptCell(doc_->project, v->type, value);
+        value = keptCell(q, v->type, value);
     }
     if (t->givens[index].target == target && t->givens[index].value == value) return true;
     return change("Pose " + target + " (cas " + t->name + ")", [index, target, value](hmi::FunctionTest& x, std::string*) {
@@ -1204,11 +1258,13 @@ bool keptCheckExpected(const hmi::Project& p, const std::string& target, std::st
 bool HmiFunctionTestsPage::addCheck(Id tid, const std::string& rawTarget, const std::string& rawExpected, const std::string& rawTol, std::string* why) {
     const std::string target = trim(rawTarget), tol = trim(rawTol);
     std::string expected = trim(rawExpected);
-    if (const std::string bad = targetProblem(doc_->project, target, true); !bad.empty()) {
-        if (why) *why = bad;
+    const auto sp = spaceOf(doc_->project, fn());           // 1.50.0 : une methode - SELF.EnMarche sur son banc
+    const std::string read = sp->read(target);
+    if (const std::string bad = targetProblem(sp->project(), read, true); !bad.empty()) {
+        if (why) *why = sp->said(bad);
         return false;
     }
-    if (!keptCheckExpected(doc_->project, target, expected, why)) return false;
+    if (!keptCheckExpected(sp->project(), read, expected, why)) return false;
     double d = 0;
     if (!tol.empty() && (!parseTolerance(tol, d) || d < 0)) {
         if (why) *why = "tol\xC3\xA9rance \xC2\xAB " + tol + " \xC2\xBB : un nombre positif";
@@ -1234,11 +1290,13 @@ bool HmiFunctionTestsPage::setCheck(Id tid, std::size_t index, const std::string
     std::string expected = trim(rawExpected);
     const auto& cur = t->checks[index];
     if (cur.target == target && cur.expected == expected && cur.tolerance == tol) return true;
-    if (const std::string bad = targetProblem(doc_->project, target, true); !bad.empty()) {
-        if (why) *why = bad;
+    const auto sp = spaceOf(doc_->project, fn());           // 1.50.0 : une methode - SELF.EnMarche sur son banc
+    const std::string read = sp->read(target);
+    if (const std::string bad = targetProblem(sp->project(), read, true); !bad.empty()) {
+        if (why) *why = sp->said(bad);
         return false;
     }
-    if (!keptCheckExpected(doc_->project, target, expected, why)) return false;
+    if (!keptCheckExpected(sp->project(), read, expected, why)) return false;
     if (cur.target == target && cur.expected == expected && cur.tolerance == tol) return true;
     double d = 0;
     if (!tol.empty() && (!parseTolerance(tol, d) || d < 0)) {
@@ -1270,7 +1328,10 @@ bool HmiFunctionTestsPage::removeCheck(Id tid, std::size_t index, std::string* w
 
 // ---- jouer ----
 void HmiFunctionTestsPage::emitLines(const std::vector<TestLine>& lines) {
-    if (hosts_.output) hosts_.output(lines);
+    if (!hosts_.output) return;
+    auto shown = lines;
+    if (const auto* f = fn()) methodLines(doc_->project, *f, shown);   // 1.50.0 : une methode mene a son type
+    hosts_.output(shown);
 }
 
 bool HmiFunctionTestsPage::runCase(Id tid) {

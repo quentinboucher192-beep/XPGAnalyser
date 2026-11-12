@@ -999,6 +999,8 @@ struct IntFormula {
     const std::vector<long long>& idx;
     std::size_t                   p{0};
     std::string                   err{};
+    // 1.50.0 (Dupliquer, planche 04) : d'autres noms que i et j (i, j, k, n, o) ; nul : i et j des [*].
+    const FormulaNames*           names{nullptr};
     static constexpr long long    kLimit = 1000000000000LL;
 
     bool fault(std::string m) {
@@ -1047,6 +1049,17 @@ struct IntFormula {
             const std::size_t from = p;
             while (p < s.size() && (std::isalnum(static_cast<unsigned char>(s[p])) || s[p] == '_')) ++p;
             const std::string name = upperOf(s.substr(from, p - from));
+            if (names) {   // 1.50.0 : les compteurs de Dupliquer
+                std::string list;
+                for (const auto& [n, value] : *names) {
+                    if (upperOf(n) == name) {
+                        v = value;
+                        return true;
+                    }
+                    list += (list.empty() ? "" : ", ") + n;
+                }
+                return fault(std::string(s.substr(from, p - from)) + " inconnu : " + list + " seulement");
+            }
             if (name == "I" || name == "J") {
                 const std::size_t k = name == "I" ? 0 : 1;
                 if (k >= idx.size())
@@ -1139,7 +1152,9 @@ bool patternIndices(std::string_view pattern, std::string_view rel, std::vector<
     return true;
 }
 
-std::string formulaAddress(std::string_view formula, const std::vector<long long>& indices, std::string* why) {
+namespace {
+// L'adresse d'une formule : chaque calcul entre parentheses remplace par sa valeur (i, j ; ou `names`).
+std::string addressOfFormula(std::string_view formula, const std::vector<long long>& indices, const FormulaNames* names, std::string* why) {
     std::string out;
     for (std::size_t k = 0; k < formula.size();) {
         const char c = formula[k];
@@ -1164,6 +1179,7 @@ std::string formulaAddress(std::string_view formula, const std::vector<long long
             return {};
         }
         IntFormula e{formula.substr(k + 1, end - k - 1), indices};
+        e.names = names;
         long long v = 0;
         bool good = e.sum(v);
         if (good) {
@@ -1182,6 +1198,34 @@ std::string formulaAddress(std::string_view formula, const std::vector<long long
         k = end + 1;
     }
     return out;
+}
+} // namespace
+
+std::string formulaAddress(std::string_view formula, const std::vector<long long>& indices, std::string* why) {
+    return addressOfFormula(formula, indices, nullptr, why);
+}
+
+// 1.50.0 (Dupliquer, planche 04) : la meme ecriture, des compteurs nommes.
+std::string namedFormulaAddress(std::string_view formula, const FormulaNames& names, std::string* why) {
+    return addressOfFormula(formula, {}, &names, why);
+}
+
+bool formulaValue(std::string_view expr, const FormulaNames& names, long long& out, std::string* why) {
+    const std::vector<long long> none;
+    IntFormula e{expr, none};
+    e.names = &names;
+    long long v = 0;
+    bool good = e.sum(v);
+    if (good) {
+        e.blank();
+        if (e.p < e.s.size()) good = e.fault("\xC2\xAB " + std::string(e.s.substr(e.p)) + " \xC2\xBB en trop");
+    }
+    if (!good) {
+        fail(why, e.err);
+        return false;
+    }
+    out = v;
+    return true;
 }
 
 std::string internalEntryOf(const Variable& v, std::string_view rel) {

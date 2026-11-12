@@ -108,14 +108,33 @@ public:
     std::function<void(std::size_t)>                                askFreeType;
     std::function<void(std::size_t)>                                askPickType;
     std::function<void(std::size_t)>                                askPickUnit;   // 1.13.0 (lot J6b)
+    // 1.50.0 (planche 01) : LA LIGNE DE TETE d'une methode d'un type IHM - SELF, grise et verrouille : on le voit, on ne
+    // peut ni le renommer ni le retirer (il n'est pas une declaration). `lead` : 1 s'il y en a une ; les lignes de la
+    // table sont alors decalees d'une (rows[0] est la ligne 1 de la table) - la grille convertit (selectedRows...).
+    std::size_t      lead{0};
+    hmi::Declaration leadDecl;
 
-    [[nodiscard]] std::size_t rowCount() const override { return rows.size(); }
+    [[nodiscard]] std::string leadText(std::size_t c) const {
+        if (c >= columns.size() || columns[c] == kUses) return {};
+        switch (static_cast<de::Column>(columns[c])) {
+            case de::Column::Name:        return leadDecl.name;
+            case de::Column::Type:        return leadDecl.type;
+            case de::Column::Mode:        return std::string(de::modeLabel(hmi::PassMode::InOut));
+            case de::Column::Value:       return "\xE2\x80\x94";
+            case de::Column::Description: return leadDecl.description;
+            default:                      return {};
+        }
+    }
+
+    [[nodiscard]] std::size_t rowCount() const override { return rows.size() + lead; }
     [[nodiscard]] std::size_t columnCount() const override { return columns.size(); }
     [[nodiscard]] std::string headerText(std::size_t c) const override {
         if (c >= columns.size()) return {};
         return columns[c] == kUses ? std::string("Utilisations") : de::columnTitle(static_cast<de::Column>(columns[c]), tab);
     }
     [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
+        if (r < lead) return leadText(c);
+        r -= lead;
         if (r >= rows.size() || c >= columns.size()) return {};
         if (columns[c] == kUses) return std::to_string(rows[r].uses);
         // 1.12.7 : une valeur calculee au demarrage - ce qu'elle vaut (l'apercu), sinon qu'elle l'est.
@@ -126,6 +145,16 @@ public:
     }
     [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override {
         ui::CellStyle s;
+        if (r < lead) {                                   // SELF : grise, le cadenas devant son nom
+            s.fgTone = ui::Tone::Muted;
+            if (c < columns.size() && columns[c] != kUses && static_cast<de::Column>(columns[c]) == de::Column::Name) {
+                s.icon = ui::Icon::Lock;
+                s.iconTone = ui::Tone::Muted;
+            }
+            if (c < columns.size() && columns[c] != kUses && static_cast<de::Column>(columns[c]) != de::Column::Description) s.monospace = true;
+            return s;
+        }
+        r -= lead;
         if (r >= rows.size() || c >= columns.size()) return s;
         const auto& row = rows[r];
         if (columns[c] == kUses) {
@@ -170,10 +199,13 @@ public:
         return s;
     }
     [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t c) const override {
-        if (c < columns.size() && columns[c] == kUses) return rows[a].uses < rows[b].uses;
+        if (a < lead || b < lead) return a < b;           // SELF reste en tete
+        if (c < columns.size() && columns[c] == kUses) return rows[a - lead].uses < rows[b - lead].uses;
         return cellText(a, c) < cellText(b, c);
     }
     [[nodiscard]] bool editable(ui::RowIndex r, std::size_t c) const override {
+        if (r < lead) return false;                       // SELF : verrouille
+        r -= lead;
         // 1.12.7 : la valeur calculee se change par « \xC6\x92x Calcul\xE2\x80\xA6 » (pas dans la case).
         if (r < rows.size() && c < columns.size() && columns[c] != kUses && rows[r].d.computed
             && static_cast<de::Column>(columns[c]) == de::Column::Value)
@@ -181,6 +213,8 @@ public:
         return editableAll && r < rows.size() && c < columns.size() && columns[c] != kUses;
     }
     [[nodiscard]] std::vector<std::string> cellChoices(ui::RowIndex r, std::size_t c) const override {
+        if (r < lead) return {};
+        r -= lead;
         if (r >= rows.size() || c >= columns.size() || columns[c] == kUses) return {};
         const auto col = static_cast<de::Column>(columns[c]);
         switch (col) {
@@ -215,6 +249,8 @@ public:
     // Entree : un champ, Ctrl+Espace propose les unites, sa derniere ligne ouvre le selecteur) ; le
     // double-clic ouvre le selecteur d'unites (doubleClickInDialog).
     bool editInDialog(ui::RowIndex r, std::size_t c) override {
+        if (r < lead) return false;
+        r -= lead;
         if (r >= rows.size() || c >= columns.size() || columns[c] == kUses) return false;
         if (static_cast<de::Column>(columns[c]) == de::Column::Unit) return false;
         if (!askPickType || !typepicker::available()) return false;
@@ -223,12 +259,16 @@ public:
         return true;
     }
     bool doubleClickInDialog(ui::RowIndex r, std::size_t c) override {
+        if (r < lead) return false;
+        r -= lead;
         if (r >= rows.size() || c >= columns.size() || columns[c] == kUses) return false;
         if (static_cast<de::Column>(columns[c]) != de::Column::Unit || !askPickUnit || !unitpicker::available()) return false;
         askPickUnit(r);
         return true;
     }
     bool setCellText(ui::RowIndex r, std::size_t c, std::string_view text) override {
+        if (r < lead) return false;
+        r -= lead;
         if (r >= rows.size() || c >= columns.size() || columns[c] == kUses || !commit) return false;
         const auto col = static_cast<de::Column>(columns[c]);
         if (col == de::Column::Type && text == kOtherType) {
@@ -242,6 +282,10 @@ public:
         return commit(r, col, std::string(text));
     }
     [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override {
+        if (r < lead)
+            return leadDecl.name + " : " + leadDecl.type + " (entr\xC3\xA9" "e/sortie) - " + leadDecl.description
+                 + "\nToujours l\xC3\xA0, en t\xC3\xAA" "te : ni renomm\xC3\xA9, ni retir\xC3\xA9 (ce n'est pas un param\xC3\xA8tre \xC3\xA0 \xC3\xA9" "crire).";
+        r -= lead;
         if (r >= rows.size()) return {};
         const auto& row = rows[r];
         std::string tip = row.d.name + " : " + hmi::units::withUnit(row.d.type, row.d.unit);   // 1.13.0 (lot J6b) : REAL [bar]
@@ -368,7 +412,7 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
         const int c = tableColumnOf(de::Column::Type);
         if (c < 0) return;
         rows_->freeTypeRow = static_cast<int>(row);
-        (void)table_->beginCellEdit(static_cast<ui::RowIndex>(row), static_cast<std::size_t>(c));
+        (void)table_->beginCellEdit(static_cast<ui::RowIndex>(row + rows_->lead), static_cast<std::size_t>(c));
     };
     rows_->askPickType = [this](std::size_t row) { pickType(row); };
     rows_->askPickUnit = [this](std::size_t row) { pickUnit(row); };   // 1.13.0 (lot J6b)
@@ -376,6 +420,8 @@ HmiDeclGrid::HmiDeclGrid(std::string id, hmi::DocumentPtr doc, Apply apply, de::
     // 1.12.19 (U3, la regle des cases) : Ctrl+Espace dans une case Valeur - les variables, les fonctions, les
     // declarations voisines (comme une case fx de l'inspecteur).
     table_->setCellAssist([this](ui::RowIndex r, std::size_t col) -> ui::InputText::Assist {
+        if (r < rows_->lead) return {};                   // 1.50.0 : SELF ne s'ecrit pas
+        r -= rows_->lead;
         // 1.13.0 (lot J6b) : la case Unite - les unites du catalogue, puis " Choisir une unite... ".
         if (col < rows_->columns.size() && rows_->columns[col] != kUses && doc_ && r < rows_->rows.size()
             && static_cast<de::Column>(rows_->columns[col]) == de::Column::Unit) {
@@ -624,6 +670,18 @@ void HmiDeclGrid::refresh() {
     rows_->rows.clear();
     const bool ok = code.valid() && usable();
     rows_->editableAll = ok;
+    // 1.50.0 (planche 01) : les parametres d'une methode d'un type IHM - SELF en tete, grise et verrouille.
+    rows_->lead = 0;
+    if (code.valid() && tab_ == de::Tab::Parameters && place_ && place_->kind == de::Place::Kind::TypeMethod)
+        if (const auto* ty = doc_->project.hmiType(place_->type)) {
+            rows_->lead = 1;
+            rows_->leadDecl = {};
+            rows_->leadDecl.name = "SELF";
+            rows_->leadDecl.type = hmi::fullName(*ty);
+            rows_->leadDecl.kind = hmi::DeclKind::Parameter;
+            rows_->leadDecl.mode = hmi::PassMode::InOut;
+            rows_->leadDecl.description = "l'instance, toujours l\xC3\xA0 (THIS en est l'alias)";
+        }
     if (code.valid()) {
         const auto faults = de::faults(doc_->project, code);
         // 1.14.0 (lot M1) : les utilisations dans tout le projet, en un parcours (une constante de vue n'a pas de code).
@@ -642,7 +700,7 @@ void HmiDeclGrid::refresh() {
     table_->setScrollOffset(scroll);
     std::vector<ui::RowIndex> sel;
     for (std::size_t i = 0; i < rows_->rows.size(); ++i)
-        if (std::find(keep.begin(), keep.end(), rows_->rows[i].d.id) != keep.end()) sel.push_back(static_cast<ui::RowIndex>(i));
+        if (std::find(keep.begin(), keep.end(), rows_->rows[i].d.id) != keep.end()) sel.push_back(static_cast<ui::RowIndex>(i + rows_->lead));
     table_->selectModelRows(sel, false);
     applySearch();
     refreshUnfold();
@@ -782,8 +840,8 @@ void HmiDeclGrid::applySearch() {
 
 std::vector<std::size_t> HmiDeclGrid::selectedRows() const {
     std::vector<std::size_t> out;
-    for (const auto r : table_->selectedModelRows())
-        if (r < rows_->rows.size()) out.push_back(r);
+    for (const auto r : table_->selectedModelRows())   // 1.50.0 : la ligne SELF (lead) n'en est pas une
+        if (r >= rows_->lead && r - rows_->lead < rows_->rows.size()) out.push_back(r - rows_->lead);
     std::sort(out.begin(), out.end());
     return out;
 }
@@ -791,7 +849,7 @@ std::vector<std::size_t> HmiDeclGrid::selectedRows() const {
 void HmiDeclGrid::selectRows(const std::vector<std::size_t>& rows) {
     std::vector<ui::RowIndex> sel;
     for (const auto r : rows)
-        if (r < rows_->rows.size()) sel.push_back(static_cast<ui::RowIndex>(r));
+        if (r < rows_->rows.size()) sel.push_back(static_cast<ui::RowIndex>(r + rows_->lead));
     table_->selectModelRows(sel, true);
 }
 
@@ -859,6 +917,11 @@ std::string HmiDeclGrid::ownerLabel() const {
         case K::ViewConstants:   // 1.12.16
             if (const auto* v = p.view(place_->view)) return v->name;
             break;
+        case K::TypeMethod:      // 1.50.0 : une methode d'un type IHM
+            if (const auto* t = p.hmiType(place_->type))
+                for (const auto& m : t->methods)
+                    if (m.id == place_->id) return t->name + "." + m.name;
+            break;
     }
     return {};
 }
@@ -903,7 +966,8 @@ bool HmiDeclGrid::add() {
                                                     : " ajout\xC3\xA9 : son nom est \xC3\xA0 \xC3\xA9" "crire (F2 plus tard) - Ctrl+Z le retire"),
                 false);
             // Le nom tout de suite a ecrire, comme dans la maquette.
-            if (const int c = tableColumnOf(de::Column::Name); c >= 0) (void)table_->beginCellEdit(static_cast<ui::RowIndex>(i), static_cast<std::size_t>(c));
+            if (const int c = tableColumnOf(de::Column::Name); c >= 0)
+                (void)table_->beginCellEdit(static_cast<ui::RowIndex>(i + rows_->lead), static_cast<std::size_t>(c));
         }
     return true;
 }
@@ -1319,6 +1383,7 @@ void HmiDeclGrid::pickType(std::size_t row) {
     spec.current = d.type;
     spec.use = hmi::typereg::UseDeclaration;
     spec.doc = doc_;
+    spec.constant = d.kind == hmi::DeclKind::Constant;   // 1.50.0 (planche 03) : une constante ne vise rien
     const std::weak_ptr<int> alive = alive_;
     const hmi::Id id = d.id;
     typepicker::ask(std::move(spec), [this, alive, id](const HmiTypePicker::Answer& a) {

@@ -374,6 +374,8 @@ Tally tally(const hmi::Project& p) {
     for (const auto& f : p.programs.functions) t += tally(p, f);
     for (const auto& v : p.views)
         for (const auto& f : v.functions) t += tally(p, f);
+    for (const auto& ty : p.programs.types)          // 1.50.0 : les methodes des types IHM
+        for (const auto& m : ty.methods) t += tally(p, m);
     return t;
 }
 

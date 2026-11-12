@@ -11,6 +11,7 @@
 #include "../../hmi/HmiDuplicate.hpp"   // 1.10.2 (D) : les modeles d'objets
 #include "../../hmi/HmiRanges.hpp"   // 1.12.10 (lot F) : un objet pose suit la plage de sa variable
 #include "../../hmi/HmiStore.hpp"    // 1.13.1 (lot K3) : le code brut d'un objet
+#include "HmiSimMarks.hpp"           // 1.50.0 : dashedRect (l'apercu d'Etirer)
 
 #include "../../ui/Shapes.hpp"
 #include "../../ui/widgets/Controls.hpp"   // 1.12.18 : KeyboardMenuScope (Maj+F10 sur la vue)
@@ -1271,6 +1272,91 @@ void HmiCanvas::paintGrid(const ui::PaintContext& ctx, const HmiViewport& vp, co
     }
 }
 
+// ---- 1.50.0 : l'apercu d'Etirer (planche 02) -------------------------------------------
+void HmiCanvas::setStretchPreview(std::optional<hmi::stretch::Plan> plan) {
+    if (plan && !plan->possible()) plan.reset();
+    const bool had = stretchPreview_.has_value();
+    stretchPreview_ = std::move(plan);
+    if (had || stretchPreview_) invalidate();
+}
+
+// Chaque objet tel qu'il serait : sa boite en pointilles turquoise, la cote de ce qui s'ajoute (+ 396 px \xC2\xB7
+// largeur 412 -> 808) et, vers le bord de la vue (ou le voisin), la marge gardee.
+void HmiCanvas::paintStretchPreview(const ui::PaintContext& ctx, const HmiViewport& vp) {
+    if (!stretchPreview_ || !stretchPreview_->possible()) return;
+    namespace st = hmi::stretch;
+    const auto& plan = *stretchPreview_;
+    const auto acc = gfx::Color::rgb(0x0D9488), white = gfx::Color::rgb(0xFFFFFF);
+    const auto f = ctx.theme.font.smallUi;
+    const auto badge = [&](gfx::Point centre, const std::string& text) {
+        const float tw = ctx.r.measure(text, f).width + 12.f, th = ctx.r.lineHeight(f) + 4.f;
+        const gfx::Rect bx{centre.x - tw / 2.f, centre.y - th / 2.f, tw, th};
+        ctx.r.fillRoundedRect(bx, white, 4.f);
+        ctx.r.strokeRect(bx, acc, 1.f);
+        ctx.r.drawText({bx.x + 6.f, bx.y + 2.f}, text, f, acc);
+    };
+    const auto cote = [&](gfx::Point p0, gfx::Point p1, bool horizontal) {
+        ctx.r.line(p0, p1, acc, 1.5f);
+        const float t = 4.f;
+        if (horizontal) {
+            ctx.r.line({p0.x, p0.y - t}, {p0.x, p0.y + t}, acc, 1.5f);
+            ctx.r.line({p1.x, p1.y - t}, {p1.x, p1.y + t}, acc, 1.5f);
+        } else {
+            ctx.r.line({p0.x - t, p0.y}, {p0.x + t, p0.y}, acc, 1.5f);
+            ctx.r.line({p1.x - t, p1.y}, {p1.x + t, p1.y}, acc, 1.5f);
+        }
+    };
+    const bool showMargin = plan.margin > 0 && (plan.to == st::To::View || plan.to == st::To::Neighbour);
+    const std::string marginText = (plan.to == st::To::View ? "marge " : "espacement ") + hmi::formatNumber(plan.margin);
+    for (const auto& c : plan.changes) {
+        const gfx::Point a0 = vp.toScreen(c.after.x, c.after.y), a1 = vp.toScreen(c.after.right(), c.after.bottom());
+        const gfx::Rect ghost{std::min(a0.x, a1.x), std::min(a0.y, a1.y), std::max(1.f, std::fabs(a1.x - a0.x)),
+                              std::max(1.f, std::fabs(a1.y - a0.y))};
+        ctx.r.fillRect(ghost, acc.withAlpha(26));
+        simmark::dashedRect(ctx.r, ghost, acc, 2.f, 6.f, 4.f);
+        const auto& b = c.before;
+        const auto& a = c.after;
+        const bool movedL = std::fabs(a.x - b.x) > 0.01, movedR = std::fabs(a.right() - b.right()) > 0.01;
+        const bool movedT = std::fabs(a.y - b.y) > 0.01, movedB = std::fabs(a.bottom() - b.bottom()) > 0.01;
+        std::optional<gfx::Point> labelAt;
+        if (movedL || movedR) {
+            const double y = std::clamp(b.cy(), a.y, a.bottom());
+            const double x0 = movedR && !movedL ? b.right() : a.x, x1 = movedL && !movedR ? b.x : a.right();
+            const gfx::Point p0 = vp.toScreen(x0, y), p1 = vp.toScreen(x1, y);
+            cote(p0, p1, true);
+            labelAt = gfx::Point{(p0.x + p1.x) / 2.f, p0.y};
+        }
+        if (movedT || movedB) {
+            const double x = std::clamp(b.cx(), a.x, a.right());
+            const double y0 = movedB && !movedT ? b.bottom() : a.y, y1 = movedT && !movedB ? b.y : a.bottom();
+            const gfx::Point p0 = vp.toScreen(x, y0), p1 = vp.toScreen(x, y1);
+            cote(p0, p1, false);
+            if (!labelAt) labelAt = gfx::Point{p0.x, (p0.y + p1.y) / 2.f};
+            else labelAt = gfx::Point{(ghost.x + ghost.right()) / 2.f, (ghost.y + ghost.bottom()) / 2.f};
+        }
+        badge(labelAt.value_or(gfx::Point{(ghost.x + ghost.right()) / 2.f, (ghost.y + ghost.bottom()) / 2.f}), st::deltaText(c));
+        // La marge gardee : un trait entre le bord atteint et la cible, sa valeur a cote.
+        if (showMargin) {
+            const double m = plan.margin;
+            const double yq = a.y + std::min(18.0, a.h / 4.0), xq = a.x + std::min(18.0, a.w / 4.0);
+            bool said = false;
+            const auto mark = [&](gfx::Point p0, gfx::Point p1, bool horizontal, gfx::Point textAt) {
+                cote(p0, p1, horizontal);
+                if (!said) badge(textAt, marginText);
+                said = true;
+            };
+            if (movedR) { const auto p0 = vp.toScreen(a.right(), yq), p1 = vp.toScreen(a.right() + m, yq);
+                          mark(p0, p1, true, {p0.x - ctx.r.measure(marginText, f).width / 2.f - 14.f, p0.y + 14.f}); }
+            if (movedL) { const auto p0 = vp.toScreen(a.x - m, yq), p1 = vp.toScreen(a.x, yq);
+                          mark(p0, p1, true, {p1.x + ctx.r.measure(marginText, f).width / 2.f + 14.f, p1.y + 14.f}); }
+            if (movedB) { const auto p0 = vp.toScreen(xq, a.bottom()), p1 = vp.toScreen(xq, a.bottom() + m);
+                          mark(p0, p1, false, {p0.x + ctx.r.measure(marginText, f).width / 2.f + 14.f, p0.y - 12.f}); }
+            if (movedT) { const auto p0 = vp.toScreen(xq, a.y - m), p1 = vp.toScreen(xq, a.y);
+                          mark(p0, p1, false, {p1.x + ctx.r.measure(marginText, f).width / 2.f + 14.f, p1.y + 12.f}); }
+        }
+    }
+}
+
 // ---- 1.12.26 : le suivi des modifications -------------------------------------------
 // Le point orange des objets changes depuis le dernier enregistrement, en haut a droite de l'objet.
 void HmiCanvas::paintPendingDots(const ui::PaintContext& ctx, const HmiViewport& vp) {
@@ -1597,6 +1683,7 @@ void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
     paintSessionHolds(ctx, vp);  // 1.43.0 : les objets tenus par les equipiers
     paintSelection(ctx, vp);
     paintDimensions(ctx, vp);    // 1.12.30 : les cotes (Alt au survol, un deplacement)
+    paintStretchPreview(ctx, vp);   // 1.50.0 : l'apercu d'Etirer (le survol du menu, la fenetre)
 
     if (marqueeShown_) {
         const gfx::Point m0 = vp.toScreen(marquee_.x, marquee_.y), m1 = vp.toScreen(marquee_.right(), marquee_.bottom());
@@ -2570,6 +2657,17 @@ ui::EventResult HmiCanvas::onEvent(const ui::InputEvent& ev) {
             ui::KeyboardMenuScope keyboard;
             contextRequested->emit(contextScreen_);
             return ui::EventResult::Consumed;
+        }
+        // 1.50.0 : Ctrl+Alt+Maj+fleche - etirer la selection jusqu'au bord de la vue de ce cote (libres jusque-la :
+        // ces touches tombaient dans Maj+fleche, le deplacement d'un pas de grille).
+        if (k->mods.ctrl && k->mods.alt && k->mods.shift && !selection_.empty()) {
+            namespace st = hmi::stretch;
+            const unsigned edge = k->key == ui::Key::Left ? st::kLeft : k->key == ui::Key::Right ? st::kRight
+                                : k->key == ui::Key::Up ? st::kTop : k->key == ui::Key::Down ? st::kBottom : 0u;
+            if (edge) {
+                stretchRequested->emit(edge);
+                return ui::EventResult::Consumed;
+            }
         }
         const double step = k->mods.shift ? std::max(1, v->grid.step) : 1.0;
         switch (k->key) {

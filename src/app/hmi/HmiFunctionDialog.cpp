@@ -5,7 +5,9 @@
 #include "../../ui/DialogFrame.hpp"
 
 #include "../../core/FieldCodec.hpp"
+#include "../../hmi/HmiMethods.hpp"   // 1.50.0 : une methode d'un type IHM (methodProblem)
 #include "../../hmi/HmiSymbols.hpp"
+#include "../../hmi/HmiTypes.hpp"     // 1.50.0 : les membres du type (un nom deja pris)
 #include "../../menu/MenuManager.hpp"
 
 #include <algorithm>
@@ -113,10 +115,13 @@ protected:
         const auto lines = wrapped(d_.explanation(), gfxFont(), innerW);
         explanation_ = lines;
         float h = 44.f + 14.f + static_cast<float>(lines.size()) * 21.f + 14.f;   // titre, texte
-        const bool scope = d_.owner_ == Owner::View || d_.owner_ == Owner::Popup;
-        const bool virt = d_.owner_ == Owner::Symbol;
+        // 1.50.0 : une methode d'un type IHM a les deux lignes - Portee et Redefinir (une interface : aucune).
+        const bool method = d_.owner_ == Owner::Type && !d_.interface_;
+        const bool scope = d_.owner_ == Owner::View || d_.owner_ == Owner::Popup || method;
+        const bool virt = d_.owner_ == Owner::Symbol || method;
         h += 5.f * (kFieldH + kNoteH + 6.f);                                      // nom, generiques, retour, unite, description
-        if (scope || virt) h += 26.f + kNoteH + 6.f;
+        if (scope) h += 26.f + kNoteH + 6.f;
+        if (virt) h += 26.f + kNoteH + 6.f;
         h += 12.f + 70.f + 8.f + 20.f + 56.f;                                      // l'apercu, la note, les boutons
         h = std::min(h, r.h - 40.f);
         panel = ui::dialogframe::place(*this, {std::floor((r.w - w) * 0.5f), std::floor((r.h - h) * 0.5f), w, h});
@@ -137,13 +142,15 @@ protected:
         if (d_.unitField_) d_.unitField_->setBounds({fieldX, y, fieldW, kFieldH});
         y += kFieldH + kNoteH + 6.f;
         scopeY_ = -1.f;
+        virtY_ = -1.f;
         if (scope) {
             scopeY_ = y;
             if (d_.publicRadio_) d_.publicRadio_->setBounds({fieldX, y, 130.f, 26.f});
             if (d_.privateRadio_) d_.privateRadio_->setBounds({fieldX + 140.f, y, 130.f, 26.f});
             y += 26.f + kNoteH + 6.f;
-        } else if (virt) {
-            scopeY_ = y;
+        }
+        if (virt) {
+            virtY_ = y;
             if (d_.virtualBox_) d_.virtualBox_->setBounds({fieldX, y, fieldW, 26.f});
             y += 26.f + kNoteH + 6.f;
         }
@@ -192,16 +199,26 @@ protected:
         label(unitY_, "Unit\xC3\xA9");                                   // 1.13.0 (lot J6b)
         const std::string uprob = d_.unitProblem();
         note(unitY_, uprob.empty() ? d_.unitNote() : uprob, uprob.empty() ? c.textMuted : c.error);
+        const bool method = d_.owner_ == Owner::Type;
+        const std::string called = trimmed(d_.answer_.name).empty() ? std::string("Nom") : trimmed(d_.answer_.name);
         if (scopeY_ >= 0.f) {
-            const bool virt = d_.owner_ == Owner::Symbol;
-            ctx.r.drawText({left, scopeY_ + (26.f - ctx.r.lineHeight(ctx.theme.font.ui)) * 0.5f}, virt ? "Red\xC3\xA9" "finir" : "Port\xC3\xA9" "e",
-                           ctx.theme.font.ui, c.textMuted);
-            const std::string scopeNote = virt
-                ? (d_.answer_.isVirtual ? "virtuelle : une instance peut avoir la sienne (Fonctions de l'instance)"
-                                        : "une seule version, la m\xC3\xAA" "me pour toutes les instances")
-                : (d_.answer_.pub ? "publique : les autres vues l'appellent par " + d_.ownerName_ + "." + trimmed(d_.answer_.name) + "(\xE2\x80\xA6)"
+            ctx.r.drawText({left, scopeY_ + (26.f - ctx.r.lineHeight(ctx.theme.font.ui)) * 0.5f}, "Port\xC3\xA9" "e", ctx.theme.font.ui, c.textMuted);
+            const std::string scopeNote = method
+                ? (d_.answer_.pub ? "publique : ailleurs, sur une instance (" + d_.instanceName() + "." + called + "(\xE2\x80\xA6))"
+                                  : "priv\xC3\xA9" "e : seulement depuis une m\xC3\xA9thode du type")
+                : (d_.answer_.pub ? "publique : les autres vues l'appellent par " + d_.ownerName_ + "." + called + "(\xE2\x80\xA6)"
                                   : "priv\xC3\xA9" "e : " + std::string(d_.owner_ == Owner::Popup ? "la popup" : "la vue") + " seule l'appelle");
             ctx.r.drawText({fieldX + 2.f, scopeY_ + 26.f + 1.f}, scopeNote, kSmall, c.textMuted);
+        }
+        if (virtY_ >= 0.f) {
+            ctx.r.drawText({left, virtY_ + (26.f - ctx.r.lineHeight(ctx.theme.font.ui)) * 0.5f}, "Red\xC3\xA9" "finir", ctx.theme.font.ui, c.textMuted);
+            const std::string problem = d_.methodProblem();     // 1.50.0 : privee et virtuelle...
+            const std::string virtNote = !problem.empty() ? problem
+                : method ? (d_.answer_.isVirtual ? "OVERRIDE dans le sous-type, SUPER." + called + "() y rappelle ce corps."
+                                                 : "une seule version : un sous-type ne la red\xC3\xA9" "finit pas")
+                         : (d_.answer_.isVirtual ? "virtuelle : une instance peut avoir la sienne (Fonctions de l'instance)"
+                                                 : "une seule version, la m\xC3\xAA" "me pour toutes les instances");
+            ctx.r.drawText({fieldX + 2.f, virtY_ + 26.f + 1.f}, virtNote, kSmall, problem.empty() ? c.textMuted : c.error);
         }
         label(descY_, "Description");
         // l'apercu : ce qui s'ecrira, comment elle s'appellera
@@ -212,7 +229,9 @@ protected:
         ctx.r.drawText({box.x + 10.f, box.y + 26.f}, d_.declaration(), ctx.theme.font.mono, c.text);
         ctx.r.drawText({box.x + 10.f, box.y + 48.f}, d_.calls(), kSmall, c.textMuted);
         ctx.r.drawText({left, box.y + box.h + 10.f},
-                       "Ses param\xC3\xA8tres, ses locales et ses constantes se d\xC3\xA9" "clarent ensuite dans ses onglets. Ctrl+Z la retire.",
+                       d_.owner_ == Owner::Type
+                           ? "Ses param\xC3\xA8tres, ses locales et ses constantes se d\xC3\xA9" "clarent ensuite dans ses onglets (Param\xC3\xA8tres s'ouvre). Ctrl+Z la retire."
+                           : "Ses param\xC3\xA8tres, ses locales et ses constantes se d\xC3\xA9" "clarent ensuite dans ses onglets. Ctrl+Z la retire.",
                        kSmall, c.textMuted);
         ctx.r.popClip();
     }
@@ -220,7 +239,7 @@ private:
     [[nodiscard]] static gfx::FontId gfxFont() { return gfx::FontId{16}; }
     HmiNewFunctionDialog& d_;
     std::vector<std::string> explanation_;
-    float textY_{0}, nameY_{0}, genericsY_{0}, returnY_{0}, unitY_{0}, scopeY_{-1}, descY_{0}, previewY_{0};
+    float textY_{0}, nameY_{0}, genericsY_{0}, returnY_{0}, unitY_{0}, scopeY_{-1}, virtY_{-1}, descY_{0}, previewY_{0};
 };
 
 // ======================================================================= ======
@@ -230,8 +249,18 @@ HmiNewFunctionDialog::HmiNewFunctionDialog(Spec spec) : menu::WidgetMenu(spec.id
         ownerName_ = v->name;
         owner_ = hmi::isSymbolView(*v) ? Owner::Symbol : v->role == "popup" ? Owner::Popup : Owner::View;
     }
+    // 1.50.0 : une methode d'un type IHM (une interface : une signature).
+    const hmi::HmiType* ty = spec_.doc && spec_.type != hmi::kNoId ? spec_.doc->project.hmiType(spec_.type) : nullptr;
+    if (ty) {
+        owner_ = Owner::Type;
+        ownerName_ = ty->name;
+        interface_ = ty->kind == hmi::HmiTypeKind::Interface;
+    }
     answer_.name = trimmed(spec_.name);
-    if (answer_.name.empty() && spec_.doc) {
+    if (answer_.name.empty() && spec_.doc && ty) {
+        answer_.name = "Methode";
+        for (int k = 2; k < 1000 && !nameProblem().empty(); ++k) answer_.name = "Methode" + std::to_string(k);
+    } else if (answer_.name.empty() && spec_.doc) {
         if (v) {
             answer_.name = "Fonction";
             for (int k = 2; hmi::symbolFunction(*v, answer_.name); ++k) answer_.name = "Fonction" + std::to_string(k);
@@ -258,6 +287,7 @@ std::string HmiNewFunctionDialog::title() const {
     case Owner::View:   return "Nouvelle fonction de " + ownerName_;
     case Owner::Popup:  return "Nouvelle fonction de la popup " + ownerName_;
     case Owner::Symbol: return "Nouvelle fonction du symbole " + ownerName_;
+    case Owner::Type:   return interface_ ? "Nouvelle signature de l'interface " + ownerName_ : "Nouvelle m\xC3\xA9thode du type " + ownerName_;
     default:            return "Nouvelle fonction IHM";
     }
 }
@@ -274,6 +304,13 @@ std::string HmiNewFunctionDialog::explanation() const {
     case Owner::Symbol:
         return "Une fonction du symbole s'appelle par son nom dans le symbole, et ailleurs par Vue.Instance.Nom(\xE2\x80\xA6) "
                "(l'instance pos\xC3\xA9" "e dans une vue). Virtuelle, une instance peut la red\xC3\xA9" "finir.";
+    case Owner::Type:
+        if (interface_)
+            return "Une signature de l'interface : un nom, un retour et des param\xC3\xA8tres, sans corps. Chaque type qui "
+                   "impl\xC3\xA9mente " + ownerName_ + " \xC3\xA9" "crit la m\xC3\xA9thode.";
+        return "Une m\xC3\xA9thode du type s'appelle sur une instance : " + instanceName() + ".Nom(\xE2\x80\xA6) ; dans le type, par son nom "
+               "(ou SELF.Nom(\xE2\x80\xA6)). Elle voit SELF, les membres par leur nom, ses param\xC3\xA8tres. Virtuelle, un sous-type peut "
+               "la red\xC3\xA9" "finir (SUPER y rappelle ce corps).";
     default:
         return "Une fonction IHM s'appelle par son nom partout : Moyenne(a, b) dans un script, une action ou, si elle rend "
                "une valeur, une expression de vue. Son corps part d'un mod\xC3\xA8le \xC3\xA0 compl\xC3\xA9ter.";
@@ -290,6 +327,11 @@ int HmiNewFunctionDialog::sameName() const {
         return true;
     };
     int count = 0;
+    if (owner_ == Owner::Type) {                       // 1.50.0 : une methode n'a pas de surcharge (nameProblem)
+        if (const auto* t = spec_.doc->project.hmiType(spec_.type))
+            for (const auto& m : t->methods) count += same(m.name) ? 1 : 0;
+        return count;
+    }
     if (const hmi::View* v = spec_.owner != hmi::kNoId ? spec_.doc->project.view(spec_.owner) : nullptr) {
         for (const auto& f : v->functions) count += same(f.name) ? 1 : 0;
     } else {
@@ -302,10 +344,53 @@ std::string HmiNewFunctionDialog::nameProblem() const {
     const std::string n = trimmed(answer_.name);
     if (n.empty()) return "Son nom : des lettres, des chiffres et _.";
     if (!hmi::isIdentifier(n)) return "\xC2\xAB " + n + " \xC2\xBB n'est pas un nom : des lettres, des chiffres et _ (pas de chiffre en t\xC3\xAA" "te).";
+    // 1.50.0 : une methode - ni le nom d'une autre methode du type (pas de surcharge), ni celui d'un membre.
+    if (owner_ == Owner::Type && spec_.doc)
+        if (const auto* t = spec_.doc->project.hmiType(spec_.type)) {
+            const auto same = [](const std::string& a, const std::string& b) {
+                if (a.size() != b.size()) return false;
+                for (std::size_t i = 0; i < a.size(); ++i)
+                    if (std::toupper(static_cast<unsigned char>(a[i])) != std::toupper(static_cast<unsigned char>(b[i]))) return false;
+                return true;
+            };
+            for (const auto& m : t->methods)
+                if (same(m.name, n)) return t->name + " a d\xC3\xA9j\xC3\xA0 une m\xC3\xA9thode " + m.name + " (une m\xC3\xA9thode n'a pas de surcharge).";
+            for (const auto& mem : hmi::types::membersOf(spec_.doc->project, hmi::fullName(*t)))
+                if (same(mem.name, n)) return n + " est d\xC3\xA9j\xC3\xA0 un membre de " + t->name + " (un membre et une m\xC3\xA9thode ne partagent pas un nom).";
+        }
     return {};
 }
 
+// 1.50.0 : une methode - ce que le type en dirait (hmi::methodProblem : privee et virtuelle, une redefinition...).
+std::string HmiNewFunctionDialog::methodProblem() const {
+    if (owner_ != Owner::Type || !spec_.doc || !nameProblem().empty()) return {};
+    const auto* t = spec_.doc->project.hmiType(spec_.type);
+    if (!t) return "type introuvable";
+    hmi::HmiFunction m;
+    m.name = trimmed(answer_.name);
+    m.returnType = answer_.returnType;
+    m.visibility = answer_.pub || interface_ ? hmi::Visibility::Public : hmi::Visibility::Private;
+    m.isVirtual = answer_.isVirtual && !interface_;
+    (void)hmi::parseGenerics(answer_.generics, m.generics, nullptr);
+    std::string why = hmi::methodProblem(spec_.doc->project, *t, m);
+    // "T_Pompe.Demarrer : une methode privee..." : le nom est deja dans la fenetre.
+    if (const std::string here = t->name + "." + m.name + " : "; why.rfind(here, 0) == 0) why = why.substr(here.size());
+    return why;
+}
+
+// 1.50.0 : une instance du type (la premiere variable IHM de ce type) pour dire l'appel ; sinon Instance.
+std::string HmiNewFunctionDialog::instanceName() const {
+    if (owner_ != Owner::Type || !spec_.doc) return "Instance";
+    const auto& p = spec_.doc->project;
+    const auto* t = p.hmiType(spec_.type);
+    if (!t) return "Instance";
+    for (const auto& v : p.programs.variables)
+        if (p.hmiTypeByName(trimmed(v.type)) == t) return v.name;
+    return "Instance";
+}
+
 std::string HmiNewFunctionDialog::nameNote() const {
+    if (owner_ == Owner::Type) return "Des lettres, des chiffres et _ ; ni le nom d'un membre, ni celui d'une autre m\xC3\xA9thode du type.";
     const int n = sameName();
     if (n > 0)
         return "D\xC3\xA9j\xC3\xA0 pris : une surcharge (" + std::to_string(n + 1) + " fonctions " + trimmed(answer_.name) +
@@ -326,6 +411,14 @@ std::string HmiNewFunctionDialog::genericsProblem() const {
 }
 
 std::string HmiNewFunctionDialog::genericsNote() const {
+    if (trimmed(answer_.generics).empty() && owner_ == Owner::Type) {   // 1.50.0 : ceux du type sont deja la
+        const auto* t = spec_.doc ? spec_.doc->project.hmiType(spec_.type) : nullptr;
+        std::string own;
+        if (t)
+            for (const auto& g : t->generics) own += (own.empty() ? "" : ", ") + g.name;
+        return own.empty() ? std::string("Vide : une m\xC3\xA9thode ordinaire. T (ou T : ANY_NUM) : un param\xC3\xA8tre, le retour ou une locale de type T.")
+                           : "Vide : une m\xC3\xA9thode ordinaire. Les g\xC3\xA9n\xC3\xA9riques du type (" + t->name + "<" + own + ">) sont d\xC3\xA9j\xC3\xA0 l\xC3\xA0.";
+    }
     if (trimmed(answer_.generics).empty())
         return "Vide : une fonction ordinaire. T (ou T : ANY_NUM, ou K, V) : un param\xC3\xA8tre, le retour ou une locale peut \xC3\xAAtre de type T.";
     std::vector<hmi::GenericParam> g;
@@ -344,8 +437,14 @@ std::string HmiNewFunctionDialog::declaration() const {
         std::vector<hmi::GenericParam> g;
         if (hmi::parseGenerics(answer_.generics, g, nullptr)) head = "TEMPLATE <" + hmi::genericsText(g) + "> ";
     }
-    if (answer_.returnType.empty()) return head + "FUNCTION " + n + "        (* une proc\xC3\xA9" "dure *)";
-    return head + "FUNCTION " + n + " : " + hmi::units::withUnit(answer_.returnType, answer_.returnUnit);   // 1.13.0 : REAL [bar]
+    // 1.50.0 : une methode dit sa portee et sa virtuelle (FUNCTION PUBLIC VIRTUAL Demarrer : BOOL - FUNCTION, pas METHOD :
+    // la reponse de la planche 01) ; une signature d'interface, ni l'une ni l'autre.
+    std::string word = "FUNCTION ";
+    if (owner_ == Owner::Type && !interface_)
+        word += std::string(answer_.pub ? "PUBLIC " : "PRIVATE ") + (answer_.isVirtual ? "VIRTUAL " : "");
+    if (answer_.returnType.empty())
+        return head + word + n + (interface_ ? "        (* une signature, sans corps *)" : "        (* une proc\xC3\xA9" "dure *)");
+    return head + word + n + " : " + hmi::units::withUnit(answer_.returnType, answer_.returnUnit);   // 1.13.0 : REAL [bar]
 }
 
 std::string HmiNewFunctionDialog::calls() const {
@@ -361,6 +460,10 @@ std::string HmiNewFunctionDialog::calls() const {
     case Owner::Symbol:
         return "Dans le symbole : " + call + "   \xC2\xB7   ailleurs : Vue.Instance." + call +
                (answer_.isVirtual ? "   \xC2\xB7   virtuelle" : "");
+    case Owner::Type:
+        if (interface_) return "Sur tout type qui l'impl\xC3\xA9mente : " + instanceName() + "." + call;
+        return answer_.pub ? "Dans le type : " + call + " ou SELF." + call + "   \xC2\xB7   ailleurs : " + instanceName() + "." + call
+                           : "Dans le type seulement : " + call + " ou SELF." + call;
     default:
         return "Partout : " + call;
     }
@@ -381,7 +484,11 @@ void HmiNewFunctionDialog::refresh() {
     syncing_ = false;
     if (ok_) {
         ok_->setEnabled(canConfirm());
-        ok_->setTooltip(canConfirm() ? std::string{} : !nameProblem().empty() ? nameProblem() : !genericsProblem().empty() ? genericsProblem() : unitProblem());
+        ok_->setTooltip(canConfirm()                    ? std::string{}
+                        : !nameProblem().empty()        ? nameProblem()
+                        : !genericsProblem().empty()    ? genericsProblem()
+                        : !unitProblem().empty()        ? unitProblem()
+                                                        : methodProblem());
     }
     if (body_) {
         body_->invalidateLayout();
@@ -480,6 +587,12 @@ void HmiNewFunctionDialog::chooseReturn() {
             if (std::none_of(gen.begin(), gen.end(), [&](const hmi::GenericParam& x) { return x.name == g.name; })) gen.push_back(g);
         if (ofLabel.empty()) ofLabel = label(v->name, v->generics);   // la fonction n'a pas les siens : le symbole hote
     }
+    // 1.50.0 : une methode - les generiques du type hote (T_Mesure<T>).
+    if (const hmi::HmiType* t = owner_ == Owner::Type && spec_.doc ? spec_.doc->project.hmiType(spec_.type) : nullptr; t && !t->generics.empty()) {
+        for (const auto& g : t->generics)
+            if (std::none_of(gen.begin(), gen.end(), [&](const hmi::GenericParam& x) { return x.name == g.name; })) gen.push_back(g);
+        if (ofLabel.empty()) ofLabel = label(t->name, t->generics);
+    }
     if (!gen.empty()) {
         spec.generics = gen;
         spec.genericsOf = ofLabel;
@@ -574,7 +687,8 @@ core::Status HmiNewFunctionDialog::buildUi() {
         unitField_ = &static_cast<TypeField&>(body->addChild(std::move(u)));
         links_ += unitField_->clicked->connect([this] { chooseReturnUnit(); });
     }
-    if (owner_ == Owner::View || owner_ == Owner::Popup) {
+    const bool method = owner_ == Owner::Type && !interface_;   // 1.50.0 : Portee ET Redefinir
+    if (owner_ == Owner::View || owner_ == Owner::Popup || method) {
         scope_ = std::make_shared<ui::RadioGroup>();
         publicRadio_ = &static_cast<ui::RadioButton&>(body->addChild(std::make_unique<ui::RadioButton>("Publique", scope_, 0, base + ".public")));
         privateRadio_ = &static_cast<ui::RadioButton&>(body->addChild(std::make_unique<ui::RadioButton>("Priv\xC3\xA9" "e", scope_, 1, base + ".private")));
@@ -582,9 +696,10 @@ core::Status HmiNewFunctionDialog::buildUi() {
         links_ += scope_->valueChanged->connect([this](int v) {
             if (!syncing_) setPublic(v == 0);
         });
-    } else if (owner_ == Owner::Symbol) {
+    }
+    if (owner_ == Owner::Symbol || method) {
         virtualBox_ = &static_cast<ui::Checkbox&>(body->addChild(std::make_unique<ui::Checkbox>(
-            "Virtuelle : une instance peut la red\xC3\xA9" "finir", base + ".virtual")));
+            method ? "Virtuelle : un sous-type peut la red\xC3\xA9" "finir" : "Virtuelle : une instance peut la red\xC3\xA9" "finir", base + ".virtual")));
         links_ += virtualBox_->stateChanged->connect([this](ui::Checkbox::State s) {
             if (!syncing_) setVirtual(s == ui::Checkbox::State::Checked);
         });
@@ -629,5 +744,20 @@ ui::EventResult HmiNewFunctionDialog::HandleEvent(const ui::InputEvent& ev) {
     }
     return r;
 }
+
+// ---- 1.50.0 : la fenetre demandee par un volet (les Methodes des Types IHM) ----
+namespace newfunction {
+namespace {
+Host& host() {
+    static Host h;
+    return h;
+}
+} // namespace
+void setHost(Host h) { host() = std::move(h); }
+bool available() { return static_cast<bool>(host()); }
+void ask(HmiNewFunctionDialog::Spec spec, Done done) {
+    if (host()) host()(std::move(spec), std::move(done));
+}
+} // namespace newfunction
 
 } // namespace app

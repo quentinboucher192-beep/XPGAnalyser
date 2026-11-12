@@ -1093,6 +1093,9 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   dupliquer-valider                        "Dupliquer" (une commande)
     //   dupliquer-tableau COL TABLEAU            1.10.4 : Remplir > Tableau... (V[0], V[1]...)
     //   dupliquer-vider COL                      1.10.4 : Vider (la colonne preremplie aussi)
+    //   dupliquer-grille I0 I1 [J0 J1 [K0 K1]]   1.50.0 : une grille i x j (x k) ; dupliquer-copies : une suite
+    //   dupliquer-regle GROUPE fixe|varie|FORMULE 1.50.0 : la regle d'une profondeur ("Departs", "Adresses", "Textes"...)
+    //   dupliquer-apart REPERE FORMULE [PROF]    1.50.0 : un repere a part ; FORMULE "-" : comme sa profondeur
     if (cmd.rfind("dupliquer-", 0) == 0) {
         auto* d = dynamic_cast<HmiDuplicateDialog*>(app_.menus().top());
         if (!d) { fail(cmd + " : la fen\xC3\xAAtre \xC2\xAB Dupliquer\xE2\x80\xA6 \xC2\xBB n'est pas ouverte (touche ctrl+maj+d)"); return Step::Yield; }
@@ -1120,7 +1123,23 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             d->setLayout(l);
         }
         else if (cmd == "dupliquer-ajuster") { if (!d->fitSpacing()) fail(cmd + " : aucun espacement ne fait tout tenir"); }
-        else if (cmd == "dupliquer-onglet") d->showTab(arg(1) == "2" ? 1 : 0);
+        else if (cmd == "dupliquer-onglet") d->showTab(arg(1) == "3" ? 2 : arg(1) == "2" ? 1 : 0);   // 1.50.0 : 3, le tableau (Excel)
+        else if (cmd == "dupliquer-grille") {   // 1.50.0
+            std::vector<hmi::dup::Range> ranges;
+            for (int q = 0; q < 3 && !arg(1 + 2 * q).empty(); ++q)
+                ranges.push_back({std::atoll(arg(1 + 2 * q).c_str()), std::atoll(arg(2 + 2 * q).c_str())});
+            d->setGrid(std::move(ranges));
+        }
+        else if (cmd == "dupliquer-regle") {    // 1.50.0
+            const auto what = lower(arg(2));
+            const bool ok = what == "fixe" || what == "varie" ? d->setVaries(arg(1), what == "varie")
+                                                              : d->setGroupRule(arg(1), {hmi::dup::RuleKind::Formula, arg(2)});
+            if (!ok) fail(cmd + " : groupe inconnu " + arg(1));
+        }
+        else if (cmd == "dupliquer-apart") {    // 1.50.0
+            const bool ok = arg(2) == "-" ? d->resetOwn(arg(1)) : d->setOwnFormula(arg(1), arg(2), arg(3));
+            if (!ok) fail(cmd + " : " + arg(1) + " / " + arg(3));
+        }
         else if (cmd == "dupliquer-ligne") d->chooseRow(std::atoi(arg(1).c_str()) - 1);
         else if (cmd == "dupliquer-verifier") {
             const bool wantBlocked = lower(arg(1)) == "bloque";

@@ -1623,6 +1623,11 @@ const std::vector<Topic>& topics() {
                          "**Ctrl+Alt+C** / **Ctrl+Alt+V** copient et collent le style ;", {}, "1.12.18"},
              {K::Bullet, "**Aligner** (gauche, centre, droite, haut, milieu, bas), **Distribuer**, ordre de "
                          "superposition ;", {}},
+             {K::Bullet, "**\xC3\x89tirer** (clic droit \xE2\x80\xBA \xC3\x89tirer, ou **\xC3\x89tirer \xE2\x96\xBE** de la barre) : "
+                         "jusqu'au bord de la vue (**Ctrl+Alt+Maj+fl\xC3\xA8" "che**), sur toute la largeur, la hauteur ou la "
+                         "vue, jusqu'\xC3\xA0 l'objet voisin, au bord de la s\xC3\xA9lection, \xC3\xA0 un rep\xC3\xA8re ou \xC3\xA0 une "
+                         "colonne de la grille ; la marge de la vue gard\xC3\xA9" "e (\xC2\xAB Garder les marges \xC2\xBB), "
+                         "l'aper\xC3\xA7u au survol, un seul Ctrl+Z ;", {}, "1.50.0"},
              {K::Bullet, "**Rotation** \xE2\x88\x92" "90\xC2\xB0, +90\xC2\xB0, +45\xC2\xB0, 180\xC2\xB0 et "
                          "**miroirs** horizontal / vertical ;", {}},
              {K::Bullet, "**Verrouiller** un objet : il ne se choisit plus \xC3\xA0 la souris ;", {}},
@@ -18585,15 +18590,23 @@ const std::vector<Topic>& topics() {
                          "m\xC3\xA9thode**, \xC3\xA0 droite son **Corps** ; la ligne d'\xC3\xA9tat dit "
                          "comment l'appeler, avec une variable de ce type (Pompe2.EnDefaut() pour "
                          "T_PompeDoublee).", {}, "1.13.1"},
-             {K::Bullet, "**Ajouter une m\xC3\xA9thode\xE2\x80\xA6** ouvre la fen\xC3\xAAtre \xC2\xAB "
-                         "Nouvelle m\xC3\xA9thode de T_Pompe \xC2\xBB : le nom, le retour (vide : une "
-                         "proc\xC3\xA9" "dure ; **Choisir\xE2\x80\xA6** ouvre le s\xC3\xA9lecteur de types), "
-                         "les param\xC3\xA8tres sur une ligne (`Consigne : REAL; VAR_IN_OUT Cible : "
-                         "T_Pompe`, VAR_OUTPUT pour une sortie), les cases **Priv\xC3\xA9" "e** et "
-                         "**Red\xC3\xA9" "finissable (virtuelle)**. La signature et ce qui ne va pas "
-                         "s'\xC3\xA9" "crivent en direct (un nom d\xC3\xA9j\xC3\xA0 pris par un membre, une "
-                         "m\xC3\xA9thode priv\xC3\xA9" "e et virtuelle) ; **Cr\xC3\xA9" "er la "
-                         "m\xC3\xA9thode** ouvre son corps pr\xC3\xA9rempli dans l'\xC3\xA9" "diteur.", {}, "1.13.0"},
+             {K::Bullet, "**Ajouter une m\xC3\xA9thode\xE2\x80\xA6** ouvre la fen\xC3\xAAtre des fonctions, "
+                         "\xC2\xAB Nouvelle m\xC3\xA9thode du type T_Pompe \xC2\xBB (1.50.0 : la m\xC3\xAA" "me que "
+                         "\xC2\xAB Nouvelle fonction du symbole \xC2\xBB) : le nom, les g\xC3\xA9n\xC3\xA9riques, le "
+                         "retour (**Choisir un type\xE2\x80\xA6** ; Aucun : une proc\xC3\xA9" "dure), son unit\xC3\xA9, la "
+                         "**Port\xC3\xA9" "e** (publique, ou priv\xC3\xA9" "e : seulement depuis une m\xC3\xA9thode du "
+                         "type), **Virtuelle** (un sous-type peut la red\xC3\xA9" "finir), la description, et "
+                         "\xC2\xAB Elle s'\xC3\xA9" "crira \xC2\xBB (`FUNCTION PUBLIC VIRTUAL Demarrer : BOOL`). Ce qui ne va "
+                         "pas se dit en direct (un nom d\xC3\xA9j\xC3\xA0 pris par un membre, une m\xC3\xA9thode "
+                         "priv\xC3\xA9" "e et virtuelle) ; **Cr\xC3\xA9" "er** la pose (un Ctrl+Z) et ouvre son onglet "
+                         "**Param\xC3\xA8tres**.", {}, "1.50.0"},
+             {K::Bullet, "L'\xC3\xA9" "diteur d'une m\xC3\xA9thode a les cinq onglets d'une fonction : **Code**, "
+                         "**Param\xC3\xA8tres** (SELF en t\xC3\xAAte, gris\xC3\xA9 et verrouill\xC3\xA9 : ni renomm\xC3\xA9, "
+                         "ni retir\xC3\xA9), **Locales**, **Constantes** et **Tests** - un cas part d'une instance "
+                         "d'essai du type (ses membres \xC3\xA0 leur valeur initiale) : \xC2\xAB SELF avant \xC2\xBB pose "
+                         "des membres (`SELF.EnDefaut`, ou `Pression` seul), \xC2\xAB V\xC3\xA9rifier apr\xC3\xA8s \xC2\xBB "
+                         "relit `SELF.EnMarche`. Les VAR d'un corps \xC3\xA9" "crit avant la 1.50.0 passent dans "
+                         "Locales et Constantes \xC3\xA0 l'ouverture du projet (le fichier garde son format).", {}, "1.50.0"},
              {K::Bullet, "Le corps s'\xC3\xA9" "crit dans le m\xC3\xAAme \xC3\xA9" "diteur que les fonctions "
                          "IHM : color\xC3\xA9, num\xC3\xA9rot\xC3\xA9, l'aide \xC3\xA0 la saisie "
                          "conna\xC3\xAEt SELF, les membres et les param\xC3\xA8tres. Au-dessus, la "
@@ -18602,9 +18615,9 @@ const std::vector<Topic>& topics() {
                          "\xE2\x80\xA6 \xC2\xBB. Une faute (une syntaxe, un nom inconnu) est "
                          "soulign\xC3\xA9" "e \xC3\xA0 sa ligne pendant que tu tapes ; **Compiler (F7)** "
                          "compte celles de la m\xC3\xA9thode montr\xC3\xA9" "e.", {}, "1.13.0"},
-             {K::Bullet, "Le nom, les param\xC3\xA8tres, le retour et la visibilit\xC3\xA9 se changent dans "
+             {K::Bullet, "Le nom, le retour et la visibilit\xC3\xA9 se changent dans "
                          "leur case de la liste ou dans les propri\xC3\xA9t\xC3\xA9s (avec la case "
-                         "**Red\xC3\xA9" "finissable (virtuelle)**, la description) ; **Dupliquer**, "
+                         "**Red\xC3\xA9" "finissable (virtuelle)**, la description), les param\xC3\xA8tres dans leur onglet ; **Dupliquer**, "
                          "**Supprimer**, **Monter**, **Descendre** dans la barre. Chaque geste se reprend "
                          "par **Ctrl+Z** ; ce que la forme d'une m\xC3\xA9thode refuserait (une "
                          "red\xC3\xA9" "finition d'une m\xC3\xA9thode non virtuelle ou plus priv\xC3\xA9" "e "
@@ -19239,9 +19252,17 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA0 chaque script)\nSur changement\tquand l'expression surveill\xC3\xA9" "e "
                          "change\nAppel\xC3\xA9\tpar une action \xC2\xAB Script g\xC3\xA9n\xC3\xA9ral "
                          "\xC2\xBB ou `IHM_APPELER('Nom')`", {}},
-             {K::Paragraph, "Seul le **ST** s'ex\xC3\xA9" "cute en simulation ; C et C++ sont "
-                         "\xC3\xA9" "dit\xC3\xA9s et v\xC3\xA9rifi\xC3\xA9s (accolades, parenth\xC3\xA8ses, "
-                         "cha\xC3\xAEnes, commentaires) pour accompagner le projet vers la cible.", {}},
+             {K::Paragraph, "Le **ST**, le **C** et le **C++** s'ex\xC3\xA9" "cutent en simulation (1.50.0). "
+                         "Un script C ou C++ est compil\xC3\xA9 (F7) pour le moteur des scripts : traduit ligne "
+                         "pour ligne dans le ST de l'IHM, il lit et \xC3\xA9" "crit les m\xC3\xAAmes variables, appelle "
+                         "les m\xC3\xAAmes fonctions, et une faute est dite \xC3\xA0 sa ligne. C'est un "
+                         "**sous-ensemble** : les types de base (int, float, double, bool, char, const char*, "
+                         "std::string), les types IHM, les tableaux t[N][M] ; if, switch (un break par case), "
+                         "while, do, for (et for (T x : t) en C++) ; les fonctions du script (par valeur, "
+                         "pointeur T* p, r\xC3\xA9" "f\xC3\xA9rence T& r) ; sqrt, pow, min, max, printf (au "
+                         "journal). Sans les instructions au niveau du script, main() (ou la fonction du nom de "
+                         "l'\xC3\xA9v\xC3\xA9nement, OnCycle()) est appel\xC3\xA9" "e. Pas de pointeur local, ni malloc, "
+                         "classes, templates, lambdas, exceptions, std::vector : la faute le dit.", {}},
              {K::Heading, "C et C++ : la v\xC3\xA9rification et l'en-t\xC3\xAAte du projet", {}, "1.12.20"},
              {K::Bullet, "**La v\xC3\xA9rification** lit aussi les chevrons d'un template "
                          "(`std::function<BOOL(REAL) f;` : \xC2\xAB il manque le > qui ferme "
@@ -20393,9 +20414,9 @@ const std::vector<Topic>& topics() {
                          "du type, tri\xC3\xA9s, avec leur type.", {}},
              {K::Heading, "Dans un script C ou C++", {}},
              {K::Paragraph, "Les m\xC3\xAAmes noms (l'API de la cible) : `Object* titre = "
-                         "GetObject(\"Titre_Accueil\");`. Comme tout script C et C++, ils sont "
-                         "\xC3\xA9" "dit\xC3\xA9s et v\xC3\xA9rifi\xC3\xA9s, pas ex\xC3\xA9" "cut\xC3\xA9s "
-                         "en simulation.", {}},
+                         "GetObject(\"Titre_Accueil\");`. Un script C ou C++ est compil\xC3\xA9 "
+                         "et ex\xC3\xA9" "cut\xC3\xA9 en simulation par le moteur des scripts (un "
+                         "sous-ensemble du langage, dit par **En-t\xC3\xAAte du projet**).", {}},
          },
          {"scripts", "cycle-vue", "couleurs-semantiques", "styles-nommes", "ressources", "bibliotheque-polices"},
          {"Object", "Font", "Texture", "Sound", "Style", "This", "GetObject", "ObjectsOf", "ObjectsIn", "ObjectsOfKind", "EditObject", "CopyObjectTo", "ResetObject", "ObjectProp", "MoveObject", "MoveBy", "ResizeObject", "ResizeBy", "PlaceObject", "AlignTop", "AlignBottom", "AlignLeft", "AlignRight", "AlignCenterH", "AlignCenterV", "AlignCenter", "JustifyH", "JustifyV", "SameWidth", "SameHeight", "SameSize", "ArrangeGrid", "ShowIf", "HideIf", "EnableIf", "BlinkIf", "Show", "Hide", "Enable", "Disable", "BringToFront", "SendToBack", "BringForward", "SetLayer", "GetResource", "GetFont", "GetTexture", "GetSound", "GetStyle", "Fonts", "Textures", "Sounds", "Styles", "TextWidth", "HasGlyph", "Play", "Stop", "ApplyStyle", "StyleValue", "Color"},
@@ -24241,8 +24262,8 @@ const std::vector<Topic>& topics() {
                          "reste. Deux points qui se retrouvent sur la m\xC3\xAAme ligne n'en font plus "
                          "qu'un, qui s'arr\xC3\xAAte l\xC3\xA0 o\xC3\xB9 l'un des deux s'arr\xC3\xAAtait : "
                          "actif si l'un l'\xC3\xA9tait, les conditions des points actifs jointes par OR, "
-                         "leurs passages ajout\xC3\xA9s. Un script C ou C++ n'est pas "
-                         "ex\xC3\xA9" "cut\xC3\xA9 en simulation : sa marge refuse le point.", {}},
+                         "leurs passages ajout\xC3\xA9s. Un script C ou C++ s'ex\xC3\xA9" "cute sans le "
+                         "d\xC3\xA9" "bogueur : sa marge refuse le point.", {}},
              {K::Bullet, "En pause, la marge du code montr\xC3\xA9 dans D\xC3\xA9" "bogage pose aussi un "
                          "point : dans une **m\xC3\xA9thode** d'un type (le m\xC3\xAAme que la marge de son "
                          "\xC3\xA9" "diteur), et dans ce qui n'a pas de marge \xC3\xA0 lui : un "
@@ -24251,10 +24272,10 @@ const std::vector<Topic>& topics() {
              {K::Code, "(* Statistiques_Pression : un point sur la ligne IF P < Mini *)\nP := "
                          "Armoires[0].ana.PT1.mes;\nTours := Tours + 1;\nIF P < Mini THEN          (* le "
                          "moteur s'arr\xC3\xAAte AVANT cette instruction *)\n    Mini := P;\nEND_IF;", "ST"},
-             {K::Code, "/* Un script C n'est pas ex\xC3\xA9" "cut\xC3\xA9 en simulation : pas de point "
+             {K::Code, "/* Un script C s'ex\xC3\xA9" "cute sans le d\xC3\xA9" "bogueur : pas de point "
                          "d'arr\xC3\xAAt (\xC3\xA9" "cris-le en ST pour le d\xC3\xA9" "boguer). */\np = "
                          "Armoires[0].ana.PT1.mes;\ntours = tours + 1;\nif (p < mini) mini = p;", "C"},
-             {K::Code, "// Un script C++ n'est pas ex\xC3\xA9" "cut\xC3\xA9 en simulation : pas de point "
+             {K::Code, "// Un script C++ s'ex\xC3\xA9" "cute sans le d\xC3\xA9" "bogueur : pas de point "
                          "d'arr\xC3\xAAt (\xC3\xA9" "cris-le en ST pour le d\xC3\xA9" "boguer).\np = "
                          "Armoires[0].ana.PT1.mes;\n++tours;\nif (p < mini) mini = p;", "C++"},
              {K::Heading, "La pause est r\xC3\xA9" "elle", {}},

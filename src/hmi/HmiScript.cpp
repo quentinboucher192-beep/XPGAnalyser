@@ -1,5 +1,6 @@
 #include "HmiScript.hpp"
 #include "HmiNames.hpp"   // 1.13.0 (lot J8) : les directives USING
+#include "HmiScriptC.hpp"  // 1.50.0 : le C et le C++ compiles pour le moteur des scripts
 #include "../sim/DialectLib.hpp"   // 1.12.7 : les templates (NUMERIC_LIMITS<T>, NUMBERS) ne sont pas des variables
 
 #include "../sim/Interpreter.hpp"
@@ -334,10 +335,11 @@ std::string cDeclOf(const Project& p, std::string_view text, const std::string& 
         return join(t);                                             // un type du projet : son typedef
     }
     if (s.form == typeform::Form::Array || s.form == typeform::Form::Array2D) {
-        std::string inner = cDeclOf(p, s.element, name, false);
-        if (inner.empty() || name.empty()) return {};
-        for (const auto n : dimensionsOf(s.parameter)) inner += "[" + std::to_string(n) + "]";
-        return inner;
+        // 1.50.0 : les dimensions de ce niveau d'abord - un tableau de tableaux ARRAY[0..3] OF ARRAY[0..15] OF BOOL : bool t[4][16].
+        if (name.empty()) return {};
+        std::string dims;
+        for (const auto n : dimensionsOf(s.parameter)) dims += "[" + std::to_string(n) + "]";
+        return cDeclOf(p, s.element, name + dims, false);
     }
     return {};                                                      // LIST, VECTOR, MAP, TUPLE, SET, RING : pas en C
 }
@@ -428,6 +430,41 @@ std::vector<std::string> quotedArgs(std::string_view body, std::string_view func
     return out;
 }
 
+// 1.50.0 (planche 03) : les lignes ou un code ST ecrit POINTER OF (hors des chaines et des commentaires).
+std::vector<int> pointerOfLines(std::string_view code) {
+    std::vector<int> out;
+    int line = 1;
+    for (std::size_t i = 0; i < code.size(); ++i) {
+        const char c = code[i];
+        if (c == '\n') { ++line; continue; }
+        if (c == '(' && i + 1 < code.size() && code[i + 1] == '*') {
+            for (i += 2; i + 1 < code.size() && !(code[i] == '*' && code[i + 1] == ')'); ++i)
+                if (code[i] == '\n') ++line;
+            ++i;
+            continue;
+        }
+        if (c == '/' && i + 1 < code.size() && code[i + 1] == '/') {
+            while (i + 1 < code.size() && code[i + 1] != '\n') ++i;
+            continue;
+        }
+        if (c == '\'' || c == '"') {
+            for (++i; i < code.size() && code[i] != c; ++i)
+                if (code[i] == '\n') ++line;
+            continue;
+        }
+        if (!identStart(c) || (i > 0 && identChar(code[i - 1]))) continue;
+        std::size_t j = i;
+        while (j < code.size() && identChar(code[j])) ++j;
+        if (upper(code.substr(i, j - i)) == "POINTER") {
+            std::size_t k = j;
+            while (k < code.size() && (code[k] == ' ' || code[k] == '\t')) ++k;
+            if (k + 2 <= code.size() && upper(code.substr(k, 2)) == "OF" && (k + 2 == code.size() || !identChar(code[k + 2]))) out.push_back(line);
+        }
+        i = j - 1;
+    }
+    return out;
+}
+
 } // namespace
 
 std::vector<NameUse> scriptNamesRaw(std::string_view s);
@@ -495,6 +532,10 @@ std::string frenchSimMessage(std::string_view english) {
         out = "plus de " + count + " instructions : arr\xC3\xAAt\xC3\xA9 (une boucle ne se termine sans doute pas)";
     } else if (startsWith(m, "the scan ran for more than its time limit")) {     // 1.12.7 : un calcul au demarrage (2 s)
         out = "trop long : arr\xC3\xAAt\xC3\xA9 \xC3\xA0 son heure limite (une boucle ne se termine sans doute pas)";
+    } else if (m == "the upper bound is below the lower bound") {           // 1.50.0 : les bornes d'un tableau
+        out = "tableau : la borne haute est sous la borne basse (ARRAY[0..9])";
+    } else if (startsWith(m, "the array is too large")) {
+        out = "tableau trop grand (plus de 1000000 cases)";
     } else if (m == "division by zero") {
         out = "division par z\xC3\xA9ro";
     } else if (m == "modulo by zero") {
@@ -531,8 +572,22 @@ std::vector<ScriptDiagnostic> checkScript(ScriptLang lang, std::string_view code
     const std::string_view body = lang == ScriptLang::ST ? std::string_view(st) : code;
     if (lang != ScriptLang::ST) {
         out = checkC(body, lang);
-        out.push_back({ScriptDiagnostic::Severity::Info, 0,
-                       std::string(scriptLangKey(lang)) + " : \xC3\xA9" "dit\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9, non ex\xC3\xA9" "cut\xC3\xA9 en simulation"});
+        // 1.50.0 : le C et le C++ sont COMPILES pour le moteur des scripts (traduits ligne pour ligne dans le ST de l'IHM,
+        // HmiScriptC.hpp) : la faute du texte C a sa ligne, puis ce que le moteur dit du code traduit (a la meme ligne).
+        const bool delimitersOk = std::none_of(out.begin(), out.end(), [](const ScriptDiagnostic& d) { return d.severity == ScriptDiagnostic::Severity::Error; });
+        if (delimitersOk && body.find_first_not_of(" \t\r\n") != std::string_view::npos) {
+            const auto tr = cscript::translated(body, lang, name.empty() ? std::vector<std::string>{} : std::vector<std::string>{std::string(name)});
+            if (!tr.ok()) {
+                out.insert(out.end(), tr.errors.begin(), tr.errors.end());
+            } else {
+                for (auto d : checkScript(ScriptLang::ST, tr.st, name, knownType)) {
+                    if (d.severity == ScriptDiagnostic::Severity::Info) continue;
+                    cscript::placeFault(tr, d);
+                    out.push_back(std::move(d));
+                }
+            }
+        }
+        out.push_back({ScriptDiagnostic::Severity::Info, 0, cscript::compiledNote(lang)});
         return out;
     }
     if (body.find_first_not_of(" \t\r\n") == std::string_view::npos) {
@@ -542,6 +597,20 @@ std::vector<ScriptDiagnostic> checkScript(ScriptLang lang, std::string_view code
     // Lot 7 : les blocs VAR / VAR_TEMP d'abord ; le simulateur lit le reste.
     const auto parts = splitDeclarations(body, false, knownType);
     out.insert(out.end(), parts.errors.begin(), parts.errors.end());
+    // 1.50.0 : le type d'une locale riche (ARRAY[..] OF ARRAY[..], MAP...) lu par le moteur, comme a l'execution - ses
+    // bornes fausses dites a sa ligne (avant : seulement en marche).
+    for (const auto& l : parts.locals) {
+        if (localTypeSupported(l.type) || upper(l.type).rfind("ARRAY", 0) != 0) continue;
+        if (auto one = sim::parse("VAR\n  x : " + l.type + ";\nEND_VAR\n", std::string(name), dialectOptions()); !one) {
+            std::string rest;
+            (void)splitLine(one.error().context.empty() ? one.error().message() : one.error().context, &rest);
+            out.push_back({ScriptDiagnostic::Severity::Error, l.line, l.name + " : " + frenchSimMessage(rest)});
+        }
+    }
+    // 1.50.0 (planche 03) : POINTER OF (la faute de frappe courante) se lit comme POINTER TO - dit, a sa ligne.
+    for (const int line : pointerOfLines(body))
+        out.push_back({ScriptDiagnostic::Severity::Warning, line,
+                       "\xC2\xAB POINTER OF \xC2\xBB lu \xC2\xAB POINTER TO \xC2\xBB : \xC3\xA9" "cris POINTER TO T (un pointeur vers T)"});
     auto program = sim::parse(parts.body, std::string(name), dialectOptions());   // 1.10 : le dialecte IHM
     if (!program) {
         const std::string raw = program.error().context.empty() ? program.error().message() : program.error().context;
@@ -605,8 +674,7 @@ std::string projectHeader(const Project& p, ScriptLang lang, const View* view) {
     const auto line = [&](const std::string& s) { out += s + "\n"; };
     const auto comment = [&](const std::string& s) { line(cpp ? "// " + s : "/* " + s + " */"); };
     comment("En-t\xC3\xAAte du projet " + p.config.name + " (lecture seule) : ses types, ses rappels, ses fonctions, ses variables.");
-    comment(cpp ? "C++ : \xC3\xA9" "dit\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9, non ex\xC3\xA9" "cut\xC3\xA9 en simulation (seul le ST y tourne)."
-                : "C : \xC3\xA9" "dit\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9, non ex\xC3\xA9" "cut\xC3\xA9 en simulation (seul le ST y tourne).");
+    comment(cscript::supportedSubset(lang));          // 1.50.0 : compile et execute, ce qu'il prend
     if (cpp) {
         line("#include <array>\n#include <cstdint>\n#include <deque>\n#include <functional>\n#include <list>\n#include <map>\n#include <set>\n#include <string>\n#include <tuple>\n#include <vector>");
         line("");

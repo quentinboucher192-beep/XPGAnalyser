@@ -1674,7 +1674,8 @@ private:
             t->element = *e;
             return TypeRef(t);
         }
-        if (atWord("POINTER") && atWord("TO", 1)) {
+        // 1.50.0 (planche 03) : POINTER OF, la faute de frappe courante, se lit comme POINTER TO (le controle le dit).
+        if (atWord("POINTER") && (atWord("TO", 1) || (dialect_ && atWord("OF", 1)))) {
             advance();
             advance();
             auto e = typeSpec();

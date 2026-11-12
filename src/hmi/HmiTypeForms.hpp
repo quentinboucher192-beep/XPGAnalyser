@@ -62,11 +62,35 @@ inline constexpr Form kForms[] = {Form::Simple, Form::Array, Form::Array2D, Form
 // Une reference (REF_TO) : une declaration, un retour.
 [[nodiscard]] bool referenceAllowed(unsigned use) noexcept;
 
+// 1.50.0 (planche 03) : L'ACCES - la valeur elle-meme (Direct), une reference (REF_TO T : REF(x), r^) ou un VRAI POINTEUR
+// (POINTER TO T : ADR(x), p^ pour lire et ecrire, NULL, = et <>), pour tout type (Object compris). Le meme usage que
+// REF_TO : dans un code (une locale, une variable de script, un parametre de fonction) et un retour ; jamais la ou il
+// faut une place dans l'equipement (une variable IHM, un membre lie), ni pour une constante (elle ne vise rien), ni un
+// operande. Un parametre de popup ou de symbole : pas encore.
+enum class Access : std::uint8_t { Direct, Ref, Pointer };
+inline constexpr Access kAccesses[] = {Access::Direct, Access::Ref, Access::Pointer};
+[[nodiscard]] std::string_view accessLabel(Access) noexcept;     // "Direct", "REF_TO", "POINTER TO"
+[[nodiscard]] std::string_view accessHint(Access) noexcept;      // "la valeur", "une r\xC3\xA9" "f\xC3\xA9rence", "un pointeur"
+// Ce que l'acces fait, en une phrase (sous la ligne Acces du selecteur).
+[[nodiscard]] std::string accessSummary(Access, std::string_view element);
+// Permis pour cet usage ? Sinon (vide : permis) la raison, en francais, montree sur le choix grise. `constant` : la
+// declaration est une constante.
+[[nodiscard]] std::string accessRefusal(Access, unsigned use, bool constant = false);
+
 struct Shape {
     Form        form{Form::Simple};
     std::string element{"INT"};      // le type des elements ("REAL", "T_Four", "ARRAY[0..2] OF INT"...)
     std::string parameter{};         // les bornes, la cle, les types suivants (vide : celui par defaut)
     bool        reference{false};    // REF_TO devant l'element
+    // 1.50.0 (planche 03) : POINTER TO devant l'element ; `whole` : l'acces vise le TOUT (POINTER TO LIST OF Object),
+    // pas chaque element (LIST OF POINTER TO Object) - seulement avec une forme.
+    bool        pointer{false};
+    bool        whole{false};
+    [[nodiscard]] Access access() const noexcept { return pointer ? Access::Pointer : reference ? Access::Ref : Access::Direct; }
+    void setAccess(Access a) noexcept {
+        reference = a == Access::Ref;
+        pointer = a == Access::Pointer;
+    }
 };
 // Le texte du type : "ARRAY[0..9] OF REAL", "MAP[STRING] OF REF_TO T_Four", "TUPLE(INT, STRING)".
 [[nodiscard]] std::string compose(const Shape&);

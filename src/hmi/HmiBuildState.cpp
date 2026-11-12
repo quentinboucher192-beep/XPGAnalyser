@@ -114,16 +114,13 @@ State ofScript(const Script& sc, const TypeKnown& knownType) {
             if (!first) first = &d;
         }
     if (first) st.firstLine = first->line;
-    if (sc.lang != ScriptLang::ST) {
+    // 1.50.0 : le C et le C++ se compilent pour le moteur des scripts (un sous-ensemble, HmiScriptC.hpp) : comme le ST,
+    // compiles sans faute ils s'executent ; une faute est dite a sa ligne.
+    if (sc.lang != ScriptLang::ST && !first) {
         const auto lang = std::string(scriptLangKey(sc.lang));
-        st.compile    = Compile::NotCompilable;
-        st.generate   = Generate::No;
-        st.simMessage = lang + " : \xC3\xA9" "dit\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9, non ex\xC3\xA9" "cut\xC3\xA9 en simulation";
-        st.reason     = "Non compilable : " + lang + ", relu (accolades, parenth\xC3\xA8ses, cha\xC3\xAEnes) mais jamais ex\xC3\xA9" "cut\xC3\xA9";
-        if (first) st.reason += " ; " + std::to_string(st.errors) + " faute" + (st.errors > 1 ? "s" : "")
-                              + (first->line > 0 ? " (ligne " + std::to_string(first->line) + ")" : std::string())
-                              + " : " + first->message;
-        st.reason += ".";
+        st.compile  = Compile::Ok;
+        st.generate = Generate::Yes;
+        st.reason   = "Compil\xC3\xA9 : " + lang + " (un sous-ensemble), sans erreur ; le simulateur l\xE2\x80\x99" "ex\xC3\xA9" "cute.";
         return st;
     }
     if (first) {

@@ -272,6 +272,10 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     tools->add(ActAlignBottom, HmiGlyph::AlignBottom, "Aligner en bas");
     tools->add(ActDistributeH, HmiGlyph::DistributeH, "Distribuer horizontalement (3 objets ou plus)");
     tools->add(ActDistributeV, HmiGlyph::DistributeV, "Distribuer verticalement");
+    // 1.50.0 (planche 02) : Etirer v - le menu Etirer du clic droit, sous le bouton.
+    tools->add(ActStretch, HmiGlyph::DistributeH,
+               "\xC3\x89tirer : jusqu'aux bords de la vue (Ctrl+Alt+Maj+fl\xC3\xA8" "che), jusqu'\xC3\xA0 un voisin, au bord de la "
+               "s\xC3\xA9lection, \xC3\xA0 un rep\xC3\xA8re, \xC3\xA0 une colonne", "\xC3\x89tirer \xE2\x96\xBE");
     tools->separator();
     tools->add(ActRotateLeft, HmiGlyph::RotateLeft, "Tourner de -90\xC2\xB0");
     tools->add(ActRotateRight, HmiGlyph::RotateRight, "Tourner de +90\xC2\xB0");
@@ -449,6 +453,7 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
         return false;
     });
     tools_->setEnabledWhen(ActStylePaste, hasSel);
+    tools_->setEnabledWhen(ActStretch, hasSel);   // 1.50.0
     tools_->setCheckedWhen(ActGrid, [this] { const auto* v = canvas_->view(); return v && v->grid.visible; });
     tools_->setCheckedWhen(ActSnap, [this] {
         const auto* v = canvas_->view();
@@ -463,6 +468,13 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     links_ += canvas_->historyRequested->connect([this](bool redo) { run(redo ? ActRedo : ActUndo); });
     // 1.12.18 : Ctrl+Maj+D ouvre "Dupliquer..." (Ctrl+D : la copie decalee, dans le canevas).
     links_ += canvas_->duplicateRequested->connect([this] { run(ActDuplicate); });
+    // 1.50.0 : Ctrl+Alt+Maj+fleche - etirer jusqu'au bord de la vue de ce cote (Garder les marges du menu).
+    links_ += canvas_->stretchRequested->connect([this](unsigned edge) {
+        hmi::stretch::Request r;
+        r.edges = edge;
+        r.keepMargins = stretchMargins_;
+        (void)stretch(r);
+    });
     // 1.10.2 (chantier D) : le clic droit sur la vue. 1.12.18 : le menu de ce qui est vise
     // (la selection, un objet verrouille, le vide) - tout ce que fait la barre d'outils.
     context_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".context")));
@@ -2675,6 +2687,7 @@ void HmiEditor::openCanvasMenu(gfx::Point at, bool explorer) {
                       plain("Distribuer horizontalement", act(ActDistributeH), three, "3 objets ou plus"),
                       plain("Distribuer verticalement", act(ActDistributeV), three, "3 objets ou plus")};
     items.push_back(std::move(align));
+    items.push_back(stretchEntry());   // 1.50.0 (planche 02) : Etirer >, juste apres Aligner > (les gestes qui placent)
     ui::PopupMenu::Item turn = plain("Transformer", -1);
     turn.children = {plain("Tourner de -90\xC2\xB0", act(ActRotateLeft)), plain("Tourner de +90\xC2\xB0", act(ActRotateRight)),
                      plain("Tourner de +45\xC2\xB0", act(ActRotate45)), plain("Tourner de 180\xC2\xB0", act(ActRotate180)),
@@ -3016,6 +3029,7 @@ void HmiEditor::canvasMenuChosen(int a) {
         return;
     }
     if (a >= kMenuAct && a < kMenuLayer) { run(a - kMenuAct); return; }
+    if (stretchMenuChosen(a)) { invalidate(); return; }   // 1.50.0 : Etirer
     switch (a) {
         case MDupWindow: run(ActDuplicate); break;
         case MDuplicate: c.duplicateSelection(); break;
@@ -3186,6 +3200,7 @@ void HmiEditor::run(int action) {
         case ActGuidesLock:   c.toggleGuidesLocked(); break;
         case ActGuidesClear:  c.clearGuides(); break;
         case ActLanguages:    if (openLanguages_) openLanguages_(viewId_); break;
+        case ActStretch:      openStretchMenu(); break;   // 1.50.0
         case ActShowHidden:   c.setShowHidden(!c.showHidden()); break;
         case ActZoomOut:      c.zoomBy(1.f / 1.25f); break;
         case ActZoomIn:       c.zoomBy(1.25f); break;
@@ -3452,6 +3467,7 @@ void HmiEditor::applyDisposition() {
 
 void HmiEditor::onPaint(const ui::PaintContext& ctx) {
     ctx.r.fillRect(bounds(), ctx.theme.color.windowBg);
+    syncStretchPreview();   // 1.50.0 : l'apercu d'Etirer suit l'entree survolee (la vue se dessine apres)
 }
 
 } // namespace app

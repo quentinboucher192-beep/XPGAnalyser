@@ -36,6 +36,7 @@
 #include "../../hmi/HmiDesign.hpp"
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiEdit.hpp"
+#include "../../hmi/HmiStretch.hpp"   // 1.50.0 : Etirer (l'apercu sur la vue)
 #include "../../hmi/HmiVertices.hpp"   // 1.12.12 (lot H) : les sommets sur le dessin
 #include "../../ui/Widget.hpp"
 
@@ -174,6 +175,14 @@ public:
     // Les cotes de ce moment, sans dessiner (scripts, essais) : Alt tenu au point `screen`.
     [[nodiscard]] std::vector<hmi::edit::Dimension> dimensionsAt(gfx::Point screen, hmi::Id* target = nullptr) const;
 
+    // ---- 1.50.0 : ETIRER (planche 02) ------------------------------------------
+    //  L'APERCU : au survol d'une entree du menu Etirer (ou dans la fenetre Etirer...), le
+    //  resultat en pointilles turquoise sur la vue, ce qui change (+ 396 px) et la marge ; rien
+    //  ne bouge avant le clic. Ctrl+Alt+Maj+fleche : etirer la selection jusqu'au bord de la vue
+    //  de ce cote (le bord : hmi::stretch::Edge) - l'editeur le fait (sa case Garder les marges).
+    void setStretchPreview(std::optional<hmi::stretch::Plan> plan);
+    [[nodiscard]] const std::optional<hmi::stretch::Plan>& stretchPreview() const noexcept { return stretchPreview_; }
+    const core::SignalPtr<unsigned> stretchRequested = core::Signal<unsigned>::create();
     // Le document a change ailleurs (annulation, explorateur, proprietes) :
     // la selection oublie ce qui a disparu.
     void documentChanged();
@@ -373,6 +382,8 @@ private:
     double                 paintTime_{0};
     double                 hoverSince_{-1};             // -1 : a poser au prochain dessin
     void paintPendingDots(const ui::PaintContext&, const HmiViewport&);
+    std::optional<hmi::stretch::Plan> stretchPreview_;          // 1.50.0 : l'apercu d'Etirer
+    void paintStretchPreview(const ui::PaintContext&, const HmiViewport&);
     void paintSessionHolds(const ui::PaintContext&, const HmiViewport&);   // 1.43.0 : les objets tenus en session
 
     // 1.12.12 (lot H) : les sommets.

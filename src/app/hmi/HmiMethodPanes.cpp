@@ -7,7 +7,9 @@
 #include "HmiIcons.hpp"
 #include "HmiScriptPanes.hpp"    // guardedDiagnostics, squigglesOf
 #include "HmiTypePicker.hpp"     // "Choisir..." : le selecteur de types
+#include "HmiUnitPanes.hpp"      // 1.50.0 : l'unite du retour (comme une fonction)
 #include "../../hmi/HmiCheck.hpp"
+#include "../../hmi/HmiDeclEdit.hpp"
 #include "../../hmi/HmiDecl.hpp"
 #include "../../hmi/HmiTypes.hpp"
 #include "../../ui/Theme.hpp"
@@ -81,7 +83,8 @@ std::string nameProblem(const hmi::Project& p, const hmi::HmiType& t, const std:
     return {};
 }
 
-// La colonne du corps : la legende au-dessus, l'editeur dessous.
+// La colonne du corps (l'onglet Code) : la legende au-dessus, le bandeau de l'ancien format (1.50.0 : des VAR dans le
+// corps - " Migrer ce code "), l'editeur dessous.
 class CodeColumn final : public ui::Widget {
 public:
     explicit CodeColumn(std::string id) : ui::Widget(std::move(id)) {}
@@ -91,7 +94,14 @@ protected:
         if (children().size() < 2) return;
         constexpr float kLegend = 24.f;
         children()[0]->setBounds({b.x, b.y, b.w, kLegend});
-        children()[1]->setBounds({b.x, b.y + kLegend + 2.f, b.w, std::max(0.f, b.h - kLegend - 2.f)});
+        float y = b.y + kLegend + 2.f;
+        if (children().size() >= 3) {
+            const auto* banner = dynamic_cast<const HmiDeclBanner*>(children()[2].get());
+            const float bh = banner && banner->shown() ? HmiDeclBanner::kHeight : 0.f;
+            children()[2]->setBounds({b.x, y, b.w, bh});
+            y += bh;
+        }
+        children()[1]->setBounds({b.x, y, b.w, std::max(0.f, b.y + b.h - y)});
     }
 };
 
@@ -136,7 +146,8 @@ private:
 // restaient hors de vue, la methode privee ne paraissait pas privee. Maintenant : le nom, le cadenas (une colonne
 // courte, rien pour une publique), le genre et l'origine, puis la signature (aussi au titre du corps et dans les
 // proprietes) ; la ligne entiere en infobulle.
-enum MethodColumn : std::size_t { ColName = 0, ColVisibility, ColKind, ColOrigin, ColParams, ColReturn, ColCount };
+// 1.50.0 (planche 01) : Tests, en dernier - le nombre de cas et leur dernier verdict ("3 \xE2\x9C\x93", "2 \xC2\xB7 1 \xE2\x9C\x95").
+enum MethodColumn : std::size_t { ColName = 0, ColVisibility, ColKind, ColOrigin, ColParams, ColReturn, ColTests, ColCount };
 
 using PG = ui::PropertyGrid;
 PG::Property prop(std::string name, std::string value, PG::ValueType t = PG::ValueType::ReadOnly,
@@ -157,172 +168,13 @@ constexpr const char* kPrivate = "Priv\xC3\xA9" "e";
 } // namespace
 
 // =============================================================================
-//  La fenetre "Ajouter une methode..."
-// =============================================================================
-HmiMethodDialog::HmiMethodDialog(std::string id) : ui::Widget(std::move(id)) {
-    const std::string base = this->id();
-    name_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + ".nom")));
-    return_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + ".retour")));
-    return_->setPlaceholder("vide : une proc\xC3\xA9" "dure (sans retour)");
-    choose_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Choisir\xE2\x80\xA6", base + ".choisir")));
-    params_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>(base + ".parametres")));
-    params_->setPlaceholder("Consigne : REAL; VAR_IN_OUT Cible : T_Pompe");
-    params_->setMonospace(true);
-    private_ = &static_cast<ui::Checkbox&>(addChild(std::make_unique<ui::Checkbox>("Priv\xC3\xA9" "e (vue des seules m\xC3\xA9thodes du type)", base + ".privee")));
-    virtual_ = &static_cast<ui::Checkbox&>(addChild(std::make_unique<ui::Checkbox>("Red\xC3\xA9" "finissable (virtuelle)", base + ".virtuelle")));
-    cancel_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Annuler", base + ".annuler")));
-    create_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Cr\xC3\xA9" "er la m\xC3\xA9thode", base + ".creer")));
-    create_->setStyle(ui::Button::Style::Primary);
-    for (auto* f : {name_, return_, params_}) links_ += f->textChanged->connect([this](const std::string&) { sync(); });
-    links_ += private_->stateChanged->connect([this](ui::Checkbox::State) { sync(); });
-    links_ += virtual_->stateChanged->connect([this](ui::Checkbox::State) { sync(); });
-    links_ += cancel_->clicked->connect([this] { close(); });
-    links_ += create_->clicked->connect([this] {
-        if (problem().empty()) created->emit();
-    });
-    links_ += choose_->clicked->connect([this] {
-        if (chooseReturn) chooseReturn();
-    });
-    setVisibility(ui::Visibility::Collapsed);
-}
-
-void HmiMethodDialog::open(const hmi::Project& p, Id type) {
-    project_ = &p;
-    type_ = type;
-    const auto* t = p.hmiType(type);
-    interface_ = t && t->kind == hmi::HmiTypeKind::Interface;
-    std::string name = interface_ ? "Demarrer" : "Methode";
-    if (t)
-        for (int k = 2; k < 1000 && !nameProblem(p, *t, name, kNoId).empty(); ++k) name = (interface_ ? "Demarrer" : "Methode") + std::to_string(k);
-    name_->setText(name);
-    return_->setText({});
-    params_->setText({});
-    private_->setState(ui::Checkbox::State::Unchecked);
-    virtual_->setState(ui::Checkbox::State::Unchecked);
-    private_->setVisibility(interface_ ? ui::Visibility::Collapsed : ui::Visibility::Visible);
-    virtual_->setVisibility(interface_ ? ui::Visibility::Collapsed : ui::Visibility::Visible);
-    create_->setText(interface_ ? "Cr\xC3\xA9" "er la signature" : "Cr\xC3\xA9" "er la m\xC3\xA9thode");
-    open_ = true;
-    setVisibility(ui::Visibility::Visible);
-    sync();
-    layout();
-    invalidate();
-}
-
-void HmiMethodDialog::close() {
-    open_ = false;
-    setVisibility(ui::Visibility::Collapsed);
-    if (parent()) parent()->layout();
-}
-
-void HmiMethodDialog::setName(const std::string& s) { name_->setText(s); sync(); }
-void HmiMethodDialog::setReturnType(const std::string& s) { return_->setText(s); sync(); }
-void HmiMethodDialog::setParams(const std::string& s) { params_->setText(s); sync(); }
-void HmiMethodDialog::setPrivate(bool on) { private_->setState(on ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked); sync(); }
-void HmiMethodDialog::setVirtual(bool on) { virtual_->setState(on ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked); sync(); }
-std::string HmiMethodDialog::name() const { return trimmedOf(name_->text()); }
-std::string HmiMethodDialog::returnType() const { return trimmedOf(return_->text()); }
-std::string HmiMethodDialog::params() const { return trimmedOf(params_->text()); }
-bool HmiMethodDialog::isPrivate() const { return !interface_ && private_->isChecked(); }
-bool HmiMethodDialog::isVirtual() const { return !interface_ && virtual_->isChecked(); }
-
-std::string HmiMethodDialog::title() const {
-    const auto* t = project_ ? project_->hmiType(type_) : nullptr;
-    return std::string(interface_ ? "Nouvelle signature de " : "Nouvelle m\xC3\xA9thode de ") + (t ? t->name : std::string("?"));
-}
-
-std::string HmiMethodDialog::signature() const {
-    const auto* t = project_ ? project_->hmiType(type_) : nullptr;
-    if (!t) return {};
-    hmi::HmiFunction m;
-    m.name = name().empty() ? std::string("\xE2\x80\xA6") : name();
-    m.returnType = returnType();
-    std::string why;
-    (void)hmi::setMethodParams(m, params(), [] { return Id{1}; }, &why);
-    return hmi::methodSignature(t->name, m);
-}
-
-std::string HmiMethodDialog::problem() const {
-    const auto* t = project_ ? project_->hmiType(type_) : nullptr;
-    if (!t) return "type introuvable";
-    if (const std::string w = nameProblem(*project_, *t, name(), kNoId); !w.empty()) return w;
-    hmi::HmiFunction m;
-    m.name = name();
-    m.returnType = returnType();
-    m.visibility = isPrivate() ? hmi::Visibility::Private : hmi::Visibility::Public;
-    m.isVirtual = isVirtual();
-    std::string why;
-    if (!hmi::setMethodParams(m, params(), [] { return Id{1}; }, &why)) return why;
-    if (std::string w = hmi::methodProblem(*project_, *t, m); !w.empty()) return w;
-    return {};
-}
-
-void HmiMethodDialog::sync() {
-    create_->setEnabled(open_ && problem().empty());
-    invalidate();
-}
-
-gfx::Rect HmiMethodDialog::boxRect() const {
-    const auto b = bounds();
-    const float w = std::min(b.w - 24.f, 720.f);
-    const float h = std::min(b.h - 24.f, 400.f);
-    return {b.x + (b.w - w) * 0.5f, b.y + std::max(12.f, (b.h - h) * 0.3f), w, h};
-}
-
-void HmiMethodDialog::onLayout() {
-    const auto r = boxRect();
-    const float x = r.x + 16.f, w = r.w - 32.f;
-    name_->setBounds({x, r.y + 70.f, w * 0.5f, 28.f});
-    return_->setBounds({x, r.y + 126.f, w * 0.5f, 28.f});
-    choose_->setBounds({x + w * 0.5f + 8.f, r.y + 126.f, 100.f, 28.f});
-    params_->setBounds({x, r.y + 182.f, w, 28.f});
-    private_->setBounds({x, r.y + 222.f, w * 0.5f, 24.f});
-    virtual_->setBounds({x + w * 0.5f, r.y + 222.f, w * 0.5f, 24.f});
-    create_->setBounds({r.right() - 16.f - 190.f, r.bottom() - 42.f, 190.f, 30.f});
-    cancel_->setBounds({r.right() - 16.f - 190.f - 8.f - 100.f, r.bottom() - 42.f, 100.f, 30.f});
-}
-
-void HmiMethodDialog::onPaint(const ui::PaintContext& ctx) {
-    const auto b = bounds();
-    const auto& c = ctx.theme.color;
-    const auto& f = ctx.theme.font;
-    ctx.r.fillRect(b, gfx::Color{0, 0, 0, 110});
-    const auto r = boxRect();
-    ctx.r.fillRoundedRect(r, c.panelBg, 6.f);
-    ctx.r.strokeRect(r, c.accent, 1.f);
-    ctx.r.fillRect({r.x, r.y, r.w, 38.f}, c.headerBg);
-    ctx.r.drawText({r.x + 16.f, r.y + 11.f}, title(), f.uiBold, c.text);
-    const float x = r.x + 16.f;
-    ctx.r.drawText({x, r.y + 50.f}, "NOM", f.smallUi, c.textMuted);
-    ctx.r.drawText({x, r.y + 106.f}, "RETOUR (FACULTATIF)", f.smallUi, c.textMuted);
-    ctx.r.drawText({x, r.y + 162.f}, "PARAM\xC3\x88TRES (nom : type, s\xC3\xA9par\xC3\xA9s par ;)", f.smallUi, c.textMuted);
-    ctx.r.drawText({x, r.y + 258.f}, "SIGNATURE", f.smallUi, c.textMuted);
-    ctx.r.drawText({x, r.y + 278.f}, signature(), f.mono, c.text);
-    const std::string w = problem();
-    ctx.r.drawText({x, r.y + 304.f}, w.empty() ? std::string("\xE2\x9C\x93 pr\xC3\xAAte \xC3\xA0 cr\xC3\xA9" "er") : "\xE2\x9C\x97 " + w, f.smallUi, w.empty() ? c.ok : c.error);
-    ctx.r.line({r.x, r.bottom() - 54.f}, {r.right(), r.bottom() - 54.f}, c.border, 1.f);
-    ctx.r.drawText({x, r.bottom() - 34.f}, interface_ ? "Une signature n'a pas de corps. Ctrl+Z annule la cr\xC3\xA9" "ation."
-                                                      : "Son corps s'ouvre pr\xC3\xA9rempli dans l'\xC3\xA9" "diteur. Ctrl+Z annule la cr\xC3\xA9" "ation.",
-                   f.smallUi, c.textMuted);
-}
-
-ui::EventResult HmiMethodDialog::onEvent(const ui::InputEvent& ev) {
-    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape) {
-        close();
-        return ui::EventResult::Consumed;
-    }
-    if (std::get_if<ui::MouseDown>(&ev) || std::get_if<ui::MouseUp>(&ev) || std::get_if<ui::MouseWheel>(&ev)) return ui::EventResult::Consumed;
-    return ui::EventResult::Ignored;
-}
-
-// =============================================================================
 //  La section Methodes
 // =============================================================================
 HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)) {
     const std::string base = this->id();
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
-    tools->add(AAdd, HmiGlyph::Plus, "Ajouter une m\xC3\xA9thode : son nom, son retour, ses param\xC3\xA8tres, Priv\xC3\xA9" "e, Red\xC3\xA9" "finissable (virtuelle)",
+    tools->add(AAdd, HmiGlyph::Plus, "Ajouter une m\xC3\xA9thode : la fen\xC3\xAAtre des fonctions (nom, g\xC3\xA9n\xC3\xA9riques, retour, unit\xC3\xA9, port\xC3\xA9" "e, virtuelle, description)",
                "Ajouter une m\xC3\xA9thode\xE2\x80\xA6");
     tools->add(AOverride, HmiGlyph::Code, "Red\xC3\xA9" "finir la m\xC3\xA9thode h\xC3\xA9rit\xC3\xA9" "e choisie (une virtuelle du parent) : son corps pr\xC3\xA9rempli avec SUPER",
                "Red\xC3\xA9" "finir");
@@ -333,6 +185,9 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     tools->add(ADown, HmiGlyph::Down, "Descendre la m\xC3\xA9thode", "Descendre");
     tools->separator();
     tools->add(ACompile, HmiGlyph::Check, "Compiler la m\xC3\xA9thode montr\xC3\xA9" "e (F7) : ses fautes soulign\xC3\xA9" "es dans son corps, \xC3\xA0 leur ligne", "Compiler (F7)");
+    // 1.50.0 : comme le volet Fonctions - tous les cas des methodes du type, chacun sur une instance d'essai.
+    tools->add(ARunTests, HmiGlyph::Play, "Lancer les tests de toutes les m\xC3\xA9thodes du type (chaque cas part d'une instance d'essai) : les verdicts au panneau du bas",
+               "Lancer les tests");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setEnabledWhen(AAdd, [this] { return owner() != nullptr; });
     tools_->setEnabledWhen(AOverride, [this] {
@@ -349,6 +204,10 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         return selectedMethod() != kNoId && selectedRow_ >= 0 && static_cast<std::size_t>(selectedRow_) + 1 < ownCount() && one();
     });
     tools_->setEnabledWhen(ACompile, [this, one] { return selectedMethod() != kNoId && one(); });
+    tools_->setEnabledWhen(ARunTests, [this] {
+        const auto* t = owner();
+        return t && std::any_of(t->methods.begin(), t->methods.end(), [](const hmi::HmiFunction& m) { return !m.tests.empty(); });
+    });
 
     auto split = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, base + ".split");
     auto left = std::make_unique<ui::Splitter>(ui::Orientation::Vertical, base + ".left");
@@ -358,7 +217,7 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         // 1.13.1 (lot K4, captures) : Retour se lit (le gras, les marges, le tri) - avant : "Re..." sur une interface.
         const float retour = std::max(70.f, std::ceil(ui::measureWidth("Retour", gfx::FontId{16}) * 1.08f) + 58.f);
         table->setColumns({{"M\xC3\xA9thode", 120.f, 60.f}, {"", 30.f, 24.f}, {"Genre", 72.f, 40.f}, {"Origine", 170.f, 60.f},
-                           {"Param\xC3\xA8tres", 150.f, 50.f}, {"Retour", retour, 40.f}});
+                           {"Param\xC3\xA8tres", 150.f, 50.f}, {"Retour", retour, 40.f}, {"Tests", 64.f, 40.f}});
         table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.0 : plusieurs methodes a supprimer d'un coup
         table_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         tools_->bindListKeys(*table_, HmiToolStrip::ListKeys{ADelete, ADuplicate, AAdd, AUp, ADown, 0});
@@ -376,7 +235,7 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     }
     split->addPane(std::move(left), 0.44f, 260.f);
     {
-        auto panel = std::make_unique<HmiTitledPanel>(base + ".editorPanel", "CORPS");
+        auto panel = std::make_unique<HmiTitledPanel>(base + ".editorPanel", "\xC3\x89" "DITEUR");
         auto column = std::make_unique<CodeColumn>(base + ".code");
         auto legend = std::make_unique<ui::StatusBar>(base + ".legende");
         legend->setTooltip(kLegendTip);
@@ -388,7 +247,11 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         ed->setTabInsertsSpaces(4);
         ed->setCommandKeys(true);
         editor_ = &static_cast<ui::MultiLineText&>(column->addChild(std::move(ed)));
-        panel->setBody(std::move(column));
+        banner_ = &static_cast<HmiDeclBanner&>(column->addChild(std::make_unique<HmiDeclBanner>(base + ".declBanner")));
+        // 1.50.0 (planche 01) : LES CINQ ONGLETS D'UNE FONCTION (le meme composant que le volet Fonctions).
+        const auto made = makeFunctionTabs(*panel, base, doc_, apply_, std::move(column), banner_);
+        codeTabs_ = made.tabs;
+        testsPage_ = made.tests;
         editorPanel_ = panel.get();
         split->addPane(std::move(panel), 0.56f, 260.f);
     }
@@ -399,7 +262,15 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         const Id sel = selectedMethod();
         std::string why;
         switch (a) {
-            case AAdd: if (!openAddDialog()) say("Choisis d'abord une structure ou une interface.", true); break;
+            case AAdd:
+                if (!owner()) say("Choisis d'abord une structure ou une interface.", true);
+                else if (!openAddDialog()) {               // sans hote (un essai) : une methode d'office, comme le volet Fonctions
+                    HmiNewFunctionDialog::Answer a;
+                    a.name = "Methode";
+                    for (int k = 2; k < 1000 && !nameProblem(doc_->project, *owner(), a.name, kNoId).empty(); ++k) a.name = "Methode" + std::to_string(k);
+                    if (createMethod(a, &why) == kNoId) say("Refus\xC3\xA9" "e : " + why, true);
+                }
+                break;
             case AOverride:
                 if (const Id made = overrideMethod(selectedRowMethod(), &why); made == kNoId) say("Refus\xC3\xA9 : " + why, true);
                 break;
@@ -441,6 +312,7 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
             case AUp: if (sel) (void)moveMethod(sel, -1); break;
             case ADown: if (sel) (void)moveMethod(sel, 1); break;
             case ACompile: (void)compileCurrent(); break;
+            case ARunTests: (void)runTests(); break;
             default: break;
         }
     });
@@ -464,6 +336,23 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         const auto* m = current();
         return m && t && t->kind != hmi::HmiTypeKind::Interface ? HmiDebugTarget{kNoId, m->id} : HmiDebugTarget{};
     }, [this](const std::string& t, bool warning) { say(t, warning); });
+    // 1.50.0 : les grilles parlent dans la barre du volet ; leurs utilisations menent au code ; le bandeau migre.
+    links_ += codeTabs_->message->connect([this](const std::string& t, bool warning) { say(t, warning); });
+    links_ += codeTabs_->usesRequested->connect([this](const std::string& name) {
+        showCodeTab(CodeTabCode);
+        std::string said;
+        const bool ok = selectNextUse(*editor_, name, &said);
+        say(said, !ok);
+    });
+    links_ += codeTabs_->useRequested->connect([this](const std::string& name, int k) {
+        showCodeTab(CodeTabCode);
+        std::string said;
+        const bool ok = selectNextUse(*editor_, name, &said, k);
+        say(said, !ok);
+    });
+    links_ += codeTabs_->migrateRequested->connect([this] { (void)migrateCurrent(); });
+    links_ += testsPage_->message->connect([this](const std::string& t, bool) { message_ = t; });
+    links_ += testsPage_->countsChanged->connect([this] { refreshTabs(); });
     // L'aide a la saisie : SELF (et THIS) du type, ses membres par leur nom, les parametres de la methode.
     assist_ = assist::sourcesFor(doc_);
     assist_.declarations = [this] {
@@ -532,7 +421,10 @@ void HmiMethodsPane::goTo(Id method, int line) {
     const hmi::HmiType* t = nullptr;
     if (hmi::methodById(doc_->project, method, &t) && t && t->id != type_) setType(t->id);
     selectMethod(method);
-    if (line > 0) editor_->goToLine(static_cast<std::size_t>(line - 1));
+    if (line > 0) {
+        showCodeTab(CodeTabCode);          // 1.50.0 : la ligne est dans l'onglet Code
+        editor_->goToLine(static_cast<std::size_t>(line - 1));
+    }
 }
 
 void HmiMethodsPane::refresh() {
@@ -553,6 +445,15 @@ void HmiMethodsPane::refresh() {
         r[ColOrigin] = origin;
         r[ColParams] = hmi::methodParamsText(m);
         r[ColReturn] = m.returnType.empty() ? std::string("\xE2\x80\x94") : m.returnType;
+        if (m.tests.empty()) {
+            r[ColTests] = "\xE2\x80\x94";
+        } else {
+            const auto tl = testruns::tally(p, m);
+            const std::size_t bad = tl.failed + tl.errors;
+            r[ColTests] = bad ? std::to_string(tl.passed) + " \xC2\xB7 " + std::to_string(bad) + " \xE2\x9C\x95"
+                        : tl.passed == m.tests.size() ? std::to_string(m.tests.size()) + " \xE2\x9C\x93"
+                                                      : std::to_string(m.tests.size());
+        }
         cells.push_back(std::move(r));
         std::string tip = hmi::methodSignature(where.name, m) + "\n" + (iface ? std::string("signature d'interface")
                                                                              : std::string(priv ? "priv\xC3\xA9" "e (vue des seules m\xC3\xA9thodes du type)"
@@ -583,9 +484,12 @@ void HmiMethodsPane::refresh() {
             }
     }
     std::vector<bool> own, priv;
+    std::vector<int> tests;                       // 1.50.0 : 0 rien / pas joue, 1 tout reussi, 2 un echec
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         own.push_back(rows_[i].own);
         priv.push_back(cells[i][ColVisibility] == kPrivate);
+        const std::string& tc = cells[i][ColTests];
+        tests.push_back(tc.find("\xE2\x9C\x95") != std::string::npos ? 2 : tc.find("\xE2\x9C\x93") != std::string::npos ? 1 : 0);
     }
     // 1.13.0 (relecture F2) : une interface n'a ni visibilite, ni genre, ni origine ("signature", "propre" sur
     // chaque ligne) : ces trois colonnes se cachent, Parametres suit la signature dans la liste etroite (avant : a
@@ -599,8 +503,8 @@ void HmiMethodsPane::refresh() {
         ifaceColumns_ = iface;
     }
     model_ = std::make_shared<MethodRows>(
-        std::vector<std::string>{"M\xC3\xA9thode", "", "Genre", "Origine", "Param\xC3\xA8tres", "Retour"}, std::move(cells),
-        [own, priv](ui::RowIndex r, std::size_t c) {
+        std::vector<std::string>{"M\xC3\xA9thode", "", "Genre", "Origine", "Param\xC3\xA8tres", "Retour", "Tests"}, std::move(cells),
+        [own, priv, tests](ui::RowIndex r, std::size_t c) {
             ui::CellStyle s;
             const bool mine = r < own.size() && own[r];
             if (c == ColName) {
@@ -608,12 +512,14 @@ void HmiMethodsPane::refresh() {
                 s.bold = mine;
             }
             if (c == ColParams) s.monospace = true;
+            if (c == ColTests && r < tests.size()) s.fgTone = tests[r] == 2 ? ui::Tone::Error : tests[r] == 1 ? ui::Tone::Ok : ui::Tone::Muted;
             if (c == ColVisibility && r < priv.size() && priv[r]) s.icon = ui::Icon::Lock;
             if (!mine || c == ColOrigin) s.fgTone = ui::Tone::Muted;
             return s;
         },
         [own, iface](std::size_t r, std::size_t c) {
-            return r < own.size() && own[r] && (c == ColName || c == ColParams || c == ColReturn || (c == ColVisibility && !iface));
+            // 1.50.0 : les parametres se declarent dans l'onglet Parametres (plus dans une case de texte).
+            return r < own.size() && own[r] && (c == ColName || c == ColReturn || (c == ColVisibility && !iface));
         },
         [](std::size_t, std::size_t c) {
             if (c == ColVisibility) return std::vector<std::string>{kPublic, kPrivate};
@@ -742,6 +648,103 @@ void HmiMethodsPane::showSelected() {
     legend_->setTooltip(legendText().empty() ? std::string(kLegendTip) : legendText() + "\n" + kLegendTip);
     rebuildProperties();
     updateDiagnostics();
+    refreshTabs();                         // 1.50.0 : Parametres (SELF en tete), Locales, Constantes, Tests
+}
+
+// ---- 1.50.0 (planche 01) : les cinq onglets ----
+std::optional<hmi::decledit::Place> HmiMethodsPane::currentPlace() const {
+    const auto* t = owner();
+    const Id id = selectedMethod();
+    const auto* m = id != kNoId ? hmi::methodById(doc_->project, id) : nullptr;
+    if (!t || !m) return std::nullopt;
+    hmi::decledit::Place at;
+    at.kind = hmi::decledit::Place::Kind::TypeMethod;
+    at.type = t->id;
+    at.id = id;
+    at.label = "m\xC3\xA9thode " + t->name + "." + m->name;
+    return at;
+}
+
+void HmiMethodsPane::refreshTabs() {
+    if (!codeTabs_ || !testsPage_) return;
+    const auto* t = owner();
+    const bool iface = t && t->kind == hmi::HmiTypeKind::Interface;
+    const auto at = currentPlace();
+    const std::string why = !t                   ? "Choisis une structure ou une interface."
+                          : selectedInherited() ? "H\xC3\xA9rit\xC3\xA9" "e : ses d\xC3\xA9" "clarations se changent dans son type (Red\xC3\xA9" "finir pour la sienne)."
+                                                : "Choisis une m\xC3\xA9thode du type.";
+    codeTabs_->setPlace(at, why);
+    // Une signature d'interface n'a que ses parametres (ni corps, ni locales, ni constantes, ni cas) : les autres onglets
+    // se cachent (la planche : " Parametres seul ").
+    if (iface && at) {
+        localsGrid().setPlace(std::nullopt, "Une signature n'a pas de locales : seulement ses param\xC3\xA8tres.");
+        constantsGrid().setPlace(std::nullopt, "Une signature n'a pas de constantes : seulement ses param\xC3\xA8tres.");
+    }
+    for (const std::size_t tab : {std::size_t{CodeTabCode}, std::size_t{CodeTabLocals}, std::size_t{CodeTabConstants}, std::size_t{CodeTabTests}})
+        if (tab < codeTabs_->tabCount() && codeTabs_->tabHidden(tab) != iface) codeTabs_->setTabHidden(tab, iface);
+    if (iface && codeTabs_->currentIndex() != CodeTabParameters) codeTabs_->setCurrentIndex(CodeTabParameters);
+    testsPage_->setFunction(kNoId, at && !iface ? at->id : kNoId);
+    if (codeTabs_->tabCount() > CodeTabTests) {
+        const std::size_t n = testsPage_->caseCount();
+        codeTabs_->setTabBadge(CodeTabTests, n ? std::to_string(n) : std::string{}, testsPage_->badgeTone());
+    }
+}
+
+void HmiMethodsPane::showCodeTab(std::size_t tab) {
+    if (codeTabs_ && tab < codeTabs_->tabCount()) codeTabs_->setCurrentIndex(tab);
+}
+
+std::size_t HmiMethodsPane::currentCodeTab() const noexcept { return codeTabs_ ? codeTabs_->currentIndex() : 0; }
+
+bool HmiMethodsPane::migrateCurrent() {
+    const auto at = currentPlace();
+    if (!at) {
+        say("Migrer : aucune m\xC3\xA9thode choisie.", true);
+        return false;
+    }
+    std::string report;
+    const bool ok = migrateOne(doc_, apply_, *at, &report);
+    say(report, !ok);
+    return ok;
+}
+
+void HmiMethodsPane::setTestHosts(HmiFunctionTestsPage::Hosts h) {
+    if (testsPage_) testsPage_->setHosts(std::move(h));
+}
+
+bool HmiMethodsPane::showTestCase(Id test) {
+    const auto* t = owner();
+    const hmi::HmiType* where = nullptr;
+    for (const auto& ty : doc_->project.programs.types)
+        for (const auto& m : ty.methods)
+            for (const auto& c : m.tests)
+                if (c.id == test) where = &ty;
+    if (!where) return false;
+    if (!t || t->id != where->id) setType(where->id);
+    for (const auto& m : where->methods)
+        for (const auto& c : m.tests)
+            if (c.id == test) {
+                selectMethod(m.id);
+                showCodeTab(CodeTabTests);
+                testsPage_->selectCase(test);
+                return true;
+            }
+    return false;
+}
+
+std::size_t HmiMethodsPane::runTests() {
+    const auto* t = owner();
+    if (!t || std::none_of(t->methods.begin(), t->methods.end(), [](const hmi::HmiFunction& m) { return !m.tests.empty(); })) {
+        say("Aucun cas \xC3\xA0 lancer : l'onglet Tests d'une m\xC3\xA9thode, \xC2\xAB Nouveau cas\xE2\x80\xA6 \xC2\xBB.", true);
+        return 0;
+    }
+    const auto& hosts = testsPage_->hosts();
+    campaign_ = runTestsOf(doc_->project, t->methods, kNoId, t->name, hosts.plc ? hosts.plc() : nullptr);
+    if (hosts.output) hosts.output(campaign_.lines);
+    say(campaign_.summary() + (hosts.output ? std::string("  \xC2\xB7  le d\xC3\xA9tail au panneau du bas (Sorties)") : std::string{}),
+        campaign_.failed());
+    refresh();
+    return campaign_.tally.passed;
 }
 
 void HmiMethodsPane::rebuildProperties() {
@@ -802,9 +805,21 @@ void HmiMethodsPane::rebuildProperties() {
             });
         };
     c.properties.push_back(std::move(ret));
-    c.properties.push_back(prop("Param\xC3\xA8tres", hmi::methodParamsText(*m), PG::ValueType::Text,
-                                commit([this, id](const std::string& s, std::string* w) { return setParams(id, s, w); }), {},
-                                "nom : type, s\xC3\xA9par\xC3\xA9s par ; (Consigne : REAL; VAR_IN_OUT Cible : T_Pompe ; VAR_OUTPUT pour une sortie)."));
+    // 1.50.0 (planche 01) : les parametres, les locales et les constantes se declarent dans leurs onglets (comme une fonction).
+    std::size_t nParams = 0, nLocals = 0, nConsts = 0;
+    for (const auto& d : m->decls) {
+        if (d.kind == hmi::DeclKind::Parameter) ++nParams;
+        else if (d.kind == hmi::DeclKind::Constant) ++nConsts;
+        else ++nLocals;
+    }
+    c.properties.push_back(prop("Param\xC3\xA8tres", std::to_string(nParams) + " (onglet Param\xC3\xA8tres)", PG::ValueType::ReadOnly, {}, {},
+                                hmi::methodParamsText(*m).empty() ? std::string("Aucun : SELF seulement.") : hmi::methodParamsText(*m)));
+    if (!iface) {
+        c.properties.push_back(prop("Locales", std::to_string(nLocals) + " (onglet Locales)"));
+        c.properties.push_back(prop("Constantes", std::to_string(nConsts) + " (onglet Constantes)"));
+    }
+    if (!m->generics.empty()) c.properties.push_back(prop("G\xC3\xA9n\xC3\xA9riques", hmi::genericsText(m->generics)));
+    if (!m->returnUnit.empty()) c.properties.push_back(prop("Unit\xC3\xA9 du retour", m->returnUnit));
     if (!iface) {
         c.properties.push_back(prop("Visibilit\xC3\xA9", m->visibility == hmi::Visibility::Private ? kPrivate : kPublic, PG::ValueType::Enum,
                                     commit([this, id](const std::string& s, std::string* w) { return setPrivate(id, s == kPrivate, w); }),
@@ -1155,38 +1170,66 @@ Id HmiMethodsPane::overrideMethod(Id inherited, std::string* why) {
     return made;
 }
 
-void HmiMethodsPane::setDialogWidget(HmiMethodDialog* d) {
-    dialog_ = d;
-    if (!dialog_) return;
-    links_ += dialog_->created->connect([this] {
-        std::string why;
-        if (createFromDialog(&why) == kNoId && !why.empty()) say("Refus\xC3\xA9 : " + why, true);
-    });
-    dialog_->chooseReturn = [this] {
-        if (!dialog_ || !typepicker::available()) return;
-        HmiTypePicker::Spec spec;
-        spec.field = "Retour de la m\xC3\xA9thode";
-        spec.current = dialog_->returnType();
-        spec.use = hmi::typereg::UseVariable;
-        spec.doc = doc_;
-        typepicker::ask(std::move(spec), [this](const HmiTypePicker::Answer& a) {
-            if (dialog_ && !a.type.empty()) dialog_->setReturnType(a.type);
-        });
-    };
+// ---- 1.50.0 (planche 01) : la fenetre des fonctions, sur le type ----
+HmiNewFunctionDialog::Spec HmiMethodsPane::addDialogSpec() const {
+    HmiNewFunctionDialog::Spec spec;
+    spec.doc = doc_;
+    spec.type = type_;
+    return spec;
 }
 
 bool HmiMethodsPane::openAddDialog() {
-    if (!owner()) return false;
-    if (!dialog_) return false;
-    dialog_->open(doc_->project, type_);
+    if (!owner() || !newfunction::available()) return false;
+    const std::weak_ptr<int> alive = alive_;
+    newfunction::ask(addDialogSpec(), [this, alive](const HmiNewFunctionDialog::Answer& a) {
+        if (alive.expired()) return;
+        std::string why;
+        if (createMethod(a, &why) == kNoId && !why.empty()) say("Refus\xC3\xA9" "e : " + why, true);
+    });
     return true;
 }
 
-Id HmiMethodsPane::createFromDialog(std::string* why) {
-    if (!dialog_ || !dialog_->isOpen()) return fail(why, "la fen\xC3\xAAtre n'est pas ouverte"), kNoId;
-    if (const std::string w = dialog_->problem(); !w.empty()) return fail(why, w), kNoId;
-    const Id made = addMethod(dialog_->name(), dialog_->returnType(), dialog_->params(), dialog_->isPrivate(), dialog_->isVirtual(), why);
-    if (made != kNoId) dialog_->close();
+Id HmiMethodsPane::createMethod(const HmiNewFunctionDialog::Answer& a, std::string* why) {
+    const auto* t = owner();
+    if (!t) return fail(why, "choisis une structure ou une interface"), kNoId;
+    const bool iface = t->kind == hmi::HmiTypeKind::Interface;
+    const std::string name = trimmedOf(a.name);
+    if (const std::string w = nameProblem(doc_->project, *t, name, kNoId); !w.empty()) return fail(why, w), kNoId;
+    hmi::HmiFunction draft;
+    draft.name = name;
+    const std::string ret = trimmedOf(a.returnType);
+    draft.returnType = ret == "Aucun" || ret == "(aucun)" ? std::string{} : ret;
+    draft.returnUnit = draft.returnType.empty() ? std::string{} : trimmedOf(a.returnUnit);
+    draft.description = a.description;
+    draft.visibility = !a.pub && !iface ? hmi::Visibility::Private : hmi::Visibility::Public;
+    draft.isVirtual = a.isVirtual && !iface;
+    if (!trimmedOf(a.generics).empty()) {
+        std::string w;
+        if (!hmi::parseGenerics(a.generics, draft.generics, &w)) return fail(why, w), kNoId;
+    }
+    if (!draft.returnUnit.empty())
+        if (std::string w = unitui::problem(doc_->project, draft.returnType, draft.returnUnit); !w.empty()) return fail(why, w), kNoId;
+    if (std::string mp = hmi::methodProblem(doc_->project, *t, draft); !mp.empty()) return fail(why, mp), kNoId;
+    const Id typeId = t->id;
+    const std::string typeName = t->name;
+    Id made = kNoId;
+    auto cmd = hmi::changeProject(doc_, std::string(iface ? "Nouvelle signature " : "Nouvelle m\xC3\xA9thode ") + typeName + "." + name, [&](hmi::Project& p) {
+        auto* x = p.hmiType(typeId);
+        if (!x) return;
+        hmi::HmiFunction m = draft;
+        m.id = p.allocate();
+        if (!iface) m.body = hmi::methodTemplate(p, typeName, m);
+        made = m.id;
+        x->methods.push_back(std::move(m));
+    });
+    if (cmd) apply_(std::move(cmd));
+    if (made != kNoId) {
+        refresh();
+        selectMethod(made);
+        showCodeTab(CodeTabParameters);    // ses parametres d'abord (la planche : " Parametres s'ouvre ")
+        say(std::string(iface ? "Signature ajout\xC3\xA9" "e : " : "M\xC3\xA9thode ajout\xC3\xA9" "e : ") + hmi::methodSignature(typeName, draft)
+            + " - ses param\xC3\xA8tres, ses locales et ses constantes dans leurs onglets (Ctrl+Z la retire)");
+    }
     return made;
 }
 

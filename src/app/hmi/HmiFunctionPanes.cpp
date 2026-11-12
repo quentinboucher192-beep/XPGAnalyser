@@ -318,16 +318,12 @@ HmiFunctionsPane::HmiFunctionsPane(std::string id, hmi::DocumentPtr doc, Apply a
         symbolBar_ = &static_cast<ui::StatusBar&>(area->addChild(std::move(bar)));
         // 1.11.18 (refonte, lot 5) : Code, Parametres, Locales, Constantes ; le bandeau de l'ancien format.
         banner_ = &static_cast<HmiDeclBanner&>(area->addChild(std::make_unique<HmiDeclBanner>(base + ".declBanner")));
-        codeTabs_ = &static_cast<HmiCodeTabs&>(panel->setBody(std::make_unique<HmiCodeTabs>(
-            base + ".codeTabs", doc_, apply_, std::move(area),
-            std::vector{hmi::decledit::Tab::Parameters, hmi::decledit::Tab::Variables, hmi::decledit::Tab::Constants}, banner_)));
+        // 1.13.0 (lot J4b) : le 5e onglet, Tests - les cas de la fonction, leurs verdicts. 1.50.0 : les cinq onglets
+        // viennent de makeFunctionTabs (les Methodes des Types IHM ont les memes).
+        const auto made = makeFunctionTabs(*panel, base, doc_, apply_, std::move(area), banner_);
+        codeTabs_ = made.tabs;
+        testsPage_ = made.tests;
         editorPanel_ = panel.get();
-        // 1.13.0 (lot J4b) : le 5e onglet, Tests - les cas de la fonction, leurs verdicts.
-        {
-            auto page = std::make_unique<HmiFunctionTestsPage>(base + ".tests", doc_, apply_);
-            testsPage_ = page.get();
-            (void)codeTabs_->addTab({"Tests", ui::Icon::Ok}, std::move(page));
-        }
         // 1.11.21 : l'editeur prend toute la hauteur - ses fautes vont au panneau du bas
         // (Diagnostics, l'etape Saisie ; HmiLive.hpp), soulignees dans le code.
         right->addPane(std::move(panel), 1.f, 120.f);
@@ -623,6 +619,19 @@ void HmiFunctionsPane::showSelected() {
     codeTabs_->setPlace(currentPlace(), "Choisis une fonction.");   // 1.11.18 (lot 5) : ses onglets
     if (testsPage_) testsPage_->setFunction(symbol_, f ? f->id : kNoId);   // 1.13.0 (lot J4b)
     refreshTestsTab();
+}
+
+// ---- 1.50.0 : l'editeur partage (les cinq onglets) ----
+FunctionTabs makeFunctionTabs(HmiTitledPanel& panel, const std::string& base, hmi::DocumentPtr doc, HmiDeclGrid::Apply apply,
+                              ui::WidgetPtr codePage, HmiDeclBanner* banner) {
+    FunctionTabs out;
+    out.tabs = &static_cast<HmiCodeTabs&>(panel.setBody(std::make_unique<HmiCodeTabs>(
+        base + ".codeTabs", doc, apply, std::move(codePage),
+        std::vector{hmi::decledit::Tab::Parameters, hmi::decledit::Tab::Variables, hmi::decledit::Tab::Constants}, banner)));
+    auto page = std::make_unique<HmiFunctionTestsPage>(base + ".tests", std::move(doc), std::move(apply));
+    out.tests = page.get();
+    (void)out.tabs->addTab({"Tests", ui::Icon::Ok}, std::move(page));
+    return out;
 }
 
 // ---- 1.13.0 (lot J4b) : les tests unitaires ----

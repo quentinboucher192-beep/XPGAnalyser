@@ -215,6 +215,10 @@ HmiFunction* functionAt(Project& p, const Place& at) {
         if (auto* v = p.view(at.view))
             for (auto& f : v->functions)
                 if (f.id == at.id) return &f;
+    } else if (at.kind == Place::Kind::TypeMethod) {        // 1.50.0 : les cas d'une methode suivent aussi
+        if (auto* t = p.hmiType(at.type))
+            for (auto& m : t->methods)
+                if (m.id == at.id) return &m;
     }
     return nullptr;
 }
@@ -279,6 +283,15 @@ Code locate(Project& p, const Place& at) {
             if (auto* v = p.view(at.view))
                 for (auto& o : v->operators)
                     if (o.id == at.id) bindOperator(c, o);
+            break;
+        case K::TypeMethod:
+            // 1.50.0 : une methode d'un type IHM - comme une fonction ; SELF, THIS et SUPER ne se declarent pas.
+            if (auto* t = p.hmiType(at.type))
+                for (auto& m : t->methods)
+                    if (m.id == at.id) {
+                        bindFunction(c, m);
+                        for (const char* w : {"SELF", "THIS", "SUPER"}) c.reserved.emplace_back(w);
+                    }
             break;
         case K::ViewConstants:
             // 1.12.16 : les constantes d'une vue ou d'une popup - comme celles d'un script (calculees au
@@ -1165,7 +1178,11 @@ bool set(Project& p, const Place& at, Tab t, std::size_t row, Column col, std::s
             if (!r.ok)
                 return fail(why, r.missing ? r.why + " - \xC2\xAB Choisir un type\xE2\x80\xA6 \xC2\xBB les montre"
                                            : "type " + quoted(v) + " non pris en charge : " + r.why);
+            // 1.50.0 (planche 03) : un REF_TO / POINTER TO pour une constante - elle ne vise rien ; POINTER OF corrige, dit.
+            if (d.kind == DeclKind::Constant && r.category == typereg::Category::Reference)
+                return fail(why, std::string(r.text.rfind("POINTER", 0) == 0 ? "POINTER TO" : "REF_TO") + " : une constante ne vise rien (NULL seul)");
             d.type = r.text;                 // la forme du registre : REAL, ARRAY[0..9] OF REAL, T_Four (son nom ecrit)
+            if (!r.warning.empty() && note) *note = r.warning;
             // 1.11.21 : sa valeur ne convient plus au nouveau type (0 pour un ARRAY[1..4] OF T_Four) :
             // retiree - une constante prend la valeur nulle de son type. La meme commande : un Ctrl+Z.
             if (const std::string bad = valueMisfit(p, d.type, d.value); !bad.empty()) {

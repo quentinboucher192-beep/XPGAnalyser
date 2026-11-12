@@ -41,6 +41,7 @@
 #include "../BackgroundTasks.hpp"      // Lot API 8 : bandeau haut (la cloche)
 #include "../../hmi/HmiBuildState.hpp"  // 1.11 (chantier T3, C4) : les icones compilable / generable
 #include "../../hmi/HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele
+#include "../../hmi/HmiScriptC.hpp"   // 1.50.0 : ce que le C et le C++ prennent (le dialogue Nouveau script)
 #include "../../hmi/HmiSemanticColors.hpp"   // 1.23.1 : les couleurs semantiques publiees pour le dessin
 #include "../../hmi/HmiStyles.hpp"           // 1.23.1 : IHM > Styles deplie (les fournis compris)
 #include "../hmi/HmiDesignPanes.hpp"
@@ -525,6 +526,15 @@ void MainAnalysisScreen::bindHmi() {
     });
     // 1.11.19 (refonte, lot 6) : le selecteur de types, demande par une grille ou un volet.
     typepicker::setHost([this](HmiTypePicker::Spec spec, typepicker::Done done) { askHmiType(std::move(spec), std::move(done)); });
+    // 1.50.0 (planche 01) : la fenetre des fonctions, demandee par un volet (Ajouter une methode... des Types IHM).
+    newfunction::setHost([this](HmiNewFunctionDialog::Spec spec, newfunction::Done done) {
+        if (!spec.doc) spec.doc = app_.hmi();
+        app_.menus().ShowDialog(std::make_unique<HmiNewFunctionDialog>(std::move(spec)), [done = std::move(done)](const menu::DialogResult& r) {
+            if (!r.accepted()) return;
+            HmiNewFunctionDialog::Answer a;
+            if (HmiNewFunctionDialog::parse(r.payload, a) && done) done(a);
+        });
+    });
     // 1.13.0 (lot J6b) : le selecteur d'unites - " Gerer les unites... " mene a Configuration > Unites de mesure.
     unitpicker::setHost([this](HmiUnitPicker::Spec spec, unitpicker::Done done) {
         if (!spec.doc) spec.doc = app_.hmi();
@@ -3791,9 +3801,8 @@ void MainAnalysisScreen::askHmiNewScript(hmi::ScriptLang lang) {
                          "quand une expression change, ou quand on l'appelle (action \xC2\xAB Script g\xC3\xA9n\xC3\xA9ral \xC2\xBB, "
                          "IHM_APPELER('nom')). Il lit et \xC3\xA9" "crit les variables du programme et les variables IHM. "
                          "Ctrl+Z le retire.")
-           : "Un script " + langName + " est \xC3\xA9" "dit\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9 (accolades, parenth\xC3\xA8ses, "
-                 "cha\xC3\xAEnes, commentaires) mais le simulateur ne l'ex\xC3\xA9" "cute pas : il accompagne le projet pour "
-                 "la cible. Ctrl+Z le retire.",
+           : "Un script " + langName + " s'ex\xC3\xA9" "cute dans la simulation de l'IHM comme un script ST (les m\xC3\xAA" "mes "
+                 "d\xC3\xA9" "clencheurs, les m\xC3\xAAmes variables). " + hmi::cscript::supportedSubset(lang) + " Ctrl+Z le retire.",
         std::move(fields), "Cr\xC3\xA9" "er");
     dialog->setFieldAssist(3, assist::fieldAssist(assist::sourcesFor(doc)));
     dialog->setRules([](const std::vector<std::string>& v, std::vector<FormDialog::FieldState>& state) {
@@ -4383,6 +4392,31 @@ void MainAnalysisScreen::askHmiType(HmiTypePicker::Spec spec, typepicker::Done d
 // Les hotes de la page Types IHM et d'un onglet de type : les memes (Exporter, Importer, l'arbre qui montre un type cree,
 // le build des operateurs) ; plus l'ouverture d'un type dans son onglet, et les emplois hors des types.
 void MainAnalysisScreen::wireHmiTypesHosts(HmiTypesPane& types) {
+    // 1.50.0 (planche 01) : l'onglet Tests des methodes - " Nouveau cas... " (la fenetre des fonctions), les verdicts aux
+    // Sorties du panneau du bas, le rapport dans exports/, l'automate de la simulation (lu seulement).
+    if (auto* methods = types.methods()) {
+        HmiFunctionTestsPage::Hosts mh;
+        mh.plc = [this]() -> ::sim::Environment* { return app_.simulation().attached() ? app_.simulationRuntime() : nullptr; };
+        mh.output = [this](const std::vector<TestLine>& lines) { showHmiTestLines(lines); };
+        mh.exportFile = [this](const hmi::ExportRequest& rq, std::string* where) { return writeHmiExport(rq, where); };
+        mh.newCase = [this, methods, alive = methods->aliveToken()](hmi::Id, hmi::Id function) {
+            auto doc = app_.hmi();
+            if (!doc) return;
+            HmiNewTestCaseDialog::Spec spec;
+            spec.doc = doc;
+            spec.function = function;
+            app_.menus().ShowDialog(std::make_unique<HmiNewTestCaseDialog>(std::move(spec)), [this, methods, alive](const menu::DialogResult& r) {
+                if (!r.accepted() || alive.expired()) return;
+                HmiNewTestCaseDialog::Answer a;
+                if (!HmiNewTestCaseDialog::parse(r.payload, a)) return;
+                methods->showCodeTab(HmiMethodsPane::CodeTabTests);
+                std::string why;
+                if (methods->testsPage().addCase(a, &why) == hmi::kNoId && status_)
+                    status_->setTransientMessage("Cas refus\xC3\xA9 : " + why, 8.0, ui::StatusBar::Severity::Warning);
+            });
+        };
+        methods->setTestHosts(std::move(mh));
+    }
     HmiTypesPane::Hosts th;
     th.exportItems = [this](hmi::Id t) { askHmiExportPrograms(0, t); };   // 1.11.2 (decision 174)
     th.importAny = [this] { askHmiImport(); };

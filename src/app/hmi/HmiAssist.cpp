@@ -8,6 +8,7 @@
 #include "../../ui/widgets/ExprField.hpp"   // 1.10 (chantier K) : l'aide a la saisie selon le type du champ
 #include "HmiParamPanes.hpp"   // 1.9 : les parametres de la popup (type, mode)
 #include "../../hmi/HmiTypes.hpp"
+#include "../../hmi/HmiMethods.hpp"           // 1.50.0 : les methodes d'un type IHM (Pompe1.Demarrer)
 
 #include "../../domain/ProjectModel.hpp"
 #include "../../hmi/HmiMedia.hpp"
@@ -418,6 +419,27 @@ bool hmiCompositeMembers(const hmi::Project& hp, const std::string& path, const 
             it.rank = r * 100 + order++;
             push(std::move(it));
         }
+    // 1.50.0 (planche 01) : LES METHODES DU TYPE (Pompe1.Demarrer(...)) - apres les membres ; une privee GRISEE (la
+    // reponse 1) : d'ici, hors d'une methode du type, l'appel serait refuse.
+    if (!spec.array())
+        if (const hmi::HmiType* owner = hp.hmiTypeByName(type); owner && owner->kind == hmi::HmiTypeKind::Structure)
+            for (const auto& om : hmi::allMethods(hp, hmi::fullName(*owner))) {
+                if (!om.method || !om.owner) continue;
+                const auto& m = *om.method;
+                const int r = matchRank(m.name, needle);
+                if (r < 0) continue;
+                const bool priv = m.visibility == hmi::Visibility::Private;
+                Item it;
+                it.text = m.name;
+                it.insert = m.name + "()";
+                it.caret = hmi::methodParamsText(m).empty() ? it.insert.size() : m.name.size() + 1;
+                it.detail = hmi::methodSignature(om.owner->name, m)
+                          + (priv ? "  \xC2\xB7  priv\xC3\xA9" "e : seulement depuis une m\xC3\xA9thode de " + om.owner->name : std::string{});
+                it.kind = Kind::UserFunction;
+                it.muted = priv;
+                it.rank = r * 100 + 40 + order++;
+                push(std::move(it));
+            }
     for (const auto& pi : ty::properties()) {
         if (pi.arrayOnly && !spec.array()) continue;
         if (pi.twoD && spec.dims != 2) continue;
@@ -3194,6 +3216,10 @@ void toCompletions(const std::vector<Item>& items, std::vector<ui::MultiLineText
         c.caret = it.caret;
         c.extend = it.extend;
         c.chain = it.chain;
+        if (it.muted) {                  // 1.50.0 : grisee (une methode privee, d'ici) - le nom et sa pastille
+            c.badge.accent = true;
+            c.badge.color = gfx::Color{150, 150, 150, 255};
+        }
         out.push_back(std::move(c));
     }
 }

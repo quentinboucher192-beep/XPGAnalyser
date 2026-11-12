@@ -54,6 +54,8 @@
 #include "../src/hmi/HmiEditHistory.hpp"
 #include "../src/hmi/HmiStore.hpp"
 #include "../src/app/hmi/HmiItemDuplicateDialog.hpp"   // 1.12.16 : Dupliquer... d'un element
+#include "../src/app/hmi/HmiStretchDialog.hpp"         // 1.50.0 : la fenetre Etirer...
+#include "../src/hmi/HmiStretch.hpp"                    // 1.50.0 : Etirer (le moteur)
 #include "../src/hmi/HmiTable.hpp"   // 1.12.13 : le Tableau, un mode a la fois
 #include "../src/hmi/HmiActionKinds.hpp"
 #include "../src/hmi/HmiViewPaths.hpp"
@@ -527,7 +529,7 @@ void proprietes_et_verification() {
     auto comp = hmi::compile(b.doc->project);
     const auto n = hmi::count(comp);
     check(n.errors == 2, "compiler : 2 erreurs (expression, C) - " + std::to_string(n.errors));
-    check(n.infos >= 2, "compiler : le C est signale comme non execute, et le bilan");
+    check(n.infos >= 2, "compiler : le C est signale (compile pour le moteur des scripts, 1.50.0), et le bilan");
 
     // Le rapport, dans son onglet.
     app::HmiReportPane pane("rapport", b.doc, app::HmiReportPane::Mode::Compile, {});
@@ -21633,9 +21635,18 @@ void canevas_menu_11218() {
     check(cut && cut->shortcut == "Ctrl+X" && cut->icon == ui::Icon::Cut, "Couper (Ctrl+X, son icone) : avant, au clavier seulement");
     check(dup && dup->shortcut == "Ctrl+D" && dupw && dupw->shortcut == "Ctrl+Maj+D", "Dupliquer Ctrl+D, Dupliquer... Ctrl+Maj+D");
     check(grp && grp->enabled && grp->shortcut == "Ctrl+G", "Grouper (Ctrl+G) : deux objets");
-    for (const char* sub : {"Ordre", "Aligner", "Transformer", "Style", "Calque"}) {
+    // 1.50.0 (planche 02) : Etirer >, juste apres Aligner > (les gestes qui placent).
+    for (const char* sub : {"Ordre", "Aligner", "\xC3\x89tirer", "Transformer", "Style", "Calque"}) {
         const auto* it = findItem(items, sub);
         check(it && !it->children.empty(), std::string("le sous-menu ") + sub);
+    }
+    {
+        std::vector<std::string> subs;
+        for (const auto& it : items)
+            if (!it.children.empty()) subs.push_back(it.label);
+        std::string got;
+        for (const auto& l : subs) got += l + " ";
+        same_text(got, "Ordre Aligner \xC3\x89tirer Transformer Style Calque ", "1.50.0 : l'ordre des sous-menus (Etirer apres Aligner)");
     }
     const auto* dist = findItem(items, "Distribuer horizontalement");
     check(dist && !dist->enabled && dist->disabledReason == "3 objets ou plus", "Distribuer : grise, la raison dite (3 objets ou plus)");
@@ -23642,13 +23653,14 @@ void icones111() {
     sc = bs::ofScript(s2);
     check(sc.compile == bs::Compile::Error && sc.generate == bs::Generate::No && sc.errors >= 1,
           "un script ST en erreur : ne part pas (" + sc.reason + ")");
+    // 1.50.0 : le C et le C++ se compilent pour le moteur des scripts (HmiScriptC.hpp) : un script juste compile et part
+    // avec Generer ; une faute est une erreur, a sa ligne.
     sc = bs::ofScript(s3);
-    check(sc.compile == bs::Compile::NotCompilable && sc.generate == bs::Generate::No && sc.errors == 0
-              && sc.simMessage.find("non ex\xC3\xA9" "cut\xC3\xA9 en simulation") != std::string::npos,
-          "un script C++ juste : non compilable, non genere, le message de runScript (" + sc.simMessage + ")");
+    check(sc.compile == bs::Compile::Ok && sc.generate == bs::Generate::Yes && sc.errors == 0 && sc.reason.find("C++") != std::string::npos,
+          "un script C++ juste : compile (1.50.0), part avec Generer (" + sc.reason + ")");
     sc = bs::ofScript(s4);
-    check(sc.compile == bs::Compile::NotCompilable && sc.generate == bs::Generate::No && sc.errors >= 1,
-          "un script C mal ferme : non compilable, et sa faute dans l'infobulle (" + sc.reason + ")");
+    check(sc.compile == bs::Compile::Error && sc.generate == bs::Generate::No && sc.errors >= 1,
+          "un script C mal ferme : en erreur, et sa faute dans l'infobulle (" + sc.reason + ")");
     check(bs::tooltip(bs::ofScript(s1)).find("part avec G\xC3\xA9n\xC3\xA9rer") != std::string::npos, "l'infobulle d'un script dit Generer");
     check(bs::legend().size() == 5, "la legende : les cinq icones");
     check(bs::legend()[4].struck && !bs::legend()[3].struck, "la legende : Non genere a le glyphe barre (Genere non)");
@@ -24014,7 +24026,8 @@ void icones111_arbre() {
     const auto unitA = static_cast<domain::Index>(plc->pous.size() - 2), unitB = unitA + 1;
     auto doc = std::make_shared<Document>();
     hmi::Script s1; s1.id = 201; s1.name = "Calcul"; s1.lang = hmi::ScriptLang::ST; s1.body = "x := 1;\n";
-    hmi::Script s3; s3.id = 203; s3.name = "Calcul_Debit"; s3.lang = hmi::ScriptLang::Cpp; s3.body = "double debit(double q) { return q * 3.6; }\n";
+    // 1.50.0 : un script C++ en faute (le C++ se compile desormais : juste, il compilerait comme le ST).
+    hmi::Script s3; s3.id = 203; s3.name = "Calcul_Debit"; s3.lang = hmi::ScriptLang::Cpp; s3.body = "double debit(double q) { return q * ; }\n";
     doc->project.programs.scripts = {s1, s3};
 
     app::ProjectTreeModel tree(plc);
@@ -24038,8 +24051,8 @@ void icones111_arbre() {
     check(t.size() == 2 && t[0].glyph == "\xE2\x9C\x93" && t[1].glyph == "\xE2\x87\xA9" && !t[1].struck && t[1].tone == ui::Tone::Info,
           "un script ST juste : coche, puis la fleche de Generer");
     t = trail(NK::HmiGeneralScript, 203);
-    check(t.size() == 2 && t[0].glyph == "\xE2\x8A\x98" && t[1].struck && t[1].tone == ui::Tone::Warning,
-          "un script C++ : non compilable, la fleche barree (non genere)");
+    check(t.size() == 2 && t[0].glyph == "\xE2\x9C\x95" && t[1].struck && t[1].tone == ui::Tone::Warning,
+          "un script C++ en faute : la croix, la fleche barree (non genere)");
     using PTM = app::ProjectTreeModel;
     check(tree.buildFlags(PTM::pack(NK::Section, stErr)) == PTM::BuildNotCompiling && tree.buildFlags(PTM::pack(NK::Section, stOk)) == 0
               && tree.buildFlags(PTM::pack(NK::HmiGeneralScript, 201)) == 0
@@ -24063,7 +24076,7 @@ void icones111_arbre() {
               && t[0].tip.find("2 sections sur 3 ne compilent pas") != std::string::npos && t[0].tip.find("Sec_Faute (en erreur)") != std::string::npos,
           "la tache MAST : « 2 \xE2\x9C\x95/\xE2\x8A\x98 » en rouge (une erreur), et la raison (" + (t.empty() ? std::string() : t[0].tip) + ")");
     t = trail(NK::HmiScriptsFolder, 0);
-    check(t.size() == 1 && t[0].glyph == bs::Cache::folderSummary(1, 1) && t[0].tip.find("Calcul_Debit (non compilable)") != std::string::npos
+    check(t.size() == 1 && t[0].glyph == bs::Cache::folderSummary(1, 1) && t[0].tip.find("Calcul_Debit (en erreur)") != std::string::npos
               && t[0].tip.find("ne part pas avec G\xC3\xA9n\xC3\xA9rer") != std::string::npos,
           "le dossier des scripts : « 1 \xE2\x9C\x95/\xE2\x8A\x98 \xC2\xB7 1 non g\xC3\xA9n\xC3\xA9r\xC3\xA9 » (" + (t.empty() ? std::string() : t[0].tip) + ")");
     t = trail(NK::UnitsFolder, 0);      // Sec_Unite est dans les deux unites : comptee deux fois, comme dans l'arbre
@@ -25739,7 +25752,7 @@ void scriptReperesEditeur1111() {
           "un $ reste seul : le conseil des expressions, a la ligne 2 (" + said + ")");
     const Id cid = pane.addScript(ScriptLang::C, "Calcul", "Appel");
     const bool set3 = cid != kNoId && pane.setBody(cid, "int calcul(int a) {\n  return $Gain$ * a; /* $x */\n}\n");
-    check(set3 && errors() == 0, "un script C : le $ n'est pas lu (ni compile ni execute) - aucune erreur (" + all() + ")");
+    check(set3 && errors() == 0, "un script C : un repere $Gain$ est transparent, comme en ST (1.50.0 : compile) - aucune erreur (" + all() + ")");
 }
 
 // ---- 1.11.1 (R1111-7) : Dupliquer... - un repere long ($API.Tempon_TOR16_I4_OUT[1]$, R187_04) -------------
@@ -41982,30 +41995,46 @@ void objets113() {
     check(methods && methods->type() == pompeId && methods->count() == 0, "T_Pompe : la section M\xC3\xA9thodes, vide");
     if (!methods) return;
 
-    // ---- 1. Ajouter une m\xC3\xA9thode... : la fen\xC3\xAAtre, la signature, Cr\xC3\xA9" "er ----
-    auto* dlg = types.methodDialog();
+    // ---- 1. Ajouter une m\xC3\xA9thode... : 1.50.0 (planche 01) - LA fen\xC3\xAAtre des fonctions, Cr\xC3\xA9" "er, l'onglet Param\xC3\xA8tres ----
+    menu::MenuManager mm{menu::MenuFactory{}};
+    app::HmiNewFunctionDialog* dlg = nullptr;
+    app::newfunction::Done pending;
+    app::newfunction::setHost([&](app::HmiNewFunctionDialog::Spec spec, app::newfunction::Done done) {
+        pending = std::move(done);
+        mm.ShowDialog(std::make_unique<app::HmiNewFunctionDialog>(std::move(spec)), [&](const menu::DialogResult& r) {
+            app::HmiNewFunctionDialog::Answer a;
+            if (r.accepted() && app::HmiNewFunctionDialog::parse(r.payload, a) && pending) pending(a);
+        });
+        mm.applyPending();
+        dlg = dynamic_cast<app::HmiNewFunctionDialog*>(mm.top());
+    });
     const int addTool = methods->tools().actionByTip("Ajouter une m\xC3\xA9thode");
-    check(addTool > 0 && dlg != nullptr, "l'outil \xC2\xAB Ajouter une m\xC3\xA9thode\xE2\x80\xA6 \xC2\xBB et sa fen\xC3\xAAtre");
-    if (!dlg || addTool <= 0) return;
+    check(addTool > 0, "l'outil \xC2\xAB Ajouter une m\xC3\xA9thode\xE2\x80\xA6 \xC2\xBB");
+    if (addTool <= 0) { app::newfunction::setHost({}); return; }
     methods->tools().triggered->emit(addTool);
-    check(dlg->isOpen() && dlg->title() == "Nouvelle m\xC3\xA9thode de T_Pompe", "la fen\xC3\xAAtre s'ouvre : " + dlg->title());
+    check(dlg && dlg->title() == "Nouvelle m\xC3\xA9thode du type T_Pompe" && dlg->owner() == app::HmiNewFunctionDialog::Owner::Type,
+          "la fen\xC3\xAAtre des fonctions s'ouvre : " + (dlg ? dlg->title() : std::string("(aucune)")));
+    if (!dlg) { app::newfunction::setHost({}); return; }
     dlg->setName("Debit");
-    check(!dlg->problem().empty() && dlg->problem().find("d\xC3\xA9j\xC3\xA0 un membre") != std::string::npos,
-          "un nom de membre est refus\xC3\xA9 : " + dlg->problem());
+    check(!dlg->canConfirm() && dlg->nameProblem().find("d\xC3\xA9j\xC3\xA0 un membre") != std::string::npos,
+          "un nom de membre est refus\xC3\xA9 : " + dlg->nameProblem());
     dlg->setName("Demarrer");
-    dlg->setParams("Consigne : REAL");
     dlg->setVirtual(true);
-    same_text(dlg->signature(), "T_Pompe.Demarrer(Consigne : REAL)", "la signature, en direct");
-    check(dlg->problem().empty() && dlg->createButton().enabled(), "rien \xC3\xA0 redire : Cr\xC3\xA9" "er la m\xC3\xA9thode est permis");
-    dlg->setPrivate(true);
-    check(dlg->problem().find("priv\xC3\xA9" "e ne peut pas \xC3\xAAtre virtuelle") != std::string::npos, "priv\xC3\xA9" "e et virtuelle : refus\xC3\xA9 (" + dlg->problem() + ")");
-    dlg->setPrivate(false);
-    dlg->createButton().clicked->emit();
+    same_text(dlg->declaration(), "FUNCTION PUBLIC VIRTUAL Demarrer        (* une proc\xC3\xA9" "dure *)", "Elle s'\xC3\xA9" "crira : FUNCTION (la r\xC3\xA9ponse), en direct");
+    check(dlg->canConfirm(), "rien \xC3\xA0 redire : Cr\xC3\xA9" "er est permis");
+    dlg->setPublic(false);
+    check(!dlg->canConfirm() && dlg->methodProblem().find("priv\xC3\xA9" "e ne peut pas \xC3\xAAtre virtuelle") != std::string::npos,
+          "priv\xC3\xA9" "e et virtuelle : refus\xC3\xA9 (" + dlg->methodProblem() + ")");
+    dlg->setPublic(true);
+    check(dlg->confirm(), "Cr\xC3\xA9" "er");
+    mm.applyPending();
+    app::newfunction::setHost({});
     const auto* tp = p.hmiType(pompeId);
     const Id dem = tp && tp->methods.size() == 1 ? tp->methods[0].id : kNoId;
-    check(!dlg->isOpen() && dem != kNoId && tp->methods[0].name == "Demarrer" && tp->methods[0].isVirtual
-              && hmi::methodParamsText(tp->methods[0]) == "Consigne : REAL",
-          "Cr\xC3\xA9" "er la m\xC3\xA9thode : Demarrer(Consigne : REAL), virtuelle");
+    check(dem != kNoId && tp->methods[0].name == "Demarrer" && tp->methods[0].isVirtual && hmi::methodParamsText(tp->methods[0]).empty()
+              && methods->currentCodeTab() == app::HmiMethodsPane::CodeTabParameters,
+          "Cr\xC3\xA9" "er : Demarrer, virtuelle, sans param\xC3\xA8tre - l'onglet Param\xC3\xA8tres s'ouvre");
+    if (dem == kNoId) return;
     check(methods->selectedMethod() == dem && methods->editor().text() == tp->methods[0].body
               && tp->methods[0].body.find("SELF : l'instance de T_Pompe") != std::string::npos,
           "elle est choisie, son corps pr\xC3\xA9rempli (la l\xC3\xA9gende en commentaire) dans l'\xC3\xA9" "diteur");
@@ -42014,7 +42043,15 @@ void objets113() {
     check(p.hmiType(pompeId)->methods.empty() && methods->count() == 0, "Ctrl+Z : la m\xC3\xA9thode dispara\xC3\xAEt");
     (void)stack.redo();
     check(p.hmiType(pompeId)->methods.size() == 1 && methods->count() == 1, "Ctrl+Y : elle revient");
-
+    // 1.50.0 : son param\xC3\xA8tre se d\xC3\xA9" "clare dans l'onglet Param\xC3\xA8tres (SELF en t\xC3\xAAte, verrouill\xC3\xA9), plus dans une ligne de texte.
+    methods->selectMethod(dem);
+    {
+        auto& grid = methods->parametersGrid();
+        check(grid.add() && grid.count() == 1, "Param\xC3\xA8tres : + Ajouter");
+        namespace de = hmi::decledit;
+        check(grid.setCell(0, de::Column::Name, "Consigne") && grid.setCell(0, de::Column::Type, "REAL"), "Consigne : REAL, dans la grille");
+        check(hmi::methodParamsText(p.hmiType(pompeId)->methods[0]) == "Consigne : REAL", "Demarrer(Consigne : REAL)");
+    }
     // ---- 2. Le corps : la saisie, une faute a sa ligne, Ctrl+Z ----
     const std::string prefilled = p.hmiType(pompeId)->methods[0].body;
     check(methods->setBody(dem, "Marche := TRUE;\nDebit := Consigne;\n"), "\xC3\xA9" "crire le corps (Marche, Debit, le param\xC3\xA8tre)");
@@ -42462,8 +42499,9 @@ void correctifsF2_113() {
               "la ligne d'\xC3\xA9tat de T_PompeDoublee : Pompe2.EnDefaut() (avant : Pompe1.Demarrer() \xC3\xA9" "crit en dur) [" + methods->callHint() + "]");
         check(methods->statusText().find("Pompe2.EnDefaut()") != std::string::npos, "la ligne d'\xC3\xA9tat elle-m\xC3\xAA" "me : " + methods->statusText());
         const auto mm = methods->methodTable().model();
-        check(mm && mm->columnCount() == 6 && mm->headerText(2) == "Genre" && mm->headerText(3) == "Origine" && mm->headerText(4) == "Param\xC3\xA8tres",
-              "les colonnes : M\xC3\xA9thode, le cadenas, Genre, Origine, puis Param\xC3\xA8tres et Retour");
+        check(mm && mm->columnCount() == 7 && mm->headerText(2) == "Genre" && mm->headerText(3) == "Origine" && mm->headerText(4) == "Param\xC3\xA8tres"
+                  && mm->headerText(6) == "Tests",
+              "les colonnes : M\xC3\xA9thode, le cadenas, Genre, Origine, puis Param\xC3\xA8tres, Retour et (1.50.0) Tests");
         check(mm && mm->cellText(0, 3) == "red\xC3\xA9" "finit T_Pompe.EnDefaut" && mm->rowTooltip(0).find("red\xC3\xA9" "finit T_Pompe.EnDefaut") != std::string::npos,
               "EnDefaut de T_PompeDoublee : son origine dans la 4e colonne, et dans l'infobulle de la ligne");
         float shown = 0.f;
@@ -43429,6 +43467,373 @@ void typesOnglets1131() {
     (void)arreterId;
     (void)popupId;
     (void)endefautId;
+    core::CommandGroupScope::registerStack(nullptr);
+}
+
+// ============================================== 1.50.0 (planche 01) ===============
+//  LES METHODES DES TYPES IHM = LES FONCTIONS DES SYMBOLES. La meme fenetre de creation (les memes cases pour un
+//  symbole et pour un type ; " Elle s'ecrira FUNCTION ... "), les cinq onglets de l'editeur (Code, Parametres avec SELF
+//  en tete, grise et verrouille, Locales, Constantes, Tests - le meme composant que le volet Fonctions), un cas de test
+//  qui part d'une instance d'essai du type (SELF avant, SELF.X apres), la migration d'un projet d'avant (les VAR du
+//  corps dans Locales et Constantes, a l'ouverture, au meme format, les memes verdicts), Ctrl+Z.
+//  HMI_TEST_M150=1 : ces essais seuls.
+void methodes150() {
+    std::printf("1.50.0 (planche 01) : les m\xC3\xA9thodes des types IHM = les fonctions des symboles\n");
+    namespace fs = std::filesystem;
+    namespace de = hmi::decledit;
+    struct EditionIhm {
+        core::Edition before = core::edition();
+        EditionIhm() { core::setEdition(core::Edition::Ihm); }
+        ~EditionIhm() { core::setEdition(before); }
+    } editionIhm;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    core::CommandGroupScope::registerStack(&stack);
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    Project& p = doc->project;
+    HmiType pompe;
+    pompe.id = p.allocate();
+    pompe.name = "T_Pompe";
+    pompe.members = {{"Debit", "REAL", "", ""}, {"Pression", "REAL", "", ""}, {"EnMarche", "BOOL", "", ""}, {"EnDefaut", "BOOL", "", ""}};
+    const Id pompeId = pompe.id;
+    p.programs.types.push_back(pompe);
+    {
+        Variable v;
+        v.id = p.allocate();
+        v.name = "Pompe1";
+        v.type = "T_Pompe";
+        p.programs.variables.push_back(v);
+    }
+    View sym = makeView(p, "Sym_Carte");
+    sym.role = "symbole";
+    p.views.push_back(sym);
+    const Id symId = p.views.back().id;
+
+    // ---- 1. LA MEME FENETRE : la fonction d'un symbole et la methode d'un type ont les memes cases ----
+    {
+        menu::MenuManager mm{menu::MenuFactory{}};
+        const auto open = [&](Id owner, Id type) {
+            app::HmiNewFunctionDialog::Spec spec;
+            spec.doc = doc;
+            spec.owner = owner;
+            spec.type = type;
+            mm.ShowDialog(std::make_unique<app::HmiNewFunctionDialog>(std::move(spec)), [](const menu::DialogResult&) {});
+            mm.applyPending();
+            return dynamic_cast<app::HmiNewFunctionDialog*>(mm.top());
+        };
+        const std::vector<std::string> fields = {".name", ".generics", ".return", ".unit", ".virtual", ".description", ".ok", ".cancel"};
+        const auto has = [](app::HmiNewFunctionDialog* d, const std::string& f) {
+            return d && d->widgetRoot() && d->widgetRoot()->findById("dialog.hmiNewFunction" + f) != nullptr;
+        };
+        auto* fs1 = open(symId, kNoId);
+        bool symAll = fs1 != nullptr;
+        for (const auto& f : fields) symAll = symAll && has(fs1, f);
+        check(fs1 && fs1->title() == "Nouvelle fonction du symbole Sym_Carte" && symAll, "le symbole : Nom, G\xC3\xA9n\xC3\xA9riques, Retour, Unit\xC3\xA9, Virtuelle, Description, Cr\xC3\xA9" "er");
+        if (fs1) fs1->cancel();
+        mm.applyPending();
+        auto* ft = open(kNoId, pompeId);
+        bool typeAll = ft != nullptr;
+        for (const auto& f : fields) typeAll = typeAll && has(ft, f);
+        check(ft && ft->title() == "Nouvelle m\xC3\xA9thode du type T_Pompe" && typeAll && has(ft, ".public") && has(ft, ".private"),
+              "le type : les m\xC3\xAAmes cases, et la Port\xC3\xA9" "e (Publique, Priv\xC3\xA9" "e) en plus");
+        if (ft) {
+            const auto* ok = dynamic_cast<const ui::Button*>(ft->widgetRoot()->findById("dialog.hmiNewFunction.ok"));
+            check(ok && ok->text() == "Cr\xC3\xA9" "er", "le bouton reste \xC2\xAB Cr\xC3\xA9" "er \xC2\xBB (plus \xC2\xAB Cr\xC3\xA9" "er la m\xC3\xA9thode \xC2\xBB)");
+            const auto* virt = dynamic_cast<const ui::Checkbox*>(ft->widgetRoot()->findById("dialog.hmiNewFunction.virtual"));
+            check(virt && virt->text() == "Virtuelle : un sous-type peut la red\xC3\xA9" "finir", "Virtuelle (plus \xC2\xAB Red\xC3\xA9" "finissable \xC2\xBB)");
+            check(ft->answer().name == "Methode", "un nom libre propos\xC3\xA9 : Methode");
+            ft->setName("Demarrer");
+            ft->setReturnType("BOOL");
+            ft->setVirtual(true);
+            same_text(ft->declaration(), "FUNCTION PUBLIC VIRTUAL Demarrer : BOOL", "Elle s'\xC3\xA9" "crira : FUNCTION (la r\xC3\xA9ponse), pas METHOD");
+            check(ft->calls() == "Dans le type : Demarrer(\xE2\x80\xA6) ou SELF.Demarrer(\xE2\x80\xA6)   \xC2\xB7   ailleurs : Pompe1.Demarrer(\xE2\x80\xA6)",
+                  "son appel : " + ft->calls());
+            ft->setName("EnMarche");
+            check(!ft->canConfirm() && ft->nameProblem().find("d\xC3\xA9j\xC3\xA0 un membre de T_Pompe") != std::string::npos, "un nom de membre : refus\xC3\xA9");
+            ft->setName("Demarrer");
+            ft->setGenerics("T : ANY_NUM");
+            check(ft->canConfirm() && ft->declaration().rfind("TEMPLATE <T : ANY_NUM> FUNCTION PUBLIC VIRTUAL Demarrer", 0) == 0,
+                  "des g\xC3\xA9n\xC3\xA9riques par m\xC3\xA9thode, comme une fonction de symbole : " + ft->declaration());
+            ft->cancel();
+        }
+        mm.applyPending();
+    }
+
+    // ---- 2. Creer : une commande (un Ctrl+Z), la methode choisie, l'onglet Parametres ouvert ----
+    app::HmiTypesPane types("ty150", doc, apply);
+    types.setBounds({0, 0, 1800, 1000});
+    types.layout();
+    types.selectType(pompeId);
+    auto* methods = types.methods();
+    check(methods && methods->type() == pompeId, "T_Pompe : la section M\xC3\xA9thodes");
+    if (!methods) return;
+    app::HmiNewFunctionDialog::Answer a;
+    a.name = "Demarrer";
+    a.returnType = "BOOL";
+    a.description = "d\xC3\xA9marre la pompe en rampe";
+    a.isVirtual = true;
+    std::string why;
+    const Id dem = methods->createMethod(a, &why);
+    check(dem != kNoId && methods->selectedMethod() == dem && methods->currentCodeTab() == app::HmiMethodsPane::CodeTabParameters,
+          "Cr\xC3\xA9" "er : Demarrer choisie, l'onglet Param\xC3\xA8tres ouvert " + why);
+    if (dem == kNoId) return;
+    {
+        a.name = "Convertir";
+        a.returnType = "T";
+        a.generics = "T : ANY_NUM";
+        a.isVirtual = false;
+        a.pub = false;
+        const std::string label0 = stack.undoLabel();
+        const Id conv = methods->createMethod(a, &why);
+        const auto* m = hmi::methodById(p, conv);
+        check(m && m->visibility == hmi::Visibility::Private && m->generics.size() == 1 && m->returnType == "T"
+                  && m->description == a.description && stack.undoLabel() == "Nouvelle m\xC3\xA9thode T_Pompe.Convertir",
+              "une m\xC3\xA9thode priv\xC3\xA9" "e et g\xC3\xA9n\xC3\xA9rique : UNE commande (" + stack.undoLabel() + ") " + why);
+        check(m && hmi::methodFunctionText(p, "T_Pompe", *m).rfind("TEMPLATE <T : ANY_NUM> FUNCTION METHODE_", 0) == 0,
+              "sa fonction interne porte son TEMPLATE <T>");
+        (void)stack.undo();
+        check(!hmi::methodById(p, conv) && p.hmiType(pompeId)->methods.size() == 1 && stack.undoLabel() == label0,
+              "un seul Ctrl+Z : elle dispara\xC3\xAEt toute");
+        a.generics.clear();
+    }
+
+    // ---- 3. LES CINQ ONGLETS : les memes que ceux d'une fonction ----
+    {
+        hmi::HmiFunction moy;
+        moy.id = p.allocate();
+        moy.name = "Moyenne";
+        moy.returnType = "REAL";
+        p.programs.functions.push_back(moy);
+        app::HmiFunctionsPane functions("f150", doc, apply);
+        functions.setBounds({0, 0, 1600, 900});
+        functions.layout();
+        functions.selectFunction(moy.id);
+        methods->selectMethod(dem);
+        auto& mt = methods->codeTabs();
+        auto& ftabs = functions.codeTabs();
+        bool same = mt.tabCount() == 5 && ftabs.tabCount() == 5;
+        std::string titles;
+        for (std::size_t i = 0; same && i < 5; ++i) {
+            same = mt.tab(i) && ftabs.tab(i) && mt.tab(i)->title == ftabs.tab(i)->title;
+            titles += (titles.empty() ? "" : " | ") + (mt.tab(i) ? mt.tab(i)->title : std::string("?"));
+        }
+        check(same && titles == "Code | Param\xC3\xA8tres | Locales | Constantes | Tests", "les cinq onglets, ceux d'une fonction : " + titles);
+        p.programs.functions.clear();
+    }
+
+    // ---- 4. Parametres : SELF en tete, grise et verrouille ; un parametre, une locale, une constante ----
+    {
+        auto& grid = methods->parametersGrid();
+        check(grid.add() && grid.setCell(0, de::Column::Name, "Consigne") && grid.setCell(0, de::Column::Type, "REAL"), "Consigne : REAL");
+        check(grid.add() && grid.setCell(1, de::Column::Name, "Rampe") && grid.setCell(1, de::Column::Type, "TIME"), "Rampe : TIME");
+        const auto model = grid.table().model();
+        const int name = grid.tableColumnOf(de::Column::Name), type = grid.tableColumnOf(de::Column::Type), mode = grid.tableColumnOf(de::Column::Mode);
+        check(model && name >= 0 && type >= 0 && mode >= 0 && model->rowCount() == 3 && grid.count() == 2
+                  && model->cellText(0, static_cast<std::size_t>(name)) == "SELF" && model->cellText(0, static_cast<std::size_t>(type)) == "T_Pompe"
+                  && model->cellText(0, static_cast<std::size_t>(mode)) == "Entr\xC3\xA9" "e/sortie"
+                  && model->cellText(1, static_cast<std::size_t>(name)) == "Consigne",
+              "SELF : T_Pompe, entr\xC3\xA9" "e/sortie, en t\xC3\xAAte ; puis Consigne, Rampe (2 param\xC3\xA8tres compt\xC3\xA9s)");
+        bool locked = model != nullptr;
+        for (std::size_t c = 0; model && c < model->columnCount(); ++c) locked = locked && !model->editable(0, c);
+        check(locked && model->cellStyle(0, static_cast<std::size_t>(name)).icon == ui::Icon::Lock
+                  && model->cellStyle(0, static_cast<std::size_t>(name)).fgTone == ui::Tone::Muted
+                  && !model->setCellText(0, static_cast<std::size_t>(name), "MOI"),
+              "SELF : gris\xC3\xA9, le cadenas, ni renomm\xC3\xA9 ni chang\xC3\xA9");
+        grid.table().selectModelRows({0}, true);
+        check(grid.selectedRows().empty() && !grid.removeSelected(), "SELF choisi : rien \xC3\xA0 retirer");
+        grid.selectRows({0});
+        check(grid.table().selectedModelRows().size() == 1 && grid.table().selectedModelRows().front() == 1 && grid.rowName(0) == "Consigne",
+              "la ligne 0 de la grille est Consigne (la 2e de la table, sous SELF)");
+        auto& locals = methods->localsGrid();
+        check(locals.add() && locals.setCell(0, de::Column::Name, "Ecart") && locals.setCell(0, de::Column::Type, "REAL"), "Locales : Ecart : REAL");
+        auto& consts = methods->constantsGrid();
+        check(consts.add() && consts.setCell(0, de::Column::Name, "PRESSION_MAX") && consts.setCell(0, de::Column::Type, "REAL")
+                  && consts.setCell(0, de::Column::Value, "12.0"),
+              "Constantes : PRESSION_MAX : REAL := 12.0");
+        check(!grid.setCell(0, de::Column::Name, "SELF"), "un param\xC3\xA8tre ne s'appelle pas SELF : " + grid.lastMessage());
+        const auto* m = hmi::methodById(p, dem);
+        check(m && hmi::methodParamsText(*m) == "Consigne : REAL; Rampe : TIME", "la signature : Demarrer(Consigne : REAL; Rampe : TIME)");
+        check(methods->setBody(dem, "IF EnDefaut THEN\n    Demarrer := FALSE;\nELSE\n    Ecart := Consigne - Pression;\n"
+                                    "    EnMarche := Consigne <= PRESSION_MAX;\n    Debit := Ecart;\n    Demarrer := EnMarche;\nEND_IF;\n")
+                  && methods->compileCurrent() == 0,
+              "le corps lit SELF, ses param\xC3\xA8tres, sa locale et sa constante : rien \xC3\xA0 redire");
+        check(locals.add() && hmi::methodById(p, dem)->decls.size() == 5, "une locale de plus");
+        (void)stack.undo();
+        check(hmi::methodById(p, dem)->decls.size() == 4, "Ctrl+Z : la locale ajout\xC3\xA9" "e s'en va");
+    }
+
+    // ---- 5. TESTS : un cas part d'une instance d'essai du type (SELF avant, SELF.X apres) ----
+    {
+        methods->selectMethod(dem);
+        methods->showCodeTab(app::HmiMethodsPane::CodeTabTests);
+        auto& page = methods->testsPage();
+        check(page.function() == dem, "l'onglet Tests montre Demarrer");
+        app::HmiFunctionTestsPage::NewCase c1;
+        c1.name = "d\xC3\xA9marre \xC3\xA0 vide";
+        c1.arguments = {"6.0", "T#2s"};
+        c1.expected = "TRUE";
+        const Id t1 = page.addCase(c1, &why);
+        check(t1 != kNoId && page.addGiven(t1, "Pression", "2.0", &why) && page.addCheck(t1, "SELF.Debit", "4.0", "", &why)
+                  && page.addCheck(t1, "SELF.EnMarche", "TRUE", "", &why),
+              "d\xC3\xA9marre \xC3\xA0 vide : Pression := 2.0 avant (un membre seul), SELF.Debit = 4.0 apr\xC3\xA8s " + why);
+        app::HmiFunctionTestsPage::NewCase c2;
+        c2.name = "refuse en d\xC3\xA9" "faut";
+        c2.arguments = {"6.0", "T#2s"};
+        c2.expected = "FALSE";
+        const Id t2 = page.addCase(c2, &why);
+        check(t2 != kNoId && page.addGiven(t2, "SELF.EnDefaut", "TRUE", &why), "refuse en d\xC3\xA9" "faut : SELF.EnDefaut := TRUE " + why);
+        app::HmiFunctionTestsPage::NewCase c3;
+        c3.name = "consigne trop haute";
+        c3.arguments = {"15.0", "T#2s"};
+        c3.expected = "TRUE";
+        const Id t3 = page.addCase(c3, &why);
+        check(t3 != kNoId, "consigne trop haute : attendu TRUE (il rend FALSE)");
+        check(t1 != kNoId && !page.addGiven(t1, "SELF.Inconnu", "1", &why), "SELF.Inconnu : refus\xC3\xA9 (" + why + ")");
+        check(page.runCase(t1), "le cas 1 r\xC3\xA9ussit : " + page.lastMessage());
+        check(page.runCase(t2), "le cas 2 r\xC3\xA9ussit (EnDefaut pos\xC3\xA9) : " + page.lastMessage());
+        check(!page.runCase(t3) && page.lastResult(t3) && page.lastResult(t3)->verdict == hmi::Verdict::Failed,
+              "le cas 3 \xC3\xA9" "choue : " + page.lastMessage());
+        const auto* r1 = page.lastResult(t1);
+        check(r1 && r1->call == "Demarrer(6.0, T#2s)", "l'appel se dit dans les mots de la m\xC3\xA9thode : " + (r1 ? r1->call : std::string("?")));
+        check(p.variable("Essai_SELF") == nullptr && !p.programs.variables.empty() && p.programs.functions.empty(),
+              "le banc ne touche pas le projet (ni Essai_SELF, ni Essai_Demarrer)");
+        std::vector<app::TestLine> said;
+        auto hosts = page.hosts();
+        hosts.output = [&said](const std::vector<app::TestLine>& lines) { said = lines; };
+        methods->setTestHosts(hosts);
+        check(methods->runTests() == 2 && methods->lastCampaign().tally.failed == 1 && !said.empty()
+                  && said.front().element == "type:" + std::to_string(pompeId),
+              "Lancer les tests (la barre des M\xC3\xA9thodes) : 2 r\xC3\xA9ussis, 1 \xC3\xA9" "chec ; la ligne m\xC3\xA8ne au type");
+        const auto owner = app::ownerOfTest(p, t2);
+        check(owner && owner->type == pompeId && owner->function == dem, "un cas d'une m\xC3\xA9thode : son type et sa m\xC3\xA9thode (le double-clic aux Sorties)");
+        std::vector<hmi::Issue> issues;
+        hmi::checkFunctionTests(p, issues);
+        check(issues.empty() || std::none_of(issues.begin(), issues.end(), [](const hmi::Issue& i) { return i.severity == hmi::Issue::Severity::Error; }),
+              "G\xC3\xA9n\xC3\xA9rer lit les cas de la m\xC3\xA9thode sur son banc : aucune erreur");
+        {
+            // une methode PRIVEE se teste aussi (le banc seulement la rend appelable)
+            const auto* m = hmi::methodById(p, dem);
+            check(m && methods->setVirtual(dem, false) && methods->setPrivate(dem, true) && page.runCase(t1),
+                  "Demarrer priv\xC3\xA9" "e : son cas r\xC3\xA9ussit encore : " + page.lastMessage());
+            (void)stack.undo();
+            (void)stack.undo();
+        }
+        const std::size_t before = hmi::methodById(p, dem)->tests.size();
+        (void)stack.undo();
+        check(hmi::methodById(p, dem)->tests.size() == before - 1, "Ctrl+Z : le dernier cas s'en va");
+        (void)stack.redo();
+    }
+
+    // ---- 6. MIGRATION : un projet d'avant 1.50.0 (les VAR dans le corps) - a l'ouverture, ses onglets ----
+    {
+        Project old;
+        HmiType t;
+        t.id = old.allocate();
+        t.name = "T_Vanne";
+        t.members = {{"Ouverture", "REAL", "", ""}, {"Ouverte", "BOOL", "", ""}};
+        hmi::HmiFunction m;
+        m.id = old.allocate();
+        m.name = "Ouvrir";
+        m.returnType = "BOOL";
+        hmi::Declaration cible;
+        cible.id = old.allocate();
+        cible.kind = hmi::DeclKind::Parameter;
+        cible.name = "Cible";
+        cible.type = "REAL";
+        m.decls.push_back(cible);                         // la ligne " Cible : REAL " d'avant (deja une declaration du fichier)
+        m.body = "VAR\n    Ecart : REAL; (* l'\xC3\xA9" "cart \xC3\xA0 la cible *)\nEND_VAR\nVAR CONSTANT\n    PLEIN : REAL := 100.0;\nEND_VAR\n"
+                 "Ecart := Cible - Ouverture;\nOuverture := Cible;\nOuverte := Ouverture >= PLEIN;\nOuvrir := Ecart > 0.0;\n";
+        hmi::FunctionTest ft;
+        ft.id = old.allocate();
+        ft.name = "ouvre en grand";
+        ft.arguments = {"100.0"};
+        ft.expected = "TRUE";
+        ft.checks = {{"SELF.Ouverte", "TRUE", ""}};
+        m.tests.push_back(ft);
+        t.methods.push_back(m);
+        const Id vanneId = t.id, ouvrirId = m.id;
+        old.programs.types.push_back(t);
+        const auto before = hmi::runFunctionTests(old, old.programs.types[0].methods[0]);
+        check(before.results.size() == 1 && before.results[0].verdict == hmi::Verdict::Passed, "avant : le cas r\xC3\xA9ussit (" + (before.results.empty() ? std::string("?") : before.results[0].detail) + ")");
+        const fs::path dir = fs::temp_directory_path() / ("xpg_m150_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        check(static_cast<bool>(hmi::save(old, dir.string())), "le projet d'avant, \xC3\xA9" "crit");
+        const auto readIndex = [](const fs::path& folder) {
+            std::ifstream in(folder / "ihm" / "ihm.txt", std::ios::binary);
+            return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        };
+        const std::string written = readIndex(dir);
+        const auto formatOf = [](const std::string& index) {
+            const auto at = index.find("(format ");
+            return at == std::string::npos ? std::string{} : index.substr(at + 8, index.find(')', at) - at - 8);
+        };
+        check(written.find("methode_type") != std::string::npos && written.find("END_VAR") != std::string::npos, "son corps garde ses VAR (le format d'avant)");
+        const auto loaded = hmi::load(dir.string());
+        const hmi::HmiFunction* mig = loaded ? hmi::methodById(*loaded, ouvrirId) : nullptr;
+        bool local = false, constant = false, param = false;
+        for (const auto& d : mig ? mig->decls : std::vector<hmi::Declaration>{}) {
+            local = local || (d.name == "Ecart" && d.kind == hmi::DeclKind::Variable && d.description.find("cart") != std::string::npos);
+            constant = constant || (d.name == "PLEIN" && d.kind == hmi::DeclKind::Constant && d.value == "100.0");
+            param = param || (d.name == "Cible" && d.kind == hmi::DeclKind::Parameter);
+        }
+        check(mig && local && constant && param && mig->body.find("END_VAR") == std::string::npos && mig->body.find("Ouvrir := Ecart > 0.0;") != std::string::npos
+                  && mig->tests.size() == 1,
+              "\xC3\xA0 l'ouverture : Cible dans Param\xC3\xA8tres, Ecart (sa documentation) dans Locales, PLEIN dans Constantes ; le corps sans ses VAR, ses cas gard\xC3\xA9s");
+        if (mig) {
+            const auto after = hmi::runFunctionTests(*loaded, *mig);
+            check(after.results.size() == 1 && after.results[0].verdict == hmi::Verdict::Passed, "apr\xC3\xA8s : le m\xC3\xAA" "me cas r\xC3\xA9ussit (le moteur lit les m\xC3\xAA" "mes d\xC3\xA9" "clarations)");
+            check(hmi::checkMethod(*loaded, {}, ouvrirId).empty(), "Compiler : rien \xC3\xA0 redire apr\xC3\xA8s la migration");
+            const fs::path dir2 = dir.string() + "_b";
+            check(static_cast<bool>(hmi::save(*loaded, dir2.string())), "r\xC3\xA9" "enregistr\xC3\xA9");
+            const std::string again = readIndex(dir2);
+            check(formatOf(again) == formatOf(written) && !formatOf(written).empty() && again.find("methode_type") != std::string::npos
+                      && again.find("END_VAR") == std::string::npos && again.find("Ecart") != std::string::npos,
+                  "le m\xC3\xAAme format (" + formatOf(written) + " \xE2\x86\x92 " + formatOf(again) + "), la m\xC3\xA9thode et ses d\xC3\xA9" "clarations");
+            const auto reread = hmi::load(dir2.string());
+            const auto* back = reread ? hmi::methodById(*reread, ouvrirId) : nullptr;
+            check(back && back->decls.size() == mig->decls.size() && back->body == mig->body, "relu : la m\xC3\xAAme m\xC3\xA9thode (rien ne bouge une 2e fois)");
+            fs::remove_all(dir2, ec);
+        }
+        (void)vanneId;
+        fs::remove_all(dir, ec);
+        // Le bandeau " Migrer ce code " des fonctions sert aussi a une methode d'un document deja ouvert.
+        hmi::HmiFunction legacy;
+        legacy.id = p.allocate();
+        legacy.name = "Purger";
+        legacy.body = "VAR\n    Duree : TIME;\nEND_VAR\nDuree := T#5s;\n";
+        p.hmiType(pompeId)->methods.push_back(legacy);
+        methods->refresh();
+        methods->selectMethod(legacy.id);
+        check(methods->declBanner().shown(), "Purger (ses VAR dans le corps) : le bandeau \xC2\xAB Migrer \xC2\xBB dans l'onglet Code");
+        check(methods->migrateCurrent() && hmi::methodById(p, legacy.id)->decls.size() == 1 && methods->localsGrid().count() == 1,
+              "Migrer : Duree dans Locales");
+        (void)stack.undo();
+        check(hmi::methodById(p, legacy.id)->body.find("END_VAR") != std::string::npos, "Ctrl+Z : le corps d'avant, \xC3\xA0 l'octet pr\xC3\xA8s");
+    }
+
+    // ---- 7. Une interface : ses signatures n'ont que l'onglet Parametres ----
+    {
+        HmiType iface;
+        iface.id = p.allocate();
+        iface.name = "I_Demarrable";
+        iface.kind = hmi::HmiTypeKind::Interface;
+        hmi::HmiFunction sig;
+        sig.id = p.allocate();
+        sig.name = "Demarrer";
+        sig.returnType = "BOOL";
+        iface.methods.push_back(sig);
+        const Id ifaceId = iface.id;
+        p.programs.types.push_back(iface);
+        types.selectType(ifaceId);
+        auto& tabs = methods->codeTabs();
+        check(tabs.tabHidden(app::HmiMethodsPane::CodeTabCode) && tabs.tabHidden(app::HmiMethodsPane::CodeTabLocals)
+                  && tabs.tabHidden(app::HmiMethodsPane::CodeTabConstants) && tabs.tabHidden(app::HmiMethodsPane::CodeTabTests)
+                  && !tabs.tabHidden(app::HmiMethodsPane::CodeTabParameters) && methods->currentCodeTab() == app::HmiMethodsPane::CodeTabParameters,
+              "une signature d'interface : l'onglet Param\xC3\xA8tres seul");
+        types.selectType(pompeId);
+        check(!tabs.tabHidden(app::HmiMethodsPane::CodeTabCode) && !tabs.tabHidden(app::HmiMethodsPane::CodeTabTests), "T_Pompe : les cinq onglets reviennent");
+    }
     core::CommandGroupScope::registerStack(nullptr);
 }
 
@@ -49570,7 +49975,15 @@ void cycleVue1270() {
     }
 }
 
+#include "hmi_editor_etirer.inl"   // 1.50.0 (planche 02) : Etirer dans le clic droit d'un objet de la vue
+
 int main(int argc, char** argv) {
+    // 1.50.0 : HMI_TEST_ETI=1 - Etirer (le moteur, le menu, la barre, l'apercu, la fenetre), seul.
+    if (const char* only = std::getenv("HMI_TEST_ETI"); only && *only == '1') {
+        etirer1500();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.26.0 : resources/polices - le 3e argument ; sinon a cote des fixtures (tests/fixtures/MAST.XPG -> la racine).
     if (argc > 3) gFonts1260 = fs1260::path(argv[3]);
     else if (argc > 1) gFonts1260 = fs1260::path(argv[1]).parent_path().parent_path().parent_path() / "resources" / "polices";
@@ -49761,6 +50174,13 @@ int main(int argc, char** argv) {
     // 1.13.0 (lot F3) : HMI_TEST_F3=1 - les defauts vus aux captures (unites, tests, aide F1), seuls.
     if (const char* only = std::getenv("HMI_TEST_F3"); only && *only == '1') {
         lotF3_113();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.50.0 (planche 01) : HMI_TEST_M150=1 - les methodes des types IHM = les fonctions des symboles, avec l'ecran des objets.
+    if (const char* only = std::getenv("HMI_TEST_M150"); only && *only == '1') {
+        methodes150();
+        objets113();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -50182,6 +50602,7 @@ int main(int argc, char** argv) {
     corbeillePanneau1251();                 // 1.25.1 : la Corbeille (par genre, la recherche, Restaurer, Vider)
     corbeilleProjet1261();                  // 1.26.1 : la Corbeille du projet IHM (vues, ressources... supprimees)
     cycleVue1270();                         // 1.27.0 : le cycle de la vue, deballe (Execution, glisser-deposer, Moment)
+    etirer1500();                           // 1.50.0 (planche 02) : Etirer dans le clic droit d'un objet de la vue
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)
@@ -50338,6 +50759,7 @@ int main(int argc, char** argv) {
     zoom11231();                            // 1.12.31 : le zoom de toute la page, la vue en ilot, le panneau du bas
     bibliotheques113();                     // 1.13.0 (lot J8) : espaces de noms et bibliotheques - le volet, l'arbre
     objets113();                            // 1.13.0 (J1b) : l'ecran des objets - methodes, visibilite, heritage, interfaces
+    methodes150();                          // 1.50.0 (planche 01) : les methodes des types IHM = les fonctions des symboles
     testsUnitaires113();                    // 1.13.0 (lot J4b) : les tests unitaires - l'onglet Tests, les verdicts, l'arbre
     unites113();                            // 1.13.0 (lot J6b) : les unites - la colonne Unite, le selecteur, Unites de mesure
     lotF3_113();                            // 1.13.0 (lot F3) : les defauts vus aux captures (unites, tests, aide F1)

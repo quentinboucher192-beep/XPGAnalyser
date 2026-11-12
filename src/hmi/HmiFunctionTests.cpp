@@ -8,6 +8,7 @@
 #include "HmiDecl.hpp"             // decl::codeOf
 #include "HmiEnums.hpp"            // 1.13.0 : un retour ou une verif d'enumeration, compare par son nom
 #include "HmiExpr.hpp"             // Expression, cellValue n'est pas ici
+#include "HmiMethods.hpp"          // 1.50.0 : methodById (les tests d'une methode d'un type IHM)
 #include "HmiRuntime.hpp"
 #include "HmiScript.hpp"           // splitDeclarations, LocalVar
 #include "HmiSymbols.hpp"          // cellValue (la regle des cases)
@@ -443,8 +444,153 @@ std::string FunctionTestReport::summary() const {
     return s;
 }
 
+// ================================================= 1.50.0 : le banc d'une methode ===
+bool isTypeMethod(const Project& p, const HmiFunction& m) {
+    const HmiType* owner = nullptr;
+    return m.id != kNoId && methodById(p, m.id, &owner) != nullptr && owner && owner->kind == HmiTypeKind::Structure;
+}
+
+bool methodBench(const Project& p, const HmiFunction& m, MethodBench& out, std::string* why) {
+    const HmiType* owner = nullptr;
+    if (m.id == kNoId || !methodById(p, m.id, &owner) || !owner) {
+        if (why) *why = "pas une m\xC3\xA9thode d'un type IHM";
+        return false;
+    }
+    if (owner->kind != HmiTypeKind::Structure) {
+        if (why) *why = "une signature d'interface n'a pas de corps";
+        return false;
+    }
+    out = MethodBench{};
+    out.project = p;
+    Project& q = out.project;
+    out.typeName = fullName(*owner);
+    for (const auto& mem : types::membersOf(p, out.typeName)) out.members.push_back(mem.name);
+    // La methode telle que la page la montre (une copie a jour), appelable du banc (une privee aussi : le banc seulement).
+    for (auto& t : q.programs.types)
+        for (auto& x : t.methods)
+            if (x.id == m.id) {
+                x = m;
+                x.visibility = Visibility::Public;
+            }
+    // L'instance d'essai : une variable IHM du type, ses membres a leur valeur initiale (prime()).
+    std::string self = "Essai_SELF";
+    for (int k = 2; q.variable(self) || q.functionByName(self); ++k) self = "Essai_SELF" + std::to_string(k);
+    out.self = self;
+    Variable v;
+    v.id = q.allocate();
+    v.name = self;
+    v.type = out.typeName;
+    q.programs.variables.push_back(std::move(v));
+    // L'appel : Essai_<Methode>(ses parametres) := Essai_SELF.<Methode>(...).
+    HmiFunction call;
+    call.id = q.allocate();
+    std::string name = "Essai_" + m.name;
+    for (int k = 2; q.functionByName(name) || q.variable(name); ++k) name = "Essai_" + m.name + std::to_string(k);
+    call.name = name;
+    call.returnType = m.returnType;
+    call.returnUnit = m.returnUnit;
+    call.generics = m.generics;
+    call.description = m.description;
+    std::string args;
+    for (const auto& d : m.decls) {
+        if (d.kind != DeclKind::Parameter) continue;
+        Declaration c = d;
+        c.id = q.allocate();
+        call.decls.push_back(std::move(c));
+        args += (args.empty() ? "" : ", ") + d.name + (d.mode == PassMode::Out ? " => " : " := ") + d.name;
+    }
+    const std::string invoke = self + "." + m.name + "(" + args + ")";
+    call.body = m.returnType.empty() ? invoke + ";\n" : name + " := " + invoke + ";\n";
+    q.programs.functions.push_back(call);
+    out.call = std::move(call);
+    return true;
+}
+
+std::string benchText(const MethodBench& b, std::string_view text, bool bareMembers) {
+    const auto uc = [](char c) { return static_cast<unsigned char>(c); };
+    std::string out;
+    out.reserve(text.size() + 16);
+    char prev = 0;                                   // le dernier caractere ecrit (hors blancs)
+    std::size_t i = 0;
+    while (i < text.size()) {
+        const char c = text[i];
+        if (c == '\'' || c == '"') {                 // un texte : tel quel
+            const std::size_t from = i++;
+            while (i < text.size() && text[i] != c) i += (text[i] == '$' && i + 1 < text.size()) ? 2 : 1;
+            if (i < text.size()) ++i;
+            out.append(text.substr(from, i - from));
+            prev = c;
+            continue;
+        }
+        if (std::isalpha(uc(c)) || c == '_') {
+            std::size_t j = i;
+            while (j < text.size() && (std::isalnum(uc(text[j])) || text[j] == '_')) ++j;
+            const std::string word(text.substr(i, j - i));
+            std::size_t k = j;
+            while (k < text.size() && (text[k] == ' ' || text[k] == '\t')) ++k;
+            const bool free = prev != '.' && prev != '#';          // ni Pompe.SELF, ni 16#FF, ni T#5s
+            const bool call = k < text.size() && text[k] == '(';
+            const bool member = std::any_of(b.members.begin(), b.members.end(), [&](const std::string& n) { return iequals(n, word); });
+            if (free && (iequals(word, "SELF") || iequals(word, "THIS"))) out += b.self;
+            else if (free && bareMembers && !call && member && !b.project.variable(word)) out += b.self + "." + word;
+            else out += word;
+            prev = word.back();
+            i = j;
+            continue;
+        }
+        out += c;
+        if (!std::isspace(uc(c))) prev = c;
+        ++i;
+    }
+    return out;
+}
+
+FunctionTest benchCase(const MethodBench& b, const FunctionTest& t) {
+    const auto formula = [](const std::string& s) { const std::string x = trim(s); return !x.empty() && x.front() == '='; };
+    FunctionTest out = t;
+    for (auto& g : out.givens) {
+        g.target = benchText(b, g.target);
+        if (formula(g.value)) g.value = benchText(b, g.value);
+    }
+    for (auto& c : out.checks) {
+        if (!iequals(trim(c.target), "JOURNAL")) c.target = benchText(b, c.target);
+        if (formula(c.expected)) c.expected = benchText(b, c.expected);
+    }
+    if (formula(out.expected)) out.expected = benchText(b, out.expected);
+    for (auto& a : out.arguments) a = benchText(b, a, false);   // SELF.Debit en argument ; un mot seul reste un texte
+    return out;
+}
+
+namespace {
+// Le resultat d'un cas joue sur le banc d'une methode, dit dans les mots de la methode : Demarrer(6.0) (pas
+// Essai_Demarrer), Essai_SELF redevenu SELF dans le detail.
+FunctionTestResult fromBench(const MethodBench& b, const HmiFunction& m, FunctionTestResult r) {
+    const auto back = [&](std::string s) {
+        for (std::size_t at = s.find(b.self); at != std::string::npos; at = s.find(b.self, at + 4)) s.replace(at, b.self.size(), "SELF");
+        return s;
+    };
+    if (r.call.rfind(b.call.name + "(", 0) == 0) r.call = m.name + r.call.substr(b.call.name.size());
+    r.detail = back(r.detail);
+    return r;
+}
+} // namespace
+
 // ============================================================ le moteur =======
 FunctionTestResult runFunctionTest(const Project& p, const HmiFunction& f, const FunctionTest& test, sim::Environment* plc) {
+    // 1.50.0 : une methode d'un type IHM - le cas se joue sur son banc (une instance d'essai du type).
+    if (isTypeMethod(p, f)) {
+        MethodBench b;
+        std::string why;
+        if (!methodBench(p, f, b, &why)) {
+            FunctionTestResult res;
+            res.test = test.id;
+            res.name = test.name;
+            res.verdict = Verdict::Error;
+            res.detail = why;
+            return res;
+        }
+        return fromBench(b, f, runFunctionTest(b.project, b.call, benchCase(b, test), plc));
+    }
     FunctionTestResult res;
     res.test = test.id;
     res.name = test.name;
@@ -642,6 +788,12 @@ FunctionTestReport runFunctionTests(const Project& p, const HmiFunction& f, sim:
     rep.function = f.id;
     rep.functionName = f.name;
     rep.results.reserve(f.tests.size());
+    // 1.50.0 : une methode - un seul banc (la copie du projet) pour tous ses cas ; chacun y repart d'un Runtime neuf.
+    MethodBench b;
+    if (isTypeMethod(p, f) && methodBench(p, f, b)) {
+        for (const auto& t : f.tests) rep.results.push_back(fromBench(b, f, runFunctionTest(b.project, b.call, benchCase(b, t), plc)));
+        return rep;
+    }
     for (const auto& t : f.tests) rep.results.push_back(runFunctionTest(p, f, t, plc));
     return rep;
 }
@@ -766,8 +918,9 @@ std::string pathFault(const Project& p, const std::string& target) {
 
 void checkFunctionTests(const Project& p, std::vector<Issue>& out) {
     using S = Issue::Severity;
-    forEachFunction(p, [&](const HmiFunction& f, const std::string& owner, Id view) {
-        if (f.tests.empty()) return;
+    // 1.50.0 : `q` - le projet ou les cas se lisent (celui du banc pour une methode d'un type IHM : SELF.X y est un chemin).
+    const auto checkOne = [&](const Project& q, const HmiFunction& f, const std::vector<FunctionTest>& tests, const std::string& owner, Id view) {
+        if (tests.empty()) return;
         const auto parts = splitDeclarations(decl::codeOf(f), true, anyType);
         const std::size_t nParams = parts.parameters().size();
         const std::string fname = owner.empty() ? f.name : owner + "." + f.name;
@@ -782,7 +935,7 @@ void checkFunctionTests(const Project& p, std::vector<Issue>& out) {
             out.push_back(std::move(i));
         };
         std::vector<std::string> names;
-        for (const auto& t : f.tests) {
+        for (const auto& t : tests) {
             if (t.name.empty()) add(S::Error, t, "cas sans nom");
             else if (std::find_if(names.begin(), names.end(), [&](const std::string& n) { return iequals(n, t.name); }) != names.end())
                 add(S::Error, t, "nom de cas en double : " + t.name);
@@ -808,14 +961,14 @@ void checkFunctionTests(const Project& p, std::vector<Issue>& out) {
             for (std::size_t k = 0; k < t.arguments.size() && k < inputs.size(); ++k) {
                 const std::string text = trim(t.arguments[k]);
                 if (text.empty()) continue;
-                const auto cell = cellValue(&p, testCellType(f, inputs[k]->type), text);      // 1.13.0 : T dans sa contrainte
+                const auto cell = cellValue(&q, testCellType(f, inputs[k]->type), text);      // 1.13.0 : T dans sa contrainte
                 if (!cell.ok()) { add(S::Error, t, inputs[k]->name + " : " + cell.why); continue; }
                 if (!Expression::compile(cell.text).valid()) add(S::Error, t, inputs[k]->name + " : " + text + " illisible");
             }
             // 1.13.0 : l'attendu du retour, lisible comme le moteur le compare (un nombre, un booleen, une
             // valeur de l'enumeration) ; un generique (T) ou un autre type : laisse a l'appel.
             if (!f.returnType.empty() && !trim(t.expected).empty() && t.errorCode.empty())
-                if (const std::string why = unreadableExpected(p, testCellType(f, f.returnType), t.expected); !why.empty())
+                if (const std::string why = unreadableExpected(q, testCellType(f, f.returnType), t.expected); !why.empty())
                     add(S::Error, t, "attendu illisible : " + why);
             // Les poses : une variable connue, une valeur lisible.
             for (const auto& g : t.givens) {
@@ -824,19 +977,19 @@ void checkFunctionTests(const Project& p, std::vector<Issue>& out) {
                 const Expression ex = Expression::compile(target);
                 if (!ex.valid()) { add(S::Warning, t, "pose " + qmark(target) + " : cible illisible"); continue; }
                 // 1.13.0 : la variable posee existe (une faute de frappe se voit ici, pas seulement en jouant le cas).
-                if (const std::string unknown = unknownRoot(p, ex); !unknown.empty()) {
+                if (const std::string unknown = unknownRoot(q, ex); !unknown.empty()) {
                     add(S::Error, t, "pose " + qmark(target) + " : variable inconnue (" + unknown + ")");
                     continue;
                 }
                 // 1.13.0 (seconde passe) : un membre, un indice qui n'existe pas (Cuve.Niveu).
-                if (const std::string fault = pathFault(p, target); !fault.empty()) {
+                if (const std::string fault = pathFault(q, target); !fault.empty()) {
                     add(S::Error, t, "pose " + qmark(target) + " : " + fault);
                     continue;
                 }
                 // La valeur, lue comme le banc l'ecrit (la regle des cases, dans le type de la cible : =Seuil -> Seuil,
                 // 2,5 -> 2.5) ; une structure/liste [..] ou (..) : laissee a l'ecriture.
                 std::string val, why;
-                if (!givenText(p, target, g.value, val, why)) {
+                if (!givenText(q, target, g.value, val, why)) {
                     add(S::Error, t, "pose " + qmark(target) + " : " + why);
                     continue;
                 }
@@ -851,23 +1004,36 @@ void checkFunctionTests(const Project& p, std::vector<Issue>& out) {
                 const Expression ex = Expression::compile(target);
                 if (!ex.valid()) {
                     add(S::Warning, t, "v\xC3\xA9rif " + qmark(target) + " : cible illisible");
-                } else if (const std::string unknown = unknownRoot(p, ex); !unknown.empty()) {
+                } else if (const std::string unknown = unknownRoot(q, ex); !unknown.empty()) {
                     add(S::Error, t, "v\xC3\xA9rif " + qmark(target) + " : variable inconnue (" + unknown + ")");
                     continue;
-                } else if (const std::string fault = pathFault(p, target); !fault.empty()) {    // 1.13.0 : Cuve.Niveu
+                } else if (const std::string fault = pathFault(q, target); !fault.empty()) {    // 1.13.0 : Cuve.Niveu
                     add(S::Error, t, "v\xC3\xA9rif " + qmark(target) + " : " + fault);
                     continue;
                 }
                 if (trim(c.expected).empty()) add(S::Warning, t, "v\xC3\xA9rif " + qmark(target) + " : aucun attendu");
                 // 1.13.0 (seconde passe) : l'attendu d'une verif, lisible dans le type de sa cible (comme celui du retour).
-                else if (const std::string why = unreadableExpected(p, types::typeOfPath(p, target), c.expected); !why.empty())
+                else if (const std::string why = unreadableExpected(q, types::typeOfPath(q, target), c.expected); !why.empty())
                     add(S::Error, t, "v\xC3\xA9rif " + qmark(target) + " : attendu illisible : " + why);
             }
             // Un cas qui ne juge rien (ni retour attendu, ni verif, ni erreur attendue).
             if (trim(t.expected).empty() && t.checks.empty() && t.errorCode.empty())
                 add(S::Info, t, "le cas ne v\xC3\xA9rifie rien (ni attendu, ni v\xC3\xA9rif, ni erreur)");
         }
-    });
+    };
+    forEachFunction(p, [&](const HmiFunction& f, const std::string& owner, Id view) { checkOne(p, f, f.tests, owner, view); });
+    // 1.50.0 : les cas des methodes des types IHM, lus sur leur banc (l'instance d'essai du type).
+    for (const auto& t : p.programs.types)
+        for (const auto& m : t.methods) {
+            if (m.tests.empty()) continue;
+            MethodBench bench;
+            if (!methodBench(p, m, bench)) continue;
+            std::vector<FunctionTest> tests;
+            for (const auto& c : m.tests) tests.push_back(benchCase(bench, c));
+            HmiFunction shown = bench.call;
+            shown.name = m.name;
+            checkOne(bench.project, shown, tests, t.name, kNoId);
+        }
 }
 
 } // namespace hmi

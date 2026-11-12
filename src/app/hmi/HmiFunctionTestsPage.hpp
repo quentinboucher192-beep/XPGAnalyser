@@ -78,6 +78,7 @@ struct TestLine {
 struct TestOwner {
     hmi::Id view{hmi::kNoId};       // la vue, la popup ou le symbole ; kNoId : une fonction IHM du projet
     hmi::Id function{hmi::kNoId};
+    hmi::Id type{hmi::kNoId};       // 1.50.0 : une methode - son type IHM (`function` : la methode)
 };
 [[nodiscard]] std::optional<TestOwner> ownerOfTest(const hmi::Project&, hmi::Id test);
 [[nodiscard]] hmi::Id testOfElement(std::string_view element);   // "cas-test:900" -> 900 ; kNoId : autre chose

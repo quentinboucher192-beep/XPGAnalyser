@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <iterator>
 #include <cctype>
 #include <cmath>
@@ -31,7 +32,6 @@ constexpr float       kRow = 26.f;
 constexpr char        kSep = '\x1F';
 constexpr int         kAll = -2, kRecents = -1;
 // Les libelles de la ligne Construire (kSmall) : leur place, fixe comme la mise en page.
-constexpr float       kRefLabel = 150.f;
 namespace tf = hmi::typeform;
 
 std::string fit(gfx::IRenderer& r, const std::string& s, gfx::FontId f, float w) {
@@ -52,6 +52,8 @@ std::string useLabel(unsigned use) {
 }
 
 bool canReference(unsigned use) { return tf::referenceAllowed(use); }
+// 1.50.0 (planche 03) : la ligne Acces se montre la ou une forme ou un acces se choisit.
+constexpr float kAccessW = 130.f;
 
 // 1.12.14 : un type COMPOSE (un tableau, une liste, une MAP, un tuple... d'autre chose) - pas un nom.
 bool composedText(std::string_view t) {
@@ -73,7 +75,7 @@ bool looksLikeType(std::string_view t) {
     std::string u(t);
     for (auto& ch : u) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
     return u.find('[') != std::string::npos || u.find('(') != std::string::npos || u.find(" OF ") != std::string::npos
-        || u.rfind("REF_TO ", 0) == 0;
+        || u.rfind("REF_TO ", 0) == 0 || u.rfind("POINTER ", 0) == 0 || u.rfind("REFERENCE TO ", 0) == 0;   // 1.50.0 : pointer to obj
 }
 
 // 1.12.21 : LES GENERIQUES DU PORTEUR (T, K d'une structure T_Extractor<T, K>, d'un symbole, d'une popup) - leurs lignes
@@ -188,7 +190,8 @@ public:
         sh.form = formAllowed(form_) ? form_ : tf::Form::Simple;
         sh.element = nameOf(e);
         sh.parameter = trimmed(bounds_->text());
-        sh.reference = ref_ && canReference(spec_.use);
+        sh.setAccess(accessAllowed(access_) ? access_ : tf::Access::Direct);
+        sh.whole = whole_ && sh.form != tf::Form::Simple;
         return tf::compose(sh);
     }
     // 1.12.14 : un selecteur imbrique - le type complet qui sortira du premier, avec ce qu'on choisit ici.
@@ -272,7 +275,36 @@ public:
         if (!bounds.empty()) bounds_->setText(bounds);
         invalidate();
     }
-    void setReference(bool on) { ref_ = on; invalidate(); }
+    void setReference(bool on) {
+        access_ = on ? tf::Access::Ref : tf::Access::Direct;
+        invalidate();
+    }
+    // 1.50.0 (planche 03) : l'acces (Direct, REF_TO, POINTER TO), grise la ou il n'est pas permis.
+    [[nodiscard]] bool accessAllowed(tf::Access a) const { return tf::accessRefusal(a, spec_.use, spec_.constant).empty(); }
+    [[nodiscard]] std::string accessProblem(tf::Access a) const { return tf::accessRefusal(a, spec_.use, spec_.constant); }
+    bool setAccess(tf::Access a) {
+        if (!accessAllowed(a)) return false;
+        access_ = a;
+        invalidate();
+        return true;
+    }
+    void setWhole(bool on) {
+        whole_ = on;
+        invalidate();
+    }
+    [[nodiscard]] std::string accessLine() const {
+        const auto* e = selected();
+        return tf::accessSummary(access_, e ? e->name : std::string{});
+    }
+    [[nodiscard]] std::string typedNote() const { return typedNote_; }
+    // « Cible : POINTER TO Object; » - le champ (Type de Cible) et le resultat.
+    [[nodiscard]] std::string writtenAs() const {
+        const std::string res = result();
+        if (res.empty()) return {};
+        const std::string prefix = "Type de ";
+        const std::string name = spec_.field.rfind(prefix, 0) == 0 ? spec_.field.substr(prefix.size()) : std::string("x");
+        return name + " : " + res + ";";
+    }
     void setMap(bool on) {
         if (on) setForm(tf::Form::Map);
         else if (form_ == tf::Form::Map) setForm(tf::Form::Simple);
@@ -328,7 +360,8 @@ public:
         here.form = form_;
         here.element = std::string(kSlot);
         here.parameter = trimmed(bounds_->text());
-        here.reference = ref_ && canReference(spec_.use);
+        here.setAccess(accessAllowed(access_) ? access_ : tf::Access::Direct);
+        here.whole = whole_;
         s.outer = spec_.outer.empty() ? tf::compose(here) : slotted(spec_.outer, tf::compose(here));
         s.level = spec_.level + 1;
         const auto* e = selected();
@@ -339,6 +372,7 @@ public:
         s.recents = spec_.recents;
         s.generics = spec_.generics;       // 1.12.21 : T, K aussi au niveau suivant (MAP[K] OF VECTOR OF T)
         s.genericsOf = spec_.genericsOf;
+        s.constant = spec_.constant;
         typepicker::ask(std::move(s), [this](const HmiTypePicker::Answer& a) {
             if (!a.type.empty()) setComposed(a.type);
         });
@@ -354,8 +388,9 @@ protected:
         bottom_ = panel_.bottom() - 52.f;
         // 1.12.2 : trois lignes - Forme : [Simple] [Tableau] ... [Tuple] ; le parametre et [x] REF_TO ;
         // le resultat. Sans forme ni reference (un operande) : le resultat seul.
+        // 1.50.0 (planche 03) : la ligne Acces (Direct, REF_TO, POINTER TO) et sa phrase, puis S'ecrira.
         const bool construct = shownForms().size() > 1 || canReference(spec_.use);
-        constructY_ = bottom_ - (construct ? 110.f : 40.f) - (spec_.outer.empty() ? 0.f : 26.f);   // 1.12.14 : Resultat final
+        constructY_ = bottom_ - (construct ? 182.f : 40.f) - (spec_.outer.empty() ? 0.f : 26.f);   // 1.12.14 : Resultat final
         detailY_ = constructY_ - 64.f;
         list_ = {panel_.x + 16.f, panel_.y + 150.f, panel_.w - 32.f, detailY_ - 8.f - (panel_.y + 150.f)};
         relayout();
@@ -373,7 +408,6 @@ protected:
 
     // Les cases de la forme : les puces (mesurees au dessin), le champ du parametre, la case REF_TO.
     void relayout() {
-        refBox_ = {};
         const float x0 = panel_.x + 16.f + 96.f;
         const float y = constructY_ + 34.f;
         const auto label = tf::parameterLabel(form_);
@@ -384,7 +418,21 @@ protected:
         } else {
             bounds_->setBounds({});
         }
-        if (canReference(spec_.use)) refBox_ = {x, y + 5.f, 24.f + kRefLabel, 16.f};
+        (void)x;
+        // 1.50.0 (planche 03) : l'Acces - trois choix sous la forme (grises la ou ils ne sont pas permis), et, avec une
+        // forme et un acces, ce que le pointeur vise (chaque element, le tout).
+        accessBoxes_.clear();
+        wholeBoxes_.clear();
+        const bool construct = shownForms().size() > 1 || canReference(spec_.use);
+        if (construct) {
+            float ax = x0;
+            for (const auto a : tf::kAccesses) {
+                accessBoxes_.push_back({gfx::Rect{ax, y + 34.f, kAccessW, 28.f}, a});
+                ax += kAccessW;
+            }
+            wholeBoxes_.push_back({gfx::Rect{ax + 130.f, y + 38.f, 128.f, 20.f}, false});
+            wholeBoxes_.push_back({gfx::Rect{ax + 262.f, y + 38.f, 90.f, 20.f}, true});
+        }
         // 1.12.14 : Composer l'element, au bout de la ligne (une forme permise ici, sinon rien).
         if (compose_) {
             const bool any = shownForms().size() > 1;
@@ -440,9 +488,21 @@ protected:
             const auto n = countIn(cat);
             if (n) chip(std::string(tr::categoryLabel(cat)), static_cast<int>(cat), n);
         }
-        // ---- l'avis : le type actuel introuvable ----
-        if (!notice_.empty())
+        // ---- l'avis : le type actuel introuvable ; 1.50.0 : le type ecrit, compris (« pointer to obj ») ----
+        if (!typed_.empty()) {
+            const gfx::Rect band{panel_.x + 16.f, panel_.y + 120.f, panel_.w - 32.f, 24.f};
+            r.fillRoundedRect(band, c.accent.withAlpha(40), 4.f);
+            r.drawText({band.x + 10.f, band.y + 4.f}, typed_, kMono, c.text);
+            const float tx = band.x + 20.f + r.measure(typed_, kMono).width;
+            const std::string tail = "Entr\xC3\xA9" "e : le prendre";
+            const float tw = r.measure(tail, kSmall).width;
+            r.drawText({band.right() - 10.f - tw, band.y + 5.f}, tail, kSmall, c.textMuted);
+            if (!typedNote_.empty()) r.drawText({tx, band.y + 5.f}, fit(r, typedNote_, kSmall, band.right() - 30.f - tw - tx), kSmall, c.warning);
+        } else if (!typedWhy_.empty()) {
+            r.drawText({panel_.x + 16.f, panel_.y + 124.f}, fit(r, typedWhy_, kSmall, panel_.w - 32.f), kSmall, c.error);
+        } else if (!notice_.empty()) {
             r.drawText({panel_.x + 16.f, panel_.y + 124.f}, fit(r, notice_, kSmall, panel_.w - 32.f), kSmall, c.error);
+        }
         // ---- la liste ----
         r.fillRect(list_, c.windowBg);
         r.strokeRect(list_, c.border, 1.f);
@@ -558,11 +618,17 @@ protected:
                     (void)setForm(f);
                     return ui::EventResult::Consumed;
                 }
-            if (refBox_.w > 0.f && refBox_.contains(d->pos)) {
-                ref_ = !ref_;
-                invalidate();
-                return ui::EventResult::Consumed;
-            }
+            for (const auto& [rect, a] : accessBoxes_)
+                if (rect.contains(d->pos)) {
+                    (void)setAccess(a);           // grise : rien (la raison est dite sous la ligne)
+                    return ui::EventResult::Consumed;
+                }
+            if (pointsShown())
+                for (const auto& [rect, w] : wholeBoxes_)
+                    if (rect.contains(d->pos)) {
+                        setWhole(w);
+                        return ui::EventResult::Consumed;
+                    }
             for (const auto& [rect, k] : rowRects_) {
                 if (!rect.contains(d->pos) || !rowsArea_.contains(d->pos)) continue;
                 sel_ = k;
@@ -729,7 +795,8 @@ private:
             params_[static_cast<std::size_t>(sh.form)] = sh.parameter.empty() ? tf::defaultParameter(sh.form) : sh.parameter;
             (void)setForm(sh.form);
         }
-        ref_ = sh.reference || tf::decompose(sh.element).reference;
+        access_ = sh.access() != tf::Access::Direct ? sh.access() : tf::decompose(sh.element).access();   // 1.50.0
+        whole_ = sh.whole;
         // 1.12.14 : un element compose (MAP[STRING] OF VECTOR OF T_X : VECTOR OF T_X) reste entier ; il
         // se choisissait par son type le plus profond, et le type rouvert perdait un niveau sans le dire.
         if (sh.form != tf::Form::Simple && formAllowed(sh.form) && composedText(sh.element)) {
@@ -759,6 +826,32 @@ private:
         return static_cast<std::size_t>(std::count_if(usable_.begin(), usable_.end(), [cat](const tr::Entry* e) { return e->category == cat; }));
     }
 
+    // 1.50.0 (planche 03) : le dernier mot d'un type ecrit, complete par le seul type permis ici qui commence ainsi (sans
+    // casse ; le plus court s'il y en a plusieurs et qu'il est le debut de tous les autres). Vide : rien a completer.
+    [[nodiscard]] std::string completeLast(const std::string& text) const {
+        std::size_t end = text.size();
+        while (end > 0 && std::isspace(static_cast<unsigned char>(text[end - 1]))) --end;
+        std::size_t start = end;
+        while (start > 0 && identChar(text[start - 1])) --start;
+        if (start == end) return {};
+        const std::string part = upperText(std::string_view(text).substr(start, end - start));
+        const tr::Entry* best = nullptr;
+        for (const auto* e : usable_) {
+            const std::string n = upperText(e->name);
+            if (n.rfind(part, 0) != 0 || n.find_first_of(" (<[") != std::string::npos) continue;
+            if (!best || n.size() < upperText(best->name).size()) best = e;
+        }
+        if (!best) return {};
+        for (const auto* e : usable_) {                  // un autre qui ne commence pas par le meilleur : ambigu
+            const std::string n = upperText(e->name);
+            if (n.rfind(part, 0) == 0 && n.find_first_of(" (<[") == std::string::npos && n.rfind(upperText(best->name), 0) != 0) return {};
+        }
+        return text.substr(0, start) + best->name + text.substr(end);
+    }
+    [[nodiscard]] bool pointsShown() const {
+        return access_ != tf::Access::Direct && form_ != tf::Form::Simple && formAllowed(form_) && accessAllowed(access_);
+    }
+
     void filter() {
         const std::string raw = trimmed(search_ ? search_->text() : std::string{});
         const std::string q = ui::foldForSearch(raw);
@@ -767,10 +860,37 @@ private:
         // bon, c'est le resultat ; sinon, pourquoi.
         typed_.clear();
         typedWhy_.clear();
+        typedNote_.clear();
         if (reg_ && looksLikeType(raw)) {
-            const auto r = reg_->resolve(probe(raw), spec_.use);   // 1.12.21 : VECTOR OF T se verifie avec un type de T
-            if (r.ok) typed_ = mentionsGeneric(raw, spec_.generics) ? spelled(raw) : r.text;
-            else typedWhy_ = "le type \xC3\xA9" "crit : " + (r.why.empty() ? std::string("illisible") : r.why);
+            // 1.50.0 (planche 03) : un type ecrit a moitie - le dernier nom complete s'il n'y en a qu'un qui commence ainsi
+            // (« pointer to obj » : POINTER TO Object) ; POINTER OF corrige en POINTER TO, et dit.
+            std::string text = raw;
+            auto r = reg_->resolve(probe(text), spec_.use);
+            if (!r.ok && r.missing) {
+                const std::string completed = completeLast(text);
+                if (!completed.empty()) {
+                    const auto c = reg_->resolve(probe(completed), spec_.use);
+                    if (c.ok || !c.missing) {
+                        text = completed;
+                        r = c;
+                    }
+                }
+            }
+            const auto written = tf::decompose(r.text);
+            const tf::Access writtenAccess = written.access() != tf::Access::Direct ? written.access() : tf::decompose(written.element).access();
+            if (r.ok && !accessAllowed(writtenAccess)) {          // une constante : ni REF_TO, ni POINTER TO
+                typedWhy_ = "le type \xC3\xA9" "crit : " + accessProblem(writtenAccess);
+            } else if (r.ok) {
+                typed_ = mentionsGeneric(text, spec_.generics) ? spelled(text) : r.text;
+                typedNote_ = r.warning;
+                if (typedNote_.empty() && upperText(r.text) != upperText(trimmed(raw))) typedNote_ = "lu : " + r.text;
+            } else {
+                const auto sh = tf::decompose(r.text.empty() ? text : r.text);
+                const std::string refusal = r.category == tr::Category::Reference || sh.access() != tf::Access::Direct
+                                                ? tf::accessRefusal(sh.access() != tf::Access::Direct ? sh.access() : tf::Access::Ref, spec_.use, spec_.constant)
+                                                : std::string{};
+                typedWhy_ = "le type \xC3\xA9" "crit : " + (!refusal.empty() && !r.missing ? refusal : r.why.empty() ? std::string("illisible") : r.why);
+            }
         }
         if (!composed_.empty() && (chip_ == kAll || chip_ == static_cast<int>(tr::Category::Collection))
             && (q.empty() || ui::containsFolded(composed_, q)))
@@ -868,7 +988,7 @@ private:
         const bool on = constructible(selected());
         formChips_.clear();
         const auto forms = shownForms();
-        if (forms.size() > 1 || refBox_.w > 0.f) {
+        if (forms.size() > 1 || !accessBoxes_.empty()) {
             // 1.12.2 : la forme, une puce par forme permise ici.
             r.drawText({x0, y + 4.f}, "Forme :", kSmall, c.textMuted);
             float x = x0 + 96.f;
@@ -896,16 +1016,47 @@ private:
             const auto label = tf::parameterLabel(form_);
             if (!label.empty() && bounds_->bounds().w > 0.f)
                 r.drawText({x0, y + 5.f}, std::string(label) + " :", kSmall, on ? c.text : c.textDisabled);
-            if (refBox_.w > 0.f) {
-                paintCheck(ctx, {refBox_.x, refBox_.y, 16.f, 16.f}, ref_, on);
-                r.drawText({refBox_.x + 24.f, y + 5.f}, "REF_TO (une r\xC3\xA9" "f\xC3\xA9rence)", kSmall, on ? c.text : c.textDisabled);
-            }
             // Ce que la forme est (une liste vit dans la memoire de l'IHM...).
-            const float sx = (refBox_.w > 0.f ? refBox_.right() : (bounds_->bounds().w > 0.f ? bounds_->bounds().right() : x0 + 96.f)) + 18.f;
+            const float sx = (bounds_->bounds().w > 0.f ? bounds_->bounds().right() : x0 + 96.f) + 18.f;
             const float sr = compose_ && compose_->bounds().w > 0.f ? compose_->bounds().x - 10.f : panel_.right() - 16.f;   // 1.12.14
             if (form_ != tf::Form::Simple)
                 r.drawText({sx, y + 5.f}, fit(r, std::string(tf::summary(form_)), kSmall, sr - sx), kSmall, c.textMuted);
-            y += 36.f;
+            y += 34.f;
+            // 1.50.0 (planche 03) : Acces - Direct (la valeur), REF_TO (une reference), POINTER TO (un pointeur).
+            if (!accessBoxes_.empty()) {
+                r.drawText({x0, y + 7.f}, "Acc\xC3\xA8s :", kSmall, on ? c.text : c.textDisabled);
+                for (const auto& [b, a] : accessBoxes_) {
+                    const bool chosen = access_ == a;
+                    const bool allowed = accessAllowed(a);
+                    r.fillRect(b, chosen && allowed ? c.accent.withAlpha(on ? 200 : 60) : c.headerBg);
+                    r.strokeRect(b, c.border, 1.f);
+                    const std::string word(tf::accessLabel(a));
+                    const gfx::Color ink = !allowed || !on ? c.textDisabled : chosen ? c.textInverted : c.text;
+                    r.drawText({b.x + 10.f, b.y + 6.f}, word, kSmall, ink);
+                    r.drawText({b.x + 16.f + r.measure(word, kSmall).width, b.y + 7.f}, fit(r, std::string(tf::accessHint(a)), kSmall, b.w - 26.f - r.measure(word, kSmall).width),
+                               kSmall, !allowed || !on ? c.textDisabled : chosen ? c.textInverted : c.textMuted);
+                }
+                // avec une forme : ce que le pointeur (la reference) vise
+                if (pointsShown() && wholeBoxes_.size() == 2) {
+                    const auto& first = wholeBoxes_.front().first;
+                    const std::string what = access_ == tf::Access::Pointer ? "Le pointeur vise :" : "La r\xC3\xA9" "f\xC3\xA9rence vise :";
+                    r.drawText({first.x - 122.f, first.y + 2.f}, fit(r, what, kSmall, 118.f), kSmall, c.text);
+                    for (const auto& [b, w] : wholeBoxes_) {
+                        paintCheck(ctx, {b.x, b.y + 2.f, 16.f, 16.f}, whole_ == w, on);
+                        r.drawText({b.x + 22.f, b.y + 2.f}, w ? "le tout" : "chaque \xC3\xA9l\xC3\xA9ment", kSmall, on ? c.text : c.textDisabled);
+                    }
+                }
+                y += 32.f;
+                const std::string line = accessProblem(access_).empty() ? accessLine() : accessProblem(access_);
+                r.drawText({x0 + 96.f, y + 2.f}, fit(r, line, kSmall, panel_.right() - 16.f - x0 - 96.f), kSmall, c.textMuted);
+                // le choix grise : sa raison
+                std::string greyed;
+                for (const auto a : tf::kAccesses)
+                    if (!accessAllowed(a)) greyed = accessProblem(a);
+                if (!greyed.empty() && access_ == tf::Access::Direct)
+                    r.drawText({x0 + 96.f, y + 18.f}, fit(r, greyed, kSmall, panel_.right() - 16.f - x0 - 96.f), kSmall, c.textDisabled);
+                y += 38.f;
+            }
         }
         // ---- le resultat ----
         r.drawText({x0, y + 2.f}, "R\xC3\xA9sultat :", kBody, c.text);
@@ -916,6 +1067,19 @@ private:
         if (!bad.empty() && !res.empty()) {
             const float px = rx + std::min(panel_.w * 0.5f, r.measure(res, kMono).width) + 14.f;
             r.drawText({px, y + 4.f}, fit(r, bad, kSmall, panel_.right() - 16.f - px), kSmall, c.error);
+        } else if (!res.empty()) {
+            // 1.50.0 (planche 03) : verifie en direct - permis ici
+            const std::string okText = "\xE2\x9C\x93 permis ici : " + useLabel(spec_.use);
+            const float w = r.measure(okText, kSmall).width;
+            r.drawText({panel_.right() - 16.f - w, y + 4.f}, okText, kSmall, c.ok);
+        }
+        // 1.50.0 (planche 03) : ce qui s'ecrira dans le code
+        if (!accessBoxes_.empty() && spec_.outer.empty()) {
+            const std::string w = writtenAs();
+            if (!w.empty() && bad.empty()) {
+                r.drawText({x0, y + 28.f}, "S'\xC3\xA9" "crira :", kSmall, c.textMuted);
+                r.drawText({x0 + 96.f, y + 27.f}, fit(r, w, kMono, panel_.w - 130.f), kMono, c.text);
+            }
         }
         // 1.12.14 : un selecteur pose par Composer l'element - le type complet qui en sortira, ce qu'on
         // choisit ici en evidence : a chaque niveau, on sait ou l'on est.
@@ -950,7 +1114,11 @@ private:
     int                                    sel_{-1};
     int                                    hover_{-1};
     bool                                   hoverClose_{false};
-    bool                                   ref_{false};
+    tf::Access                             access_{tf::Access::Direct};             // 1.50.0 : Direct, REF_TO, POINTER TO
+    bool                                   whole_{false};                          // ... sur le tout (POINTER TO LIST OF T)
+    std::vector<std::pair<gfx::Rect, tf::Access>> accessBoxes_;
+    std::vector<std::pair<gfx::Rect, bool>> wholeBoxes_;
+    std::string                            typedNote_;                             // POINTER OF corrige, un nom complete
     tf::Form                               form_{tf::Form::Simple};                 // 1.12.2 : la forme
     std::array<std::string, std::size(tf::kForms)> params_{};                       // son parametre, par forme
     std::vector<std::pair<gfx::Rect, tf::Form>> formChips_;
@@ -968,7 +1136,7 @@ private:
     ui::Button*                            cancel_{nullptr};
     ui::Button*                            open_{nullptr};
     ui::Button*                            ok_{nullptr};
-    gfx::Rect                              panel_{}, list_{}, rowsArea_{}, close_{}, refBox_{};
+    gfx::Rect                              panel_{}, list_{}, rowsArea_{}, close_{};
     ui::PaintedScrollBar                   sbar_;
     std::vector<std::pair<gfx::Rect, int>> chips_;
     std::vector<std::pair<gfx::Rect, int>> rowRects_;
@@ -1040,6 +1208,26 @@ bool HmiTypePicker::setCategory(std::string_view label) { return body_ && body_-
 bool HmiTypePicker::select(std::string_view name) { return body_ && body_->select(name); }
 void HmiTypePicker::setArray(bool on, const std::string& bounds) { if (body_) body_->setArray(on, bounds); }
 void HmiTypePicker::setReference(bool on) { if (body_) body_->setReference(on); }
+namespace {
+std::optional<tf::Access> accessFrom(std::string_view label) {
+    for (const auto a : tf::kAccesses)
+        if (upperText(label) == upperText(tf::accessLabel(a))) return a;
+    return std::nullopt;
+}
+} // namespace
+bool HmiTypePicker::setAccess(std::string_view label) {
+    const auto a = accessFrom(label);
+    return body_ && a && body_->setAccess(*a);
+}
+void HmiTypePicker::setPointsWhole(bool whole) { if (body_) body_->setWhole(whole); }
+std::string HmiTypePicker::accessProblem(std::string_view label) const {
+    const auto a = accessFrom(label);
+    if (!a) return "acc\xC3\xA8s inconnu";
+    return body_ ? body_->accessProblem(*a) : std::string("pas de s\xC3\xA9lecteur");
+}
+std::string HmiTypePicker::accessLine() const { return body_ ? body_->accessLine() : std::string{}; }
+std::string HmiTypePicker::typedNote() const { return body_ ? body_->typedNote() : std::string{}; }
+std::string HmiTypePicker::writtenAs() const { return body_ ? body_->writtenAs() : std::string{}; }
 void HmiTypePicker::setMap(bool on) { if (body_) body_->setMap(on); }
 bool HmiTypePicker::setForm(std::string_view labelOrKey) {
     const auto f = tf::fromText(labelOrKey);

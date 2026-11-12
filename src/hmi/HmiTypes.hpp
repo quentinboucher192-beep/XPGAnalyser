@@ -206,6 +206,12 @@ bool patternIndices(std::string_view pattern, std::string_view rel, std::vector<
 // L'adresse que donne la formule pour ces indices ("%MW(1000 + 10 * i)", {2} -> "%MW1020") ; vide et
 // `why` : un nom inconnu (k : i et j seulement), une division par zero, un resultat negatif.
 [[nodiscard]] std::string formulaAddress(std::string_view formula, const std::vector<long long>& indices, std::string* why = nullptr);
+// 1.50.0 (Dupliquer, planche 04) : LA MEME ECRITURE, D'AUTRES NOMS. Dupliquer range ses copies par des compteurs
+// (i, j, k ; n le rang de la copie ; o l'indice de l'original) : "%MW(1000 + 10 * i + j)" -> "%MW1037" ; un calcul
+// seul ("o + n", "5 + 4 * i") -> un entier (negatif permis). Un nom absent de `names` : faux et `why`.
+using FormulaNames = std::vector<std::pair<std::string, long long>>;
+[[nodiscard]] std::string namedFormulaAddress(std::string_view formula, const FormulaNames& names, std::string* why = nullptr);
+[[nodiscard]] bool formulaValue(std::string_view expr, const FormulaNames& names, long long& out, std::string* why = nullptr);
 
 // L'adresse d'une case a `word` mots (et `bit`) du depart, ecrite comme le depart.
 // Une zone de bits (%M, 00017) : `word` est le rang du BOOL.

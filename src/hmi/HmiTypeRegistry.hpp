@@ -137,6 +137,8 @@ struct Resolved {
     // 1.12.2 : UN OBJET DE L'IHM - dynamic, ou un TUPLE (sans plan memoire) : une variable IHM de
     // ce type vit dans la memoire de l'IHM, entiere (elle ne se deplie pas en cases liees).
     bool         rich{false};
+    // 1.50.0 (planche 03) : un avertissement - le texte lu a ete corrige (POINTER OF -> POINTER TO) ; vide : rien.
+    std::string  warning{};
 };
 
 class Registry {

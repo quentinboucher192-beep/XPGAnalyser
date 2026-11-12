@@ -102,7 +102,9 @@ std::uint64_t boardRevision() { return state().boardRevision; }
 void setHooks(Hooks hooks) { state().hooks = std::move(hooks); }
 
 void say(const std::string& text, const std::string& replyTo) {
-    if (state().hooks.say && !text.empty()) state().hooks.say(text, replyTo);
+    if (text.empty()) return;
+    if (!replyTo.empty() && state().hooks.sayReply) state().hooks.sayReply(text, replyTo);   // 1.50.0
+    else if (state().hooks.say) state().hooks.say(text);
 }
 
 void follow(int member) {

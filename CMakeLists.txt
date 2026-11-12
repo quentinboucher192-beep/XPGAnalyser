@@ -830,6 +830,10 @@ if(XPG_BUILD_TESTS)
     # 1.47.0 : le texte dans son cadre a toutes les tailles (la fenetre de la session, l'onglet Session, l'encart de l'accueil)
     xpg_add_test_executable(session_ui_test tests/session_ui_test.cpp)
     xpg_target_link_libraries(session_ui_test PRIVATE xpg_app)
+    # 1.50.0 (planche 04) : Dupliquer... pour 500 reperes - les compteurs, une regle par profondeur, les formules des
+    # adresses, la liste et le tableau virtuels, avertit / bloque, la mesure (512 x 31), le texte dans son cadre
+    xpg_add_test_executable(hmi_dupliquer_test tests/hmi_dupliquer_test.cpp)
+    xpg_target_link_libraries(hmi_dupliquer_test PRIVATE xpg_app)
     # 1.44.0 : les sessions par Internet (le relais, chiffre de bout en bout) : un relais en memoire, puis le VRAI service sur ce
     # poste (workerd ; SAUTE sans Node.js ni wrangler) par le transport HTTP des Studios (app/SessionRelayHttp, app/ai/AiHttp)
     xpg_add_test_executable(session_relay_test tests/session_relay_test.cpp src/app/SessionRelayHttp.cpp src/app/ai/AiHttp.cpp)
@@ -862,6 +866,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(tableaux_test PRIVATE xpg_hmi)
     xpg_add_test_executable(scripts_c_test tests/scripts_c_test.cpp)          # 1.50.0 : les scripts C et C++ compiles et executes
     xpg_target_link_libraries(scripts_c_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(pointeurs_test tests/pointeurs_test.cpp)          # 1.50.0 (planche 03) : POINTER TO, un vrai pointeur ; le selecteur (Acces)
+    xpg_target_link_libraries(pointeurs_test PRIVATE xpg_app)
     xpg_add_test_executable(tests_unitaires_test tests/tests_unitaires_test.cpp)   # 1.13.0 (lot J4) : les tests unitaires des fonctions
     xpg_target_link_libraries(tests_unitaires_test PRIVATE xpg_hmi)
     xpg_add_test_executable(donnees_test tests/donnees_test.cpp)              # 1.13.0 (lot J3) : JSON et expressions regulieres, le type ANY
@@ -1430,6 +1436,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME deployui     COMMAND deploy_ui_test)                   # 1.28.0 : le volet Deploiement reseau, de bout en bout
     xpg_add_test(NAME session      COMMAND session_test)                     # 1.43.0 : les sessions (vraies sockets sur la boucle locale)
     xpg_add_test(NAME sessionui    COMMAND session_ui_test ${CMAKE_CURRENT_SOURCE_DIR})   # 1.47.0 : le texte dans son cadre (session, accueil)
+    xpg_add_test(NAME hmidupliquer COMMAND hmi_dupliquer_test ${CMAKE_CURRENT_SOURCE_DIR})   # 1.50.0 : Dupliquer pour 500 reperes
     xpg_add_test(NAME sessionrelais COMMAND session_relay_test ${CMAKE_CURRENT_SOURCE_DIR})   # 1.44.0 : les sessions par Internet (le relais)
     if(TEST sessionrelais)
         set_tests_properties(sessionrelais PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
@@ -1441,6 +1448,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME generiques   COMMAND generiques_test)                  # ---- 1.13.0 : les fonctions generiques (TEMPLATE) ----
     xpg_add_test(NAME tableaux     COMMAND tableaux_test)                    # ---- 1.50.0 : ARRAY OF ARRAY et ARRAY[a, b] partout ----
     xpg_add_test(NAME scriptsc     COMMAND scripts_c_test)                   # ---- 1.50.0 : les scripts C et C++ compiles et executes ----
+    xpg_add_test(NAME pointeurs    COMMAND pointeurs_test)                   # ---- 1.50.0 : POINTER TO, un vrai pointeur ; le selecteur de types ----
     xpg_add_test(NAME testsunitaires COMMAND tests_unitaires_test)           # ---- 1.13.0 (lot J4) : les tests unitaires des fonctions ----
     xpg_add_test(NAME donnees      COMMAND donnees_test)                     # ---- 1.13.0 (lot J3) : JSON et expressions regulieres, le type ANY ----
     xpg_add_test(NAME objets       COMMAND objets_test)                      # ---- 1.13.0 (lot J1) : methodes, prive, heritage, interfaces ----

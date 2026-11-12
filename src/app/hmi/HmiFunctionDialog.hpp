@@ -26,6 +26,12 @@
 //    |                                             [Annuler] [Creer]        |
 //    +----------------------------------------------------------------------+
 //
+//  1.50.0 (planche 01) : LA MEME FENETRE pour une METHODE D'UN TYPE IHM (Spec::type) -
+//  "Nouvelle methode du type T_Pompe" : Portee (une privee : depuis une methode du type
+//  seulement) ET Redefinir (Virtuelle : un sous-type la redefinit) ; "Elle s'ecrira
+//  FUNCTION PUBLIC VIRTUAL Demarrer : BOOL". Une interface : "Nouvelle signature de
+//  l'interface I_X" (ni portee ni virtuelle). Les Types IHM l'ouvrent par newfunction::ask.
+//
 //  Portee : une vue ou une popup (publique : Vue.Nom(...) ailleurs) ; Virtuelle :
 //  un symbole (une instance peut la redefinir). Un nom deja pris est une
 //  surcharge : dit sous le nom, il ne bloque pas. La reponse (DialogResult::
@@ -38,6 +44,7 @@
 #include "../../menu/IMenu.hpp"
 #include "../../ui/widgets/Controls.hpp"
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -49,17 +56,18 @@ public:
         std::string      id{"dialog.hmiNewFunction"};
         hmi::DocumentPtr doc;
         hmi::Id          owner{hmi::kNoId};   // la vue, la popup ou le symbole ; kNoId : une fonction IHM du projet
-        std::string      name;                // le nom propose (vide : Fonction, Fonction2...)
+        hmi::Id          type{hmi::kNoId};    // 1.50.0 : un type IHM - une methode (une interface : une signature)
+        std::string      name;                // le nom propose (vide : Fonction, Fonction2... ; Methode, Methode2...)
         std::string      returnType;          // vide : Aucun
     };
     struct Answer {
         std::string name, returnType, description;   // returnType vide : une procedure
-        bool        pub{true};                        // une vue ou une popup : publique
-        bool        isVirtual{false};                 // un symbole : virtuelle
+        bool        pub{true};                        // une vue, une popup, une methode : publique
+        bool        isVirtual{false};                 // un symbole, une methode : virtuelle
         std::string generics;                         // 1.13.0 : TEMPLATE <T> (texte : "T", "T : ANY_NUM, K") ; vide : ordinaire
         std::string returnUnit;                       // 1.13.0 (lot J6b) : l'unite du retour (bar) ; vide : sans
     };
-    enum class Owner : std::uint8_t { Project, View, Popup, Symbol };
+    enum class Owner : std::uint8_t { Project, View, Popup, Symbol, Type };   // 1.50.0 : Type (une methode)
 
     explicit HmiNewFunctionDialog(Spec spec);
     ~HmiNewFunctionDialog() override;
@@ -75,6 +83,11 @@ public:
     void setVirtual(bool on);
     void chooseReturn();                            // ouvre le selecteur de types
     [[nodiscard]] Owner owner() const noexcept { return owner_; }
+    [[nodiscard]] bool  forInterface() const noexcept { return interface_; }   // 1.50.0 : une signature d'interface
+    // 1.50.0 : une methode - ce que le type refuse (privee et virtuelle, une methode non virtuelle du parent redefinie,
+    // un type de retour inconnu...) ; vide : rien. Creer reste grise tant qu'il y en a un.
+    [[nodiscard]] std::string methodProblem() const;
+    [[nodiscard]] std::string instanceName() const;   // 1.50.0 : une instance du type (Pompe1), sinon Instance
     [[nodiscard]] const Answer& answer() const noexcept { return answer_; }
     [[nodiscard]] std::string nameProblem() const;  // vide : le nom va
     [[nodiscard]] std::string nameNote() const;     // sous le nom : la regle, ou la surcharge
@@ -84,7 +97,9 @@ public:
     [[nodiscard]] std::string declaration() const;  // FUNCTION Fonction : REAL
     [[nodiscard]] std::string calls() const;        // dans la vue : Fonction()  -  ailleurs : Vue.Fonction()
     [[nodiscard]] std::string explanation() const;
-    [[nodiscard]] bool canConfirm() const { return nameProblem().empty() && genericsProblem().empty() && unitProblem().empty(); }
+    [[nodiscard]] bool canConfirm() const {
+        return nameProblem().empty() && genericsProblem().empty() && unitProblem().empty() && methodProblem().empty();
+    }
     void setGenerics(const std::string& text);     // comme la souris (scripts, essais)
     // 1.13.0 (lot J6b) : L'UNITE DU RETOUR - seulement pour un retour numerique (grisee sinon, et retiree quand le
     // retour change) ; la case ouvre le selecteur d'unites. Un symbole inconnu : Creer grise, la raison dessous.
@@ -112,6 +127,7 @@ private:
     Spec        spec_;
     Owner       owner_{Owner::Project};
     std::string ownerName_;
+    bool        interface_{false};                 // 1.50.0 : le type est une interface (une signature)
     Answer      answer_;
     bool        done_{false};
     bool        syncing_{false};
@@ -129,5 +145,15 @@ private:
     std::shared_ptr<ui::RadioGroup> scope_;
     core::ConnectionScope links_;
 };
+
+// 1.50.0 : LA FENETRE DEMANDEE PAR UN VOLET (les Methodes des Types IHM) - comme typepicker : l'hote (l'ecran) la pose
+// par-dessus tout et rend la reponse ; sans hote (un essai sans ecran), rien ne s'ouvre.
+namespace newfunction {
+using Done = std::function<void(const HmiNewFunctionDialog::Answer&)>;
+using Host = std::function<void(HmiNewFunctionDialog::Spec, Done)>;
+void setHost(Host host);
+[[nodiscard]] bool available();
+void ask(HmiNewFunctionDialog::Spec spec, Done done);   // rien sans hote
+} // namespace newfunction
 
 } // namespace app

@@ -1697,8 +1697,9 @@ void scripts() {
     check(!rt.lastError(p.generalScript("Faux")->id).empty(), "la derni\xC3\xA8re erreur du script est gard\xC3\xA9" "e");
     check(!rt.callScript("Boucle", 2.6, &why) && why.find("boucle WHILE") != std::string::npos,
           "boucle sans fin : coup\xC3\xA9" "e (" + why + ")");
-    check(rt.callScript("Cpp", 2.7) && journalHas(rt, "Script", "non ex\xC3\xA9" "cut\xC3\xA9"),
-          "script C++ : dit non ex\xC3\xA9" "cut\xC3\xA9");
+    // 1.50.0 : un script C++ s'execute (traduit pour le moteur des scripts) : int main() { return 0; } tourne, sans erreur.
+    check(rt.callScript("Cpp", 2.7) && !journalHas(rt, "Script", "non ex\xC3\xA9" "cut\xC3\xA9"),
+          "script C++ : ex\xC3\xA9" "cut\xC3\xA9 (1.50.0), sans erreur");
     check(rt.callScript("VersB", 2.8) && rt.currentView() == b.id && rt.animation()
               && rt.animation()->spec.kind == TransitionKind::Fade,
           "IHM_NAVIGUER('Vue_B', 'Fondu') depuis un script");
@@ -1868,8 +1869,8 @@ void verificationsLot3() {
           "C++ : ')' manquante vue \xC3\xA0 la ligne 3 (" + (d.empty() ? std::string("?") : d[0].message) + ")");
     d = checkScript(ScriptLang::C, "const char* s = \"non ferm\xC3\xA9" "e;\nint x;\n", "C");
     check(!d.empty() && d[0].line == 1 && d[0].message.find("cha\xC3\xAEne") != std::string::npos, "C : cha\xC3\xAEne non ferm\xC3\xA9" "e, ligne 1");
-    check(d.back().severity == ScriptDiagnostic::Severity::Info && d.back().message.find("non ex\xC3\xA9" "cut\xC3\xA9") != std::string::npos,
-          "C : dit non ex\xC3\xA9" "cut\xC3\xA9 en simulation");
+    check(d.back().severity == ScriptDiagnostic::Severity::Info && d.back().message.find("compil\xC3\xA9") != std::string::npos,
+          "C : dit compil\xC3\xA9 pour le moteur des scripts (1.50.0)");
     same(frenchSimMessage("line 4: expected THEN"), "ligne 4 : THEN attendu", "traduction : expected THEN");
     same(frenchSimMessage("'Inconnue' cannot be written"), "'Inconnue' ne peut pas \xC3\xAAtre \xC3\xA9" "crite (inconnue, ou en lecture seule)",
          "traduction : cannot be written");
@@ -14355,8 +14356,9 @@ void typesLot16() {
     check(!parseSpec("ARRAY[9..0] OF INT", s, &why) && why.find("haute") != std::string::npos, "bornes \xC3\xA0 l'envers : refus\xC3\xA9 (" + why + ")");
     check(!parseSpec("ARRAY[0..9] REAL", s, &why) && why.find("OF") != std::string::npos, "sans OF : refus\xC3\xA9");
     check(!parseSpec("ARRAY[0..1, 0..1, 0..1] OF INT", s, &why), "trois dimensions : refus\xC3\xA9 (" + why + ")");
-    check(!parseSpec("ARRAY[0..9] OF ARRAY[0..1] OF INT", s, &why) && why.find("deux dimensions") != std::string::npos,
-          "un tableau de tableaux : refus\xC3\xA9, deux dimensions propos\xC3\xA9" "es");
+    // 1.50.0 : un tableau de tableaux est permis (comme deux dimensions) : ses cases sont un tableau (tests/tableaux_test.cpp).
+    check(parseSpec("ARRAY[0..9] OF ARRAY[0..1] OF INT", s, &why) && s.dims == 1 && s.element == "ARRAY[0..1] OF INT",
+          "un tableau de tableaux : permis (1.50.0), ses cases sont ARRAY[0..1] OF INT");
     check(!parseSpec("ARRAY[0..999999] OF INT", s, &why), "un million de cases : refus\xC3\xA9 (" + why + ")");
     check(isElementary("real") && !isElementary("T_Four") && isComposite("T_Four") && isComposite("ARRAY[0..1] OF INT") && !isComposite("INT"),
           "\xC3\xA9l\xC3\xA9mentaire ou compos\xC3\xA9");
@@ -29752,7 +29754,9 @@ void scriptsC1220() {
                            "[[nodiscard]] int f();\nauto [a, b] = paire;\nint v = static_cast<int>(x) < 5;\n",
                            "template <typename T> T limiter(T x, T bas, T haut) { return std::clamp(x, bas, haut); }\n"}) {
         e = clean(ScriptLang::Cpp, ok);
-        check(e.empty(), std::string("C++ juste, pas de faute : ") + ok + " (" + e + ")");
+        // 1.50.0 : le C++ se compile pour le moteur des scripts - ce qui sort du sous-ensemble (lambda, std::map, liaison
+        // structuree, template) est refuse a Compiler, avec la raison (avant : seulement relu, jamais execute).
+        check(!e.empty(), std::string("C++ hors du sous-ensemble execute : refuse, dit : ") + ok + " (" + e + ")");
     }
     e = clean(ScriptLang::Cpp, "auto f = [&] x > 1;\n");
     check(e.find("une lambda") != std::string::npos, "C++ : une lambda sans parametres ni corps (" + e + ")");
@@ -29762,7 +29766,8 @@ void scriptsC1220() {
     e = clean(ScriptLang::C, "int n = compter([](int x) { return x > 0; });\n");
     check(e.find("une lambda est du C++") != std::string::npos, "C : une lambda est du C++ (" + e + ")");
     e = clean(ScriptLang::C, "int a[6] = { [4] = 29, [2] = 15 };\nbool (*garder)(float) = &Est_Valide;\n");
-    check(e.empty(), "C : un initialiseur designe ([4] = 29) et un pointeur de fonction - pas de faute (" + e + ")");
+    check(e.find("initialiseur d\xC3\xA9sign\xC3\xA9") != std::string::npos,
+          "C : un initialiseur designe ([4] = 29) : hors du sous-ensemble execute (1.50.0), dit (" + e + ")");
     // Le projet : une fonction, un type rappel, une structure, des variables.
     Project p;
     HmiFunction f;

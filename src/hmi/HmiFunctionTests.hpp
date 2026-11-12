@@ -106,4 +106,29 @@ bool remapTestArguments(HmiFunction&, const std::vector<std::string>& before, co
 // Les noms des parametres d'une fonction, dans l'ordre (ceux du modele et d'un ancien bloc VAR_INPUT du code).
 [[nodiscard]] std::vector<std::string> testParameterNames(const HmiFunction&);
 
+// ---- 1.50.0 (planche 01) : LES TESTS D'UNE METHODE D'UN TYPE IHM ----------------------------------------------
+//  Un cas d'une methode part d'une INSTANCE D'ESSAI du type : une variable du banc (Essai_SELF), ses membres a leur
+//  valeur initiale. Ses poses (" SELF avant ") ecrivent des membres - SELF.Debit, THIS.Debit, ou Debit seul (un
+//  membre du type) -, ses verifs (" Verifier apres ") les relisent (SELF.EnMarche), un attendu calcule aussi
+//  (=SELF.Debit * 2). L'appel passe par une fonction du banc, Essai_<Methode>(memes parametres), qui appelle
+//  Essai_SELF.<Methode>(...) : la methode tourne comme en marche (SELF en VAR_IN_OUT, ses membres, ses autres
+//  methodes, SUPER) ; une methode privee y est rendue appelable (le banc seulement). Le projet n'est jamais touche.
+struct MethodBench {
+    Project     project;      // une copie du projet, plus l'instance d'essai et la fonction d'appel
+    HmiFunction call;         // Essai_<Methode> : les parametres de la methode, son retour
+    std::string self;         // le nom de l'instance d'essai sur le banc (Essai_SELF)
+    std::string typeName;     // le type de SELF (son nom complet)
+    std::vector<std::string> members;   // les membres du type (Debit seul vaut SELF.Debit)
+};
+// Le banc de la methode `m` (une methode d'un type du projet : son id ; `m` peut etre une copie a jour). Faux et `why` :
+// pas une methode d'une structure (une signature d'interface n'a pas de corps).
+bool methodBench(const Project&, const HmiFunction& m, MethodBench& out, std::string* why = nullptr);
+// `m` (son id) est-il une methode d'un type IHM du projet ?
+[[nodiscard]] bool isTypeMethod(const Project&, const HmiFunction& m);
+// Une cible ou une formule d'un cas de methode lue sur le banc : SELF.X, THIS.X -> Essai_SELF.X ; `bareMembers` : Debit
+// seul (un membre, pas une variable IHM) -> Essai_SELF.Debit. Les textes entre apostrophes ne changent pas.
+[[nodiscard]] std::string benchText(const MethodBench&, std::string_view text, bool bareMembers = true);
+// Le cas tel que le banc le joue (ses cibles, ses formules =..., ses arguments lus sur le banc).
+[[nodiscard]] FunctionTest benchCase(const MethodBench&, const FunctionTest&);
+
 } // namespace hmi

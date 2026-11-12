@@ -288,9 +288,13 @@ private:
         }
         if (atWord("POINTER")) {
             (void)word();
-            if (!atWord("TO")) return fail("POINTER TO attendu");
+            // 1.50.0 (planche 03) : POINTER OF, la faute de frappe courante - lu comme POINTER TO, et dit.
+            const bool of = atWord("OF");
+            if (!atWord("TO") && !of) return fail("POINTER TO attendu (POINTER TO T : un pointeur vers T)");
             (void)word();
-            return reference(use, depth, "POINTER TO ", "ptr:");
+            Resolved r = reference(use, depth, "POINTER TO ", "ptr:");
+            if (of) r.warning = "\xC2\xAB POINTER OF \xC2\xBB corrig\xC3\xA9 en \xC2\xAB POINTER TO \xC2\xBB (POINTER TO T : un pointeur vers T)";
+            return r;
         }
         const std::string name = word();
         if (name.empty()) {
@@ -415,7 +419,8 @@ private:
         (void)word();
         // Un tableau d'une variable IHM ou d'un parametre de popup : 1 ou 2 dimensions.
         if (dims.size() > 2 && (use & (UseVariable | UseParameter)) && !(use & UseDeclaration))
-            return fail("ARRAY : deux dimensions au plus pour " + useText(use & (UseVariable | UseParameter)));
+            return fail("ARRAY : deux dimensions au plus pour " + useText(use & (UseVariable | UseParameter))
+                        + " ; plus : un tableau de tableaux (ARRAY[0..1] OF ARRAY[0..1, 0..1] OF INT)");   // 1.50.0
         // L'element : les memes usages (un retour de fonction se lit comme une declaration).
         unsigned elementUse = use & (UseVariable | UseDeclaration | UseParameter);
         if (use & UseReturn) elementUse |= UseDeclaration;
@@ -434,6 +439,7 @@ private:
         r.unknown = e.unknown;
         r.dynamic = e.dynamic;                          // 1.12.2 : un tableau de listes...
         r.rich = e.rich;
+        r.warning = e.warning;                          // 1.50.0 : POINTER OF corrige, plus bas
         r.ok = e.ok && (use & (UseVariable | UseDeclaration | UseParameter | UseReturn)) != 0;
         r.why = e.ok ? (r.ok ? std::string{} : "un tableau ne convient pas \xC3\xA0 " + useText(use)) : e.why;
         return r;
@@ -460,6 +466,7 @@ private:
         r.unknown = key.missing ? key.unknown : e.unknown;
         r.dynamic = true;
         r.rich = true;
+        r.warning = e.warning;                          // 1.50.0 : POINTER OF corrige, plus bas
         if (key.missing) {
             r.ok = false;
             r.why = key.why;
@@ -503,6 +510,7 @@ private:
         r.unknown = e.unknown;
         r.dynamic = true;
         r.rich = true;
+        r.warning = e.warning;                          // 1.50.0 : POINTER OF corrige, plus bas
         r.ok = e.ok && (use & (UseVariable | UseDeclaration | UseParameter | UseReturn)) != 0;    // 1.12.4 : un parametre aussi
         r.why = e.ok ? (r.ok ? std::string{} : (flavor.empty() ? "une " + head : "un " + r.text) + " ne convient pas \xC3\xA0 " + useText(use)) : e.why;
         if (setRefused) {
@@ -621,6 +629,7 @@ private:
         r.unknown = e.unknown;
         r.ok = e.ok && (use & (UseDeclaration | UseReturn)) != 0;
         r.why = e.ok ? (r.ok ? std::string{} : "une r\xC3\xA9" "f\xC3\xA9rence ne sert qu'\xC3\xA0 " + useText(UseDeclaration)) : e.why;
+        r.warning = e.warning;
         return r;
     }
 

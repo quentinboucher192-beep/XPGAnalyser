@@ -558,6 +558,46 @@ begin
   WizardForm.NoRadio.Left := X;
 end;
 
+// 1.50.0 : << dans l'installateur de l'admin classique attention des textes se chevauchent >> - la page << Code
+// d'invitation >> : ses textes passent en Barlow (11, le code en 14), plus hauts que la police d'Inno Setup, mais
+// restaient a la place calculee pour elle : la consigne coupee apres sa premiere ligne, le bas de << Code
+// d'invitation : >> sous le champ. Recomposee ici, de haut en bas, apres le changement de police : la consigne
+// retournee a la ligne a sa hauteur (AdjustHeight), l'etiquette dessous, le champ dessous, l'erreur dessous jusqu'au
+// bas de la page. Les hauteurs sont prises a la largeur du moment, la plus etroite : la page qui s'elargit ensuite
+// (le style << modern >>) donne moins de lignes, jamais plus ; les largeurs suivent le bord droit (Anchors).
+procedure ComposerPageInvitation;
+var Y, L: Integer;
+begin
+  L := PageInvitation.SurfaceWidth;
+  Y := 0;
+  with PageInvitation.SubCaptionLabel do begin
+    AutoSize := False;
+    WordWrap := True;
+    SetBounds(0, Y, L, ScaleY(20));
+    AdjustHeight;
+    Anchors := [akLeft, akTop, akRight];
+    Y := Top + Height + ScaleY(14);
+  end;
+  with PageInvitation.PromptLabels[0] do begin
+    AutoSize := False;
+    WordWrap := True;
+    SetBounds(0, Y, L, ScaleY(20));
+    AdjustHeight;
+    Anchors := [akLeft, akTop, akRight];
+    Y := Top + Height + ScaleY(6);
+  end;
+  with PageInvitation.Edits[0] do begin
+    Top := Y;
+    Left := 0;
+    Width := L;
+    if Height < ScaleY(30) then Height := ScaleY(30);
+    Anchors := [akLeft, akTop, akRight];
+    Y := Top + Height + ScaleY(14);
+  end;
+  ErreurInvitation.SetBounds(0, Y, L, PageInvitation.SurfaceHeight - Y);
+  ErreurInvitation.Anchors := [akLeft, akTop, akRight, akBottom];
+end;
+
 procedure InitializeWizard;
 begin
   ChargerPolices;
@@ -576,8 +616,8 @@ begin
   ErreurInvitation.Parent := PageInvitation.Surface;
   ErreurInvitation.AutoSize := False;
   ErreurInvitation.WordWrap := True;
-  ErreurInvitation.SetBounds(0, PageInvitation.Edits[0].Top + PageInvitation.Edits[0].Height + ScaleY(14), PageInvitation.SurfaceWidth, ScaleY(60));
   Ecrire(ErreurInvitation.Font, '', 10, CouleurErreur);
+  ComposerPageInvitation;   // 1.50.0 : rien ne se chevauche (les textes en Barlow sont plus hauts)
   PageDonnees := CreateCustomPage(wpSelectTasks, 'Ta clé d''admin',
                                   'Elle naît sur ce PC au premier lancement, et n''en sort jamais.');
   TexteDonneesLabel := TNewStaticText.Create(WizardForm);
@@ -590,6 +630,10 @@ begin
   CreerColonne;
   HabillerEnTete;
   HabillerAccueilEtFin;
+  // 1.50.0 : le recapitulatif retourne ses longues lignes a sa largeur (avant : coupees au bord droit, une barre
+  // de defilement horizontale pour les lire)
+  WizardForm.ReadyMemo.WordWrap := True;
+  WizardForm.ReadyMemo.ScrollBars := ssVertical;
   MajEtapes(0);
 end;
 

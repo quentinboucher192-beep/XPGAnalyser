@@ -1881,7 +1881,7 @@ Id HmiScriptsPane::addScript(Script spec, std::string* why) {
     if (spec.body.empty()) {
         if (spec.lang == ScriptLang::ST) spec.body = "(* " + spec.name + " *)\n";
         else spec.body = "// " + spec.name + " : " + std::string(hmi::scriptLangKey(spec.lang))
-                       + ", edite et verifie (non execute en simulation)\n";
+                       + ", compil\xC3\xA9 et ex\xC3\xA9" "cut\xC3\xA9 par le moteur des scripts (un sous-ensemble : En-t\xC3\xAAte du projet)\n";   // 1.50.0
     }
     Id made = kNoId;
     const std::string name = spec.name, event = spec.event;

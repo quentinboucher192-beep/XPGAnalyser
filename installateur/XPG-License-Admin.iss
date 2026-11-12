@@ -639,6 +639,10 @@ begin
   CreerColonne;
   HabillerEnTete;
   HabillerAccueilEtFin;
+  // 1.50.0 : le recapitulatif retourne ses longues lignes a sa largeur (avant : coupees au bord droit, une barre
+  // de defilement horizontale pour les lire)
+  WizardForm.ReadyMemo.WordWrap := True;
+  WizardForm.ReadyMemo.ScrollBars := ssVertical;
   MajEtapes(0);
 end;
 

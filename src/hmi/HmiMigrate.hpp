@@ -41,7 +41,10 @@ namespace hmi::migrate {
 // Ou est un code a migrer.
 struct Place {
     // 1.12.16 : ViewConstants - les constantes d'une vue ou d'une popup (View::constants ; `view`).
-    enum class Kind : std::uint8_t { Script, ViewScript, Function, SymbolFunction, Override, TypeOperator, SymbolOperator, ViewConstants };
+    // 1.50.0 : TypeMethod - une methode d'un type IHM (HmiType::methods ; `type` le type, `id` la methode) : les memes
+    //  onglets qu'une fonction (Parametres, Locales, Constantes), SELF en plus.
+    enum class Kind : std::uint8_t { Script, ViewScript, Function, SymbolFunction, Override, TypeOperator, SymbolOperator, ViewConstants,
+                                     TypeMethod };
     Kind        kind{Kind::Script};
     Id          view{kNoId};       // un script de vue, une fonction ou un operateur de symbole, une redefinition
     Id          object{kNoId};     // une redefinition : l'instance
@@ -86,6 +89,10 @@ std::size_t apply(Project&, const Plan&);
 // Le rapport, en texte (le volet le montre ; le guide le cite) : un resume, puis code par
 // code - ses declarations, ses valeurs, ses commentaires, ses points d'attention.
 [[nodiscard]] std::string report(const Plan&);
+// 1.50.0 : A L'OUVERTURE D'UN PROJET, les methodes des types IHM dont le corps declare encore ses variables (VAR...
+// END_VAR ecrits a la main avant 1.50.0) passent dans leurs onglets - comme "Migrer ce code" pour chacune, sans perte (un
+// corps illisible reste tel quel). Rend le nombre de methodes changees. Le chargement l'appelle (HmiStore).
+std::size_t migrateMethods(Project&);
 // "12 codes migres, 41 declarations ; 2 laisses tels quels ; 3 points d'attention" ;
 // `before` (la question posee avant d'agir) : "12 codes a migrer, 41 declarations...".
 [[nodiscard]] std::string summary(const Plan&, bool before = false);

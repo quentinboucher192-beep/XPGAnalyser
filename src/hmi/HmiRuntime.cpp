@@ -17,6 +17,7 @@
 #include "HmiPolicy.hpp"
 
 #include "HmiScript.hpp"
+#include "HmiScriptC.hpp"     // 1.50.0 : les scripts C et C++ executes
 #include "HmiDecl.hpp"        // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiCalc.hpp"        // 1.12.7 : les valeurs calculees au demarrage
 #include "HmiMethods.hpp"     // 1.13.0 (lot J1) : les methodes des types IHM (S2) a l'execution (S1)
@@ -3275,9 +3276,20 @@ bool Runtime::runScript(const Script& sc, const std::string& source, double now,
 }
 
 bool Runtime::runScriptHere(const Script& sc, const std::string& source, double now, std::string* error) {
+    // 1.50.0 : UN SCRIPT C OU C++ s'execute : traduit ligne pour ligne dans le ST de l'IHM (HmiScriptC.hpp), il tourne
+    // ici comme un script ST - memes variables, memes fonctions, ses erreurs a la ligne du texte C.
+    std::string translatedCode;
     if (sc.lang != ScriptLang::ST) {
-        log("Script", source, std::string(scriptLangKey(sc.lang)) + " : \xC3\xA9" "dit\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9, non ex\xC3\xA9" "cut\xC3\xA9 en simulation");
-        return true;
+        const auto tr = cscript::translated(sc.body, sc.lang, cscript::entryNamesOf(sc));
+        if (!tr.ok()) {
+            const auto& d = tr.errors.front();
+            const std::string why = "ligne " + std::to_string(d.line) + " : " + d.message;
+            if (error) *error = why;
+            errors_[sc.id] = why;
+            logAt(LogLevel::Error, "Erreur", source, why, d.line);
+            return false;
+        }
+        translatedCode = tr.st;
     }
     if (depth_ >= kMaxDepth) {
         const std::string why = "appel circulaire : " + sc.name + " (plus de " + std::to_string(kMaxDepth) + " niveaux)";
@@ -3317,7 +3329,7 @@ bool Runtime::runScriptHere(const Script& sc, const std::string& source, double 
     origin_.view = project_ ? project_->viewOfScript(sc.id) : kNoId;
     origin_.name = origin_.view != kNoId ? source : sc.name;
     std::string composed;                                            // 1.11.18 (lot 3) : ses declarations du modele
-    const std::string& code = decl::codeOf(sc, composed);
+    const std::string& code = sc.lang != ScriptLang::ST ? translatedCode : decl::codeOf(sc, composed);
     // 1.13.0 (lot J8) : un script d'un espace, ou qui importe des espaces (USING) : ses noms courts en entier.
     const bool spaced = project_ && (!sc.ns.empty() || names::mentionsUsing(sc.body));
     const bool ok = runStatements(spaced ? names::qualify(*project_, code, sc.ns, {}, false) : code, source, now, why, sc.id);

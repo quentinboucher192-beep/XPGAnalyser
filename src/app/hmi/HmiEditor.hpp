@@ -48,6 +48,7 @@ class HmiSymbolPopupsPane;    // 1.11.10 : HmiSymbolPopupsPane.hpp
 class HmiDeclGrid;            // 1.12.16 : les constantes d'une vue (HmiDeclGrid.hpp)
 namespace hmitree { struct Line; }   // 1.10.3 (Q1103) : HmiTreeData.hpp
 class HmiPropsFilterBar;      // 1.10.3 : les filtres de l'onglet Proprietes (HmiEditor.cpp)
+class HmiStretchDialog;       // 1.50.0 : la fenetre Etirer... (HmiStretchDialog.hpp)
 class HmiEditor final : public ui::Widget {
 public:
     using Apply = std::function<void(core::CommandPtr)>;
@@ -139,6 +140,7 @@ public:
         ActSaveTemplate, // lot 20 : Enregistrer la vue comme modele
         // 1.12.30 : les regles, la grille de colonnes, les guides ; les langues cote a cote
         ActRulers, ActColumns, ActGuidesHide, ActGuidesLock, ActGuidesClear, ActLanguages,
+        ActStretch,      // 1.50.0 : Etirer v (la barre d'outils) - le menu Etirer, sous le bouton
     };
     void run(int action);
 
@@ -243,6 +245,29 @@ public:
     void layerMenuChosen(hmi::Id layer, int id);
     void openPaletteMenu(hmi::Kind kind, gfx::Point at);        // planche 7 : une tuile de la bibliotheque
     [[nodiscard]] ui::PopupMenu* canvasMenu() const noexcept { return context_; }
+
+    // ---- 1.50.0 : ETIRER (planche 02 ; le moteur : hmi/HmiStretch.hpp) ----
+    //  Le clic droit d'un objet (la vue, l'Explorateur d'objets) : Etirer > juste apres Aligner > ; la barre
+    //  d'outils : Etirer v (le meme menu). Jusqu'au bord gauche, droit, haut, bas de la vue (Ctrl+Alt+Maj+fleche),
+    //  toute la largeur, la hauteur, la vue ; jusqu'a l'objet voisin, au bord de la selection, a un repere, a
+    //  une colonne de la grille ; Garder les marges (cochee d'office : la marge de la vue) ; Etirer... (la fenetre).
+    //  Au survol d'une entree, l'apercu sur la vue (rien ne change) ; le clic : UNE commande pour tous les objets
+    //  choisis (un seul Ctrl+Z), la barre d'etat dit ce qui a change. Une entree grisee dit pourquoi.
+    static constexpr int kStretchMenu = 5000;   // les ids du menu : + 0..6 la vue (gauche, droite, haut, bas, largeur,
+                                                // hauteur, toute), + 10..13 le voisin, + 20..23 la selection, + 100 + i
+                                                // le repere i, + 500 + i la colonne i, + 900 Garder les marges, + 901 Etirer...
+    bool stretch(const hmi::stretch::Request& request, std::string* why = nullptr);
+    [[nodiscard]] hmi::stretch::Plan stretchPlan(const hmi::stretch::Request& request) const;
+    [[nodiscard]] std::vector<ui::PopupMenu::Item> stretchItems() const;          // le sous-menu (la selection)
+    [[nodiscard]] std::optional<hmi::stretch::Request> stretchRequestOf(int menuId) const;
+    void setStretchKeepMargins(bool on) { stretchMargins_ = on; }
+    [[nodiscard]] bool stretchKeepMargins() const noexcept { return stretchMargins_; }
+    bool previewStretch(std::optional<hmi::stretch::Request> request);   // l'apercu (nullopt : aucun) ; faux : rien a montrer
+    void syncStretchPreview();   // l'apercu suit l'entree survolee du menu ouvert (a chaque dessin)
+    void openStretchMenu();      // Etirer v : le menu sous le bouton de la barre d'outils
+    [[nodiscard]] std::unique_ptr<HmiStretchDialog> makeStretchDialog();
+    bool openStretchDialog();    // faux : rien de choisi, ou pas de gestionnaire de fenetres
+    void stretchDialogDone(bool accepted, const std::string& payload);   // la reponse de la fenetre
 
     // ---- 1.14.1 (lot N6) : LA BIBLIOTHEQUE D'IMAGES (l'onglet Images de la bibliotheque) ----
     //  Une image choisie se pose au clic suivant dans la vue (ou la ou on la lache) ; un double-clic la pose au
@@ -360,6 +385,10 @@ private:
     hmi::Id                   menuLayer_{hmi::kNoId};     // ... le calque vise
     hmi::Kind                 menuPaletteKind_{hmi::Kind::Text};
     std::optional<hmi::imagelib::Image> menuImage_;       // 1.14.1 (lot N6) : la vignette du clic droit
+    bool                      stretchMargins_{true};      // 1.50.0 : Etirer > Garder les marges (cochee d'office)
+    int                       stretchHover_{-1};          // ... l'entree survolee dont l'apercu est montre
+    [[nodiscard]] ui::PopupMenu::Item stretchEntry() const;   // ... l'entree Etirer > du clic droit
+    bool stretchMenuChosen(int id);                       // ... faux : pas une entree d'Etirer
     std::function<void()>     askImageFile_;              // 1.14.1 (lot N6) : le bouton + de l'onglet Images
     void openMenuAt(ui::PopupMenu& menu, gfx::Point at);
     ui::PopupMenu*            legendMenu_{nullptr};       // 1.11.3 : la liste des carres

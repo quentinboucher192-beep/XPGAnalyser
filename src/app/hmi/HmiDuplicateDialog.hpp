@@ -15,22 +15,38 @@
 //      "Ajuster l'espacement".
 //  Le moteur est hmi::dup (sans ecran) ; "Dupliquer" rend le plan a l'appelant,
 //  qui le joue en UNE commande (Ctrl+Z retire tout).
+//
+//  1.50.0 (maquette validee, planche 04 : « Dupliquer... qui tient 500 reperes ») :
+//  « Les copies et leurs reperes » range les copies par des COMPTEURS (une suite n,
+//  ou une grille i x j (x k), j variant le plus vite), donne UNE REGLE PAR PROFONDEUR
+//  (Armoires[.] = i, Departs[.] = j, Voies[.] fixe ; les adresses %MW(1000 + 10 * i + j),
+//  les textes 'Depart {i+1}.{j+1}', les noms 'Depart_{i}_{j}' - le calcul des formules
+//  d'adresses, hmi::dup::computeRows), montre les reperes en LISTE groupee, comptee,
+//  repliable, cherchable, filtrable et virtuelle (un repere « a part » a sa regle ; les
+//  Remplir d'avant passent dans son clic droit), l'APERCU (les 5 premieres et les 3
+//  dernieres copies, les totaux, l'avant / apres de la ligne choisie) et les CONFLITS
+//  (hors des bornes : bloque ; adresse ou nom deja pris : avertit). « Tableau (Excel) »
+//  garde la grille d'avant : la premiere colonne figee, le defilement, seules les cases
+//  visibles se dessinent.
 // =============================================================================
 #pragma once
 
 #include "../../hmi/HmiCommands.hpp"
 #include "../../hmi/HmiDuplicate.hpp"
+#include "../../hmi/HmiDuplicateRules.hpp"   // 1.50.0 : les compteurs, les regles par profondeur
 #include "../../menu/IMenu.hpp"
 #include "../../ui/widgets/Controls.hpp"
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
 
-namespace ui { class TabControl; class ScrollablePanel; }
+namespace ui { class TabControl; class TableView; }
 
 namespace app {
 
@@ -106,6 +122,72 @@ public:
     [[nodiscard]] std::string blockingText() const;      // pourquoi c'est gris
     bool confirm();                                      // "Dupliquer"
 
+    // ---- 1.50.0 (planche 04) : les compteurs, les regles, la liste, l'apercu, les conflits ----
+    [[nodiscard]] const hmi::dup::Model& model() const noexcept { return model_; }
+    [[nodiscard]] const hmi::dup::Rules& rules() const noexcept { return rules_; }
+    // « Une grille : i x j » (1 a 3 compteurs) ; setCopies : « Une suite : n ». Changer de sorte remet les regles
+    // des profondeurs a celles d'office de la nouvelle sorte (i, j, k par profondeur ; o + n) ; les reperes a part restent.
+    void setGrid(std::vector<hmi::dup::Range> ranges);
+    void prefillFromBounds();                            // « Preremplir depuis les bornes »
+    void setCounterK(bool on);                           // « + un compteur k »
+    // La regle d'un groupe (sa cle, son libelle ou son dernier morceau : "Departs[\xC2\xB7]", "Adresses", "Noms des objets").
+    bool setGroupRule(std::string_view group, hmi::dup::Rule rule);
+    bool setVaries(std::string_view group, bool varies); // la colonne « Varie ? »
+    [[nodiscard]] const hmi::dup::Group* findGroup(std::string_view group) const;
+    // Un repere « a part » (`marker` : "$Nom$" ou "Nom") ; resetOwn : « Comme sa profondeur ».
+    bool setOwnRule(std::string_view marker, hmi::dup::Own own);
+    bool resetOwn(std::string_view marker);
+    // La regle a part ecrite : une formule (un repere a indices : pour la profondeur `group`, vide : la plus grande).
+    bool setOwnFormula(std::string_view marker, std::string formula, std::string_view group = {});
+    // ---- la liste des reperes (virtuelle) ----
+    enum class ListFilter : std::uint8_t { All, Indices, Addresses, Texts, Own, Conflicts };
+    enum class Grouping : std::uint8_t { Depth, Object, None };
+    struct ListRow {
+        bool        group{false};
+        std::string key;             // un groupe : sa cle ; un repere : markerKey
+        std::size_t marker{0};       // un repere : son rang dans scanned().markers
+        std::string text, where, rule, last;
+        std::size_t count{0};        // un groupe : ses reperes montres
+        bool        expanded{true};
+        bool        own{false};      // a part
+        int         conflict{0};     // 0 aucun, 1 avertissement, 2 faute
+    };
+    void setSearch(std::string text);
+    void setListFilter(ListFilter f);
+    void setGrouping(Grouping g);
+    void expandAll(bool expanded);                       // « Tout deplier » / « Tout replier »
+    void toggleGroup(std::string_view key);
+    [[nodiscard]] const std::vector<ListRow>& listRows() const noexcept { return listRows_; }
+    [[nodiscard]] std::size_t listCount(ListFilter f) const;
+    // ---- l'apercu ----
+    struct Stats {
+        std::size_t copies{0}, places{0}, markers{0}, replacements{0}, conflicts{0}, faults{0};
+    };
+    [[nodiscard]] Stats stats() const;
+    // Les lignes de l'apercu : les 5 premieres, -1 (l'ecart), les 3 dernieres ; « Tout voir » : toutes.
+    [[nodiscard]] std::vector<int> previewRows() const;
+    void showAllPreview(bool all);
+    // ---- les conflits (les fautes d'abord) ----
+    struct Conflict {
+        bool        blocks{false};
+        std::string text;
+        int         row{0};          // la premiere ligne en cause (0 : l'original)
+        std::string column;
+    };
+    [[nodiscard]] const std::vector<Conflict>& conflicts() const noexcept { return conflicts_; }
+    // ---- pour les essais : l'ecran ----
+    [[nodiscard]] gfx::Rect panelRect() const;           // le cadre du dialogue
+    [[nodiscard]] ui::TableView* depthTable() const noexcept { return depthTable_; }
+    [[nodiscard]] ui::TableView* markerList() const noexcept { return listTable_; }
+    [[nodiscard]] ui::TableView* previewTable() const noexcept { return previewTable_; }
+    // « Tableau (Excel) » : les cases dessinees a la derniere image (lignes x colonnes), la colonne figee, le defilement.
+    struct SheetStats {
+        std::size_t rows{0}, columns{0}, drawnCells{0}, frozenColumns{0};
+        float       scrollX{0}, scrollY{0};
+    };
+    [[nodiscard]] SheetStats sheetStats() const;
+    void scrollSheet(float x, float y);
+
     // 1.11 (R111) : "veux-tu dire" sur un membre de l'automate. `path` ne mene a
     // rien (Armoires[0].sortie.V8) : le debut qui existe reste (Armoires[0]) ;
     // chaque morceau qui n'existe pas prend le membre le plus proche parmi ceux
@@ -120,8 +202,21 @@ protected:
     core::Status buildUi() override;
 
 private:
-    void rebuildGrid();
+    void rebuildGrid();             // 1.50.0 : le tableau (Excel) relit ses colonnes
+    void writeCell(int row, int column, std::string value);   // une case, sans revalider
     void refresh();                 // revalider, le bouton, la note, l'apercu
+    // 1.50.0 : les lignes d'apres les regles ; `countersChanged` : une case vide d'un repere a ses cases se remplit
+    // comme avant (son morceau decale, la colonne preremplie), un nom tape vide prend la serie.
+    void recompute(bool countersChanged);
+    void setCounters(const hmi::dup::Counters& c);
+    void markCells(std::size_t marker, std::string how);
+    void buildList();
+    void buildConflicts();
+    void syncWidgets();             // les tableaux, la bande des compteurs
+    void openOwnEditor(int mode);   // 1 : Formule... ; 2 : Serie (V1{n})
+    [[nodiscard]] std::vector<std::size_t> selectedMarkers() const;
+    [[nodiscard]] std::string ruleText(std::size_t marker) const;
+    [[nodiscard]] int conflictOf(int row, const std::string& column) const;
     void validate();                // 1.11 (R111) : dup::validate, puis "veux-tu dire" sur un membre
     void finish(bool ok);
     [[nodiscard]] int columnIndex(std::string_view column) const;
@@ -138,26 +233,66 @@ private:
     int                                  chosen_{1};
     bool                                 done_{false};
     bool                                 syncing_{false};
+    // 1.50.0 : les regles.
+    hmi::dup::Model                      model_;
+    hmi::dup::Rules                      rules_;
+    std::vector<hmi::dup::RuleError>     ruleErrors_;
+    std::vector<std::string>             ruleKeep_;      // les reperes que les regles gardent (fixe, Garder)
+    std::map<std::string, std::string>   addressOwners_; // les adresses du projet -> leur variable
+    std::vector<hmi::dup::CellCheck>     warnings_;      // les adresses deja prises
+    std::vector<Conflict>                conflicts_;
+    std::map<std::pair<int, std::string>, int> flags_;   // (ligne, markerKey ou "NOM") -> 1 avertit, 2 bloque
+    std::string                          search_;
+    ListFilter                           filter_{ListFilter::All};
+    Grouping                             grouping_{Grouping::Depth};
+    std::set<std::string>                collapsed_;
+    std::vector<ListRow>                 listRows_;
+    bool                                 previewAll_{false};
+    std::vector<std::size_t>             editing_;       // les reperes de la regle a part en cours d'ecriture
+    int                                  editMode_{0};
     // L'ecran.
     class Body;
     class CopiesPage;
     class LayoutPage;
-    class Grid;
     class Preview;
+    class Sheet;
+    class Band;
+    class DepthModel;
+    class ListModel;
+    class PreviewModel;
+    class ConflictModel;
+    hmi::dup::BoundsFn                   bounds_;        // 1.50.0 : les bornes, relevees une fois (la fenetre est modale)
+    std::size_t                          replaced_{0};   // 1.50.0 : les remplacements du plan (l'apercu)
+    std::vector<int>                     previewIndex_;  // les lignes de l'apercu (-1 : l'ecart)
+    std::vector<std::size_t>             samples_;       // les reperes montres en colonnes dans l'apercu
+    std::shared_ptr<DepthModel>          depthModel_;
+    std::shared_ptr<ListModel>           listModel_;
+    std::shared_ptr<PreviewModel>        previewModel_;
+    std::shared_ptr<ConflictModel>       conflictModel_;
     Body*                                body_{nullptr};
     ui::TabControl*                      tabs_{nullptr};
     CopiesPage*                          copiesPage_{nullptr};
     LayoutPage*                          layoutPage_{nullptr};
-    ui::ScrollablePanel*                 gridPanel_{nullptr};
-    Grid*                                grid_{nullptr};
+    Sheet*                               sheet_{nullptr};       // 1.50.0 : « Tableau (Excel) », virtuel
+    Band*                                band_{nullptr};
+    ui::TableView*                       depthTable_{nullptr};
+    ui::TableView*                       listTable_{nullptr};
+    ui::TableView*                       previewTable_{nullptr};
+    ui::TableView*                       conflictTable_{nullptr};
+    ui::InputText*                       searchField_{nullptr};
+    ui::InputText*                       ownField_{nullptr};
+    ui::InputText*                       ownFrom_{nullptr};
+    ui::DropDown*                        ownDepth_{nullptr};
+    std::vector<ui::Button*>             ownButtons_;
+    std::vector<ui::Button*>             modeButtons_;          // Une suite / Une grille
+    std::vector<ui::Button*>             filterButtons_;
+    std::vector<ui::Button*>             groupButtons_;
+    std::vector<ui::Button*>             foldButtons_;          // Tout deplier / Tout replier
+    std::vector<ui::InputText*>          rangeFields_;          // i de, a ; j de, a ; k de, a
+    ui::Button*                          kButton_{nullptr};
+    ui::Button*                          boundsButton_{nullptr};
     ui::InputText*                       copiesField_{nullptr};
-    ui::DropDown*                        fillColumn_{nullptr};
-    ui::InputText*                       fillPattern_{nullptr};
-    ui::InputText*                       fillFrom_{nullptr};
-    ui::DropDown*                        fillArray_{nullptr};    // 1.10.4 : Remplir > Tableau...
-    std::vector<ui::Checkbox*>           follow_;
-    std::vector<bool>                    followed_;      // 1.11 (REP-4) : le reglage de chaque case "Suivre"
-    std::vector<ui::Checkbox*>           keepBoxes_;
+    std::vector<bool>                    followed_;      // 1.11 (REP-4) : le reglage de chaque case "Suivre" (1.50.0 : la regle de sa profondeur)
     ui::Checkbox*                        replaceOriginal_{nullptr};
     std::shared_ptr<ui::RadioGroup>      axis_;
     ui::InputText*                       columnsField_{nullptr};

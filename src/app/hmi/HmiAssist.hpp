@@ -120,6 +120,7 @@ struct Item {
     // chemin avant le point et les deux projets).
     Nature      nature{Nature::Variable};
     Origin      origin{Origin::Hmi};
+    bool        muted{false};               // 1.50.0 : grisee (une methode privee proposee hors de son type)
 };
 
 // Ce qu'on propose pour `prefix` (le mot en cours), `before` etant le texte qui

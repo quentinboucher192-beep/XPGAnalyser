@@ -322,6 +322,9 @@ std::string methodFunctionText(const Project& p, std::string_view ownerType, con
     HmiFunction m2 = m;
     m2.body = rewriteBody(p, ownerType, m, internal);
     std::string head = "FUNCTION " + internal + (m.returnType.empty() ? std::string{} : " : " + displayType(m.returnType));
+    // 1.50.0 : une methode generique (ses propres T, comme une fonction de symbole) porte son TEMPLATE <...> devant, sur la
+    // meme ligne (functionText) ; sans generique, le texte d'avant.
+    if (!m.generics.empty()) head = "TEMPLATE <" + genericsText(m.generics) + "> " + head;
     // SELF, en VAR_IN_OUT : une methode qui ecrit un membre le modifie pour de bon. SELF a le type qui
     // DEFINIT la methode ; un sous-type passe la ou ce parent est attendu (montee du VAR_IN_OUT).
     // 1.13.0 (J1b) : l'en-tete et SELF sur la LIGNE 1, comme functionText - la ligne N du corps est la ligne N de
@@ -618,6 +621,10 @@ std::string methodProblem(const Project& p, const HmiType& owner, const HmiFunct
     // interface seule y est refusee (REF_TO I_x).
     const auto knownName = [&p](std::string_view t) { return types::knownTypeName(p, t); };
     const auto typeProblem = [&](const std::string& t) -> std::string {
+        // 1.50.0 : un generique de la methode (ses T, comme une fonction de symbole) ou du type (T_Mesure<T>) : permis.
+        for (const auto* gens : {&m.generics, &owner.generics})
+            for (const auto& g : *gens)
+                if (sameName(g.name, trimmed(t))) return {};
         if (const std::string iface = types::interfaceAsData(p, t, true); !iface.empty()) return iface;
         if (localTypeSupported(t) || richLocalType(t, knownName)) return {};
         std::string why;

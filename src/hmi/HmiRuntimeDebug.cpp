@@ -162,7 +162,7 @@ bool debugText(const Project& p, Id script, Id function, std::string& text, bool
             return false;
         }
         if (sc->lang != ScriptLang::ST) {
-            if (why) *why = "non ex\xC3\xA9" "cut\xC3\xA9 en simulation (C/C++) : il ne s'arr\xC3\xAAtera pas";
+            if (why) *why = "ex\xC3\xA9" "cut\xC3\xA9 sans le d\xC3\xA9" "bogueur (C/C++) : il ne s'arr\xC3\xAAtera pas";
             return false;
         }
         text = markers::strip(decl::codeOf(*sc));

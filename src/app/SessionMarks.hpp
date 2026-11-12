@@ -92,7 +92,8 @@ void setBoard(Board board);
 [[nodiscard]] std::uint64_t boardRevision();
 
 struct Hooks {
-    std::function<void(const std::string&, const std::string&)> say;   // ecrire a l'equipe (1.50.0 : en reponse a un message)
+    std::function<void(const std::string&)> say;                // ecrire a l'equipe
+    std::function<void(const std::string&, const std::string&)> sayReply;   // 1.50.0 : en reponse a un message (son id)
     std::function<void(int)>                follow;             // suivre un membre (sa vue s'ouvre)
     std::function<std::string(std::string*)> exportJournal;     // le chemin ecrit (vide : `why`)
 };

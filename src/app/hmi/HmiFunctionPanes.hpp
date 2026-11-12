@@ -257,6 +257,17 @@ private:
     core::ConnectionScope links_;
 };
 
+// 1.50.0 (planche 01) : L'EDITEUR D'UNE FONCTION, PARTAGE - le volet Fonctions (projet, vue, popup, symbole) et les
+// Methodes des Types IHM le posent tous les deux dans leur panneau : `codePage` (l'editeur et ce qui l'entoure) sous
+// l'onglet Code, puis Parametres, Locales, Constantes (HmiDeclGrid) et Tests (HmiFunctionTestsPage) - les memes
+// grilles, les memes fautes soulignees, le meme Ctrl+Z.
+struct FunctionTabs {
+    HmiCodeTabs*          tabs{nullptr};
+    HmiFunctionTestsPage* tests{nullptr};
+};
+FunctionTabs makeFunctionTabs(HmiTitledPanel& panel, const std::string& base, hmi::DocumentPtr doc, HmiDeclGrid::Apply apply,
+                              ui::WidgetPtr codePage, HmiDeclBanner* banner);
+
 // 1.13.0 (correctifs F2) : les declarations d'une fonction telles que l'ecran les montre (la liste IHM . Fonctions, son
 // inspecteur, Essayer) - TOUT TYPE LU : un parametre de type T (generique), une structure, un tableau. Sans types
 // connus, a : T etait refuse et Max<T>(a : T; b : T) comptait 0 parametre (la colonne disait "-").

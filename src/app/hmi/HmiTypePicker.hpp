@@ -73,6 +73,9 @@ public:
         // resultat se verifie avec un type de chaque contrainte a leur place.
         std::vector<hmi::GenericParam> generics{};
         std::string                    genericsOf{};              // « T_Extractor<T, K> » (la provenance)
+        // 1.50.0 (planche 03) : une CONSTANTE (la grille des Constantes) - l'Acces REF_TO / POINTER TO y est grise
+        // (une constante ne vise rien).
+        bool                           constant{false};
     };
     struct Answer {
         std::string type;                                                  // le type choisi (ecrit : "ARRAY[0..9] OF REAL")
@@ -96,6 +99,14 @@ public:
     bool select(std::string_view name);                // une ligne de la liste, par son nom
     void setArray(bool on, const std::string& bounds = {});   // "0..9", "0..3, 0..9"
     void setReference(bool on);
+    // 1.50.0 (planche 03) : L'ACCES - "Direct", "REF_TO", "POINTER TO" ; faux : inconnu, ou grise ici (accessProblem le
+    // dit). `whole` : avec une forme, l'acces vise le tout (POINTER TO LIST OF Object) et non chaque element.
+    bool setAccess(std::string_view label);
+    void setPointsWhole(bool whole);
+    [[nodiscard]] std::string accessProblem(std::string_view label) const;   // vide : permis ici
+    [[nodiscard]] std::string accessLine() const;      // la phrase sous la ligne Acces
+    [[nodiscard]] std::string typedNote() const;       // le texte ecrit, corrige (POINTER OF) ou complete (pointer to obj)
+    [[nodiscard]] std::string writtenAs() const;       // « S'ecrira : Cible : POINTER TO Object; »
     void setMap(bool on);
     bool setForm(std::string_view labelOrKey);         // 1.12.2 : "Liste", "vecteur", "Dictionnaire (MAP)"...
     void composeElement();                             // 1.12.14 : Composer l'element... (un second selecteur)
