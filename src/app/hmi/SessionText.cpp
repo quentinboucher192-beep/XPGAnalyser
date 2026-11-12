@@ -3,6 +3,7 @@
 // =============================================================================
 #include "SessionText.hpp"
 
+#include "../../session/SessionProtocol.hpp"   // 1.50.0 : l'extrait cite (chatExcerpt)
 #include "../../ui/Icons.hpp"
 #include "../../ui/Theme.hpp"
 
@@ -214,18 +215,38 @@ constexpr float kPadX = 8.f;
 constexpr float kTimeW = 46.f;    // "14:32" et l'espace
 constexpr float kDotW = 14.f;     // la pastille de couleur et l'espace
 constexpr float kIconW = 18.f;    // l'icone devant le texte (journal, session)
+constexpr float kQuoteBar = 8.f;  // 1.50.0 : le filet de l'extrait cite et l'espace
+constexpr float kHoverW = 24.f, kHoverH = 20.f, kHoverGap = 2.f;   // 1.50.0 : les pictogrammes du survol
 float lineStep() { return std::ceil(ui::lineHeight(kText)) + 3.f; }
 
 std::string textOf(const Row& r) { return r.count > 1 ? r.text + "  (\xC3\x97" + std::to_string(r.count) + ")" : r.text; }
+
+const std::string kSeeAll = "\xE2\x80\xA6 voir tout";
+const std::string kReduce = "R\xC3\xA9" "duire";
 } // namespace
 
-LineList::LineList(std::string id) : ui::Widget(std::move(id)) {}
+// ---- 1.50.0 : repondre, reduire, copier ----
+std::string copyText(const Row& r, bool withAuthor) { return withAuthor ? rowText(r) : textOf(r); }
+
+std::string replyLabel(const std::string& who, const std::string& excerpt) {
+    return "En r\xC3\xA9ponse \xC3\xA0 " + (who.empty() ? std::string("un message") : who) + " : \xC2\xAB " + excerpt + " \xC2\xBB";
+}
+
+std::string rowKey(const Row& r) {
+    if (!r.id.empty()) return r.id;
+    return std::string(r.journal ? "j|" : r.system ? "s|" : "c|") + r.time + "|" + r.who + "|" + r.text;
+}
+
+bool canReply(const Row& r) { return !r.journal && !r.system && !r.id.empty(); }
+
+LineList::LineList(std::string id) : ui::Widget(std::move(id)) { setFocusPolicy(true); }   // 1.50.0 : Ctrl+C, les fleches
 
 void LineList::setRows(std::vector<Row> rows) {
     const bool wasBottom = stick_ || atBottom();
     rows_ = std::move(rows);
     placedWidth_ = -1.f;
     stick_ = wasBottom;
+    if (hover_ >= static_cast<int>(rows_.size())) hover_ = -1;
     invalidateLayout();
     invalidate();
 }
@@ -276,6 +297,7 @@ void LineList::place() {
         }
         for (const auto& r : rows_) {
             Placed p;
+            p.key = rowKey(r);
             const std::string who = r.system ? std::string("Session") : r.who;
             const float whoRoom = std::max(0.f, whoW_ - (r.color && !r.system && whoW_ >= kDotW + 8.f ? kDotW : 0.f));
             p.who = elide(who, r.mine ? kTextBold : kText, whoRoom);
@@ -283,16 +305,30 @@ void LineList::place() {
             const float iconW = r.journal || r.system ? kIconW : 0.f;
             p.lines = wrap(textOf(r), kText, std::max(10.f, textW_ - iconW));
             if (p.lines.empty()) p.lines.emplace_back();
-            p.y = y;
-            if (columns_) {
-                p.textX = textX_;
-                p.textY = 0.f;
-                p.h = static_cast<float>(p.lines.size()) * step + 6.f;
-            } else {
-                p.textX = textX_;
-                p.textY = step;
-                p.h = static_cast<float>(p.lines.size() + 1) * step + 6.f;
+            // 1.50.0 : reduit au-dela de kCollapseLines + 1 lignes (sauf deballe a la main) ; l'extrait d'une reponse
+            // au-dessus du texte ; << ... voir tout >> / << Reduire >> dessous. Chacun sur une ligne, dans la colonne.
+            p.collapsible = p.lines.size() > kCollapseLines + 1;
+            p.collapsed = p.collapsible && expanded_.count(p.key) == 0;
+            p.shown = p.collapsed ? kCollapseLines : p.lines.size();
+            float cy = columns_ ? 0.f : step;   // etroit : qui sur la premiere ligne, le texte dessous
+            if (!r.replyText.empty() || !r.replyWho.empty()) {
+                const std::string quoted = r.replyWho.empty() ? r.replyText : r.replyWho + " : " + r.replyText;
+                p.quote = elide(quoted, kText, std::max(0.f, textW_ - kQuoteBar));
+                if (!p.quote.empty()) {
+                    p.quoteY = cy;
+                    cy += step;
+                }
             }
+            p.textX = textX_;
+            p.textY = cy;
+            cy += static_cast<float>(p.shown) * step;
+            if (p.collapsible) {
+                p.toggle = elide(p.collapsed ? kSeeAll : kReduce, kText, textW_);
+                p.toggleY = cy;
+                cy += step;
+            }
+            p.y = y;
+            p.h = cy + 6.f;
             y += p.h;
             placed_.push_back(std::move(p));
         }
@@ -311,6 +347,46 @@ void LineList::onLayout() {
     offset_ = stick_ ? maxOffset : std::clamp(offset_, 0.f, maxOffset);
 }
 
+int LineList::rowAt(gfx::Point pt) const {
+    const auto a = area();
+    if (!a.contains(pt)) return -1;
+    const float y = pt.y - a.y + offset_;
+    for (std::size_t i = 0; i < placed_.size() && i < rows_.size(); ++i)
+        if (y >= placed_[i].y && y < placed_[i].y + placed_[i].h) return static_cast<int>(i);
+    return -1;
+}
+
+int LineList::hoverButtonCount(std::size_t i) const {
+    if (i >= rows_.size()) return 0;
+    return replies_ && onReply && canReply(rows_[i]) ? 2 : 1;
+}
+
+gfx::Rect LineList::hoverButton(std::size_t i, int which) const {
+    if (i >= placed_.size() || i >= rows_.size() || which < 0 || which > 1) return {};
+    const int n = hoverButtonCount(i);
+    if (which == 0 && n < 2) return {};
+    const auto a = area();
+    const float top = a.y + placed_[i].y - offset_ + 2.f;
+    const float right = a.right() - 4.f;
+    const float x = which == 1 ? right - kHoverW : right - 2.f * kHoverW - kHoverGap;
+    if (x < a.x + 2.f) return {};   // trop etroit : le clic droit reste
+    return {x, top, kHoverW, kHoverH};
+}
+
+gfx::Rect LineList::quoteRect(std::size_t i) const {
+    if (i >= placed_.size() || placed_[i].quote.empty()) return {};
+    const auto a = area();
+    const auto& p = placed_[i];
+    return {a.x + p.textX, a.y + p.y - offset_ + 3.f + p.quoteY, kQuoteBar + ui::measureWidth(p.quote, kText), lineStep()};
+}
+
+gfx::Rect LineList::toggleRect(std::size_t i) const {
+    if (i >= placed_.size() || placed_[i].toggle.empty()) return {};
+    const auto a = area();
+    const auto& p = placed_[i];
+    return {a.x + p.textX, a.y + p.y - offset_ + 3.f + p.toggleY, ui::measureWidth(p.toggle, kText), lineStep()};
+}
+
 void LineList::onPaint(const ui::PaintContext& ctx) {
     if (placedWidth_ != bounds().w) onLayout();
     const auto& c = ctx.theme.color;
@@ -318,6 +394,8 @@ void LineList::onPaint(const ui::PaintContext& ctx) {
     const auto a = area();
     const float step = lineStep();
     const float th = r.lineHeight(kText);
+    const int sel = selected();
+    const int hov = hovered() ? hover_ : -1;
     r.pushClip(a);
     if (rows_.empty()) {
         float y = a.y + 6.f - offset_;
@@ -331,6 +409,13 @@ void LineList::onPaint(const ui::PaintContext& ctx) {
         const auto& p = placed_[i];
         const float top = a.y + p.y - offset_;
         if (top > a.bottom() || top + p.h < a.y) continue;
+        // 1.50.0 : le message choisi (un clic, ou celui qu'une citation montre) ; celui sous la souris.
+        if (static_cast<int>(i) == sel) {
+            r.fillRect({a.x, top, a.w, std::max(0.f, p.h - 1.f)}, c.selectionBg.withAlpha(90));
+            r.fillRect({a.x, top, 3.f, std::max(0.f, p.h - 1.f)}, c.accent);
+        } else if (static_cast<int>(i) == hov) {
+            r.fillRect({a.x, top, a.w, std::max(0.f, p.h - 1.f)}, ctx.theme.brand.hover);
+        }
         if (i > 0) r.fillRect({a.x + kPadX, std::round(top - 1.f), std::max(0.f, a.w - 2.f * kPadX), 1.f}, c.border.withAlpha(110));
         const float ty = top + 3.f + (step - th) * 0.5f;
         r.drawText({a.x + kPadX, ty}, elide(row.time, kText, std::max(0.f, a.w - 2.f * kPadX)), kText, c.textMuted);
@@ -341,6 +426,12 @@ void LineList::onPaint(const ui::PaintContext& ctx) {
         }
         if (!p.who.empty()) r.drawText({wx, ty}, p.who, row.mine ? kTextBold : kText, row.system ? c.textMuted : c.text);
         float tx = a.x + p.textX;
+        // 1.50.0 : l'extrait cite (un filet a la couleur d'accent, le texte discret) au-dessus du texte.
+        if (!p.quote.empty()) {
+            const float qy = top + 3.f + p.quoteY;
+            r.fillRect({tx, qy + 2.f, 2.f, std::max(0.f, step - 4.f)}, c.accent);
+            r.drawText({tx + kQuoteBar, qy + (step - th) * 0.5f}, p.quote, kText, c.textMuted);
+        }
         const float ly0 = top + 3.f + p.textY;
         if (row.journal || row.system) {
             ui::drawIcon(r, row.journal ? ui::Icon::History : ui::Icon::Info, {tx, ly0 + std::round((step - 14.f) * 0.5f), 14.f, 14.f},
@@ -348,11 +439,21 @@ void LineList::onPaint(const ui::PaintContext& ctx) {
             tx += kIconW;
         }
         float ly = ly0 + (step - th) * 0.5f;
-        for (const auto& l : p.lines) {
-            if (!l.empty()) r.drawText({tx, ly}, l, kText, row.system ? c.textMuted : c.text);
+        for (std::size_t k = 0; k < p.shown && k < p.lines.size(); ++k) {
+            if (!p.lines[k].empty()) r.drawText({tx, ly}, p.lines[k], kText, row.system ? c.textMuted : c.text);
             ly += step;
         }
+        if (!p.toggle.empty()) r.drawText({a.x + p.textX, top + 3.f + p.toggleY + (step - th) * 0.5f}, p.toggle, kText, c.accent);
     }
+    // 1.50.0 : Repondre et Copier sur la ligne survolee (en haut a droite, sur un fond : ils passent sur le texte).
+    if (hov >= 0)
+        for (int k = 0; k < 2; ++k) {
+            const auto b = hoverButton(static_cast<std::size_t>(hov), k);
+            if (b.w <= 0.f) continue;
+            r.fillRoundedRect(b, c.panelBg, 4.f);
+            r.strokeRect(b, c.border, 1.f);
+            ui::drawIcon(r, k == 0 ? ui::Icon::Undo : ui::Icon::Copy, b.inset(4.f, 3.f), c.text);
+        }
     r.popClip();
     scroll_.paint(ctx, offset_);
 }
@@ -363,21 +464,311 @@ ui::EventResult LineList::onEvent(const ui::InputEvent& ev) {
         if (changed) stick_ = atBottom();
         return ui::EventResult::Consumed;
     }
+    // ---- 1.50.0 : survoler, choisir, repondre, copier, deballer, le menu du clic droit ----
+    if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
+        const int h = rowAt(m->pos);
+        if (h != hover_) {
+            hover_ = h;
+            invalidate();
+        }
+        return ui::Widget::onEvent(ev);
+    }
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
+        if (!area().contains(d->pos)) return ui::Widget::onEvent(ev);
+        grabFocus();
+        const int i = rowAt(d->pos);
+        if (d->button == ui::MouseButton::Right) {
+            if (i >= 0) select(i);
+            openMenu(i, d->pos);
+            return ui::EventResult::Consumed;
+        }
+        if (d->button != ui::MouseButton::Left) return ui::Widget::onEvent(ev);
+        if (i < 0) {
+            select(-1);
+            return ui::EventResult::Consumed;
+        }
+        const auto row = static_cast<std::size_t>(i);
+        hover_ = i;
+        if (hoverButton(row, 0).contains(d->pos)) {
+            (void)reply(row);
+            return ui::EventResult::Consumed;
+        }
+        if (hoverButton(row, 1).contains(d->pos)) {
+            select(i);
+            (void)copy(row, false);
+            return ui::EventResult::Consumed;
+        }
+        if (quoteRect(row).contains(d->pos)) {
+            if (!goToQuoted(row)) select(i);
+            return ui::EventResult::Consumed;
+        }
+        if (toggleRect(row).contains(d->pos)) {
+            setExpanded(row, collapsed(row));
+            return ui::EventResult::Consumed;
+        }
+        select(i);
+        return ui::EventResult::Consumed;
+    }
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && focused()) {
+        const int s = selected();
+        if (k->key == ui::Key::C && k->mods.ctrl && !k->mods.shift && !k->mods.alt && s >= 0) {
+            (void)copy(static_cast<std::size_t>(s), false);
+            return ui::EventResult::Consumed;
+        }
+        if (ui::isContextMenuKey(*k)) {
+            const auto a = area();
+            gfx::Point at{a.x + 20.f, a.y + 10.f};
+            if (s >= 0 && static_cast<std::size_t>(s) < placed_.size())
+                at.y = std::clamp(a.y + placed_[static_cast<std::size_t>(s)].y - offset_ + 10.f, a.y, a.bottom());
+            openMenu(s, at);
+            return ui::EventResult::Consumed;
+        }
+        if ((k->key == ui::Key::Up || k->key == ui::Key::Down) && k->mods.none() && !rows_.empty()) {
+            const int n = static_cast<int>(rows_.size());
+            const int next = s < 0 ? n - 1 : std::clamp(s + (k->key == ui::Key::Up ? -1 : 1), 0, n - 1);
+            select(next);
+            reveal(static_cast<std::size_t>(next));
+            return ui::EventResult::Consumed;
+        }
+    }
     return ui::Widget::onEvent(ev);
+}
+
+// ---- 1.50.0 : choisir, repondre, reduire / deballer, copier ----
+void LineList::setRepliesEnabled(bool on) {
+    if (on == replies_) return;
+    replies_ = on;
+    invalidate();
+}
+
+int LineList::selected() const {
+    if (selectedKey_.empty()) return -1;
+    if (placed_.size() == rows_.size()) {
+        for (std::size_t i = 0; i < placed_.size(); ++i)
+            if (placed_[i].key == selectedKey_) return static_cast<int>(i);
+        return -1;
+    }
+    for (std::size_t i = 0; i < rows_.size(); ++i)
+        if (rowKey(rows_[i]) == selectedKey_) return static_cast<int>(i);
+    return -1;
+}
+
+void LineList::select(int index) {
+    const std::string key = index >= 0 && static_cast<std::size_t>(index) < rows_.size() ? rowKey(rows_[static_cast<std::size_t>(index)]) : std::string{};
+    if (key == selectedKey_) return;
+    selectedKey_ = key;
+    invalidate();
+}
+
+int LineList::indexOfId(const std::string& id) const {
+    if (id.empty()) return -1;
+    for (std::size_t i = rows_.size(); i-- > 0;)
+        if (!rows_[i].journal && !rows_[i].system && rows_[i].id == id) return static_cast<int>(i);
+    return -1;
+}
+
+bool LineList::collapsible(std::size_t i) const { return i < placed_.size() && placed_[i].collapsible; }
+bool LineList::collapsed(std::size_t i) const { return i < placed_.size() && placed_[i].collapsed; }
+
+void LineList::setExpanded(std::size_t i, bool expanded) {
+    if (i >= rows_.size()) return;
+    const std::string key = rowKey(rows_[i]);
+    if (expanded) expanded_.insert(key);
+    else expanded_.erase(key);
+    placedWidth_ = -1.f;
+    invalidateLayout();
+    invalidate();
+    layout();   // la place des lignes suivantes change : refaite tout de suite (un clic suivant la lit)
+}
+
+void LineList::collapseAll() {
+    if (expanded_.empty()) return;
+    expanded_.clear();
+    placedWidth_ = -1.f;
+    invalidateLayout();
+    invalidate();
+    layout();
+}
+
+bool LineList::copy(std::size_t i, bool withAuthor) {
+    if (i >= rows_.size()) return false;
+    ui::setClipboardText(copyText(rows_[i], withAuthor));
+    return true;
+}
+
+bool LineList::reply(std::size_t i) {
+    if (i >= rows_.size() || !replies_ || !onReply || !canReply(rows_[i])) return false;
+    onReply(rows_[i]);
+    return true;
+}
+
+void LineList::reveal(std::size_t i) {
+    if (i >= placed_.size()) return;
+    const auto a = area();
+    const auto& p = placed_[i];
+    if (p.y - 2.f < offset_) offset_ = p.y - 2.f;
+    else if (p.y + p.h + 2.f > offset_ + a.h) offset_ = std::min(p.y - 2.f, p.y + p.h + 2.f - a.h);
+    offset_ = std::clamp(offset_, 0.f, std::max(0.f, content_ - a.h));
+    stick_ = atBottom();
+    invalidate();
+}
+
+bool LineList::goToQuoted(std::size_t i) {
+    if (i >= rows_.size() || rows_[i].replyId.empty()) return false;
+    const int j = indexOfId(rows_[i].replyId);
+    if (j < 0) return false;
+    select(j);
+    reveal(static_cast<std::size_t>(j));
+    return true;
+}
+
+void LineList::setViewState(ViewState v) {
+    expanded_ = std::move(v.expanded);
+    selectedKey_ = std::move(v.selected);
+    placedWidth_ = -1.f;
+    invalidateLayout();
+    invalidate();
+}
+
+void LineList::openMenu(int row, gfx::Point at) {
+    if (!menu_) {
+        menu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".menu")));
+        menu_->itemChosen->connect([this](int a) { runMenu(a); }).release();
+    }
+    const Row* r = row >= 0 && static_cast<std::size_t>(row) < rows_.size() ? &rows_[static_cast<std::size_t>(row)] : nullptr;
+    menuKey_ = r ? rowKey(*r) : std::string{};
+    const std::string none = "aucun message choisi";
+    const auto item = [](std::string label, int id, ui::Icon icon, bool enabled, std::string why, std::string key = {}) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.id = id;
+        it.icon = icon;
+        it.enabled = enabled;
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        it.shortcut = std::move(key);
+        return it;
+    };
+    std::vector<ui::PopupMenu::Item> items;
+    const bool canAnswer = r && replies_ && onReply && canReply(*r);
+    const std::string noReply = !r ? none : r->journal ? std::string("une ligne du journal") : r->system ? std::string("une ligne de la session")
+                                                                                                         : std::string("pas ici");
+    items.push_back(item("R\xC3\xA9pondre", 1, ui::Icon::Undo, canAnswer, noReply));
+    items.push_back(item("Copier", 2, ui::Icon::Copy, r != nullptr, none, "Ctrl+C"));
+    items.push_back(item("Copier avec l'auteur et l'heure", 3, ui::Icon::None, r != nullptr, none));
+    ui::PopupMenu::Item sep;
+    sep.separator = true;
+    items.push_back(sep);
+    const auto at_ = static_cast<std::size_t>(std::max(0, row));
+    const bool coll = r && collapsible(at_);
+    items.push_back(item(coll && !collapsed(at_) ? kReduce : std::string("D\xC3\xA9" "baller"), 4, ui::Icon::None, coll,
+                         r ? std::string("le message se lit en entier") : none));
+    bool anyOpen = false;
+    for (const auto& p : placed_) anyOpen = anyOpen || (p.collapsible && !p.collapsed);
+    items.push_back(item("Tout r\xC3\xA9" "duire", 5, ui::Icon::Collapse, anyOpen, "aucun message d\xC3\xA9" "ball\xC3\xA9"));
+    menu_->setItems(std::move(items));
+    menu_->openInWindow(at);
+}
+
+void LineList::runMenu(int action) {
+    int i = -1;
+    if (!menuKey_.empty())
+        for (std::size_t k = 0; k < rows_.size(); ++k)
+            if (rowKey(rows_[k]) == menuKey_) {
+                i = static_cast<int>(k);
+                break;
+            }
+    if (action == 5) {
+        collapseAll();
+        return;
+    }
+    if (i < 0) return;
+    const auto row = static_cast<std::size_t>(i);
+    switch (action) {
+        case 1: (void)reply(row); break;
+        case 2: (void)copy(row, false); break;
+        case 3: (void)copy(row, true); break;
+        case 4: setExpanded(row, collapsed(row)); break;
+        default: break;
+    }
 }
 
 std::string LineList::liveTooltip(gfx::Point mouse) const {
     const auto a = area();
     if (!a.contains(mouse)) return {};
-    const float y = mouse.y - a.y + offset_;
-    for (std::size_t i = 0; i < placed_.size() && i < rows_.size(); ++i) {
-        if (y < placed_[i].y || y >= placed_[i].y + placed_[i].h) continue;
-        const auto& r = rows_[i];
-        if (r.system) return "La session \xC2\xB7 " + r.time;
-        std::string t = (r.journal ? "Journal de la session \xC2\xB7 " : "Discussion \xC2\xB7 ") + r.who + " \xC2\xB7 " + r.time;
-        if (r.journal && r.count > 1) t += " \xC2\xB7 " + std::to_string(r.count) + " gestes";
-        return t;
+    const int at = rowAt(mouse);
+    if (at < 0) return {};
+    const auto i = static_cast<std::size_t>(at);
+    const auto& r = rows_[i];
+    if (at == hover_) {
+        if (hoverButton(i, 0).contains(mouse)) return "R\xC3\xA9pondre \xC3\xA0 ce message";
+        if (hoverButton(i, 1).contains(mouse)) return "Copier le message (Ctrl+C)";
     }
+    if (quoteRect(i).contains(mouse))
+        return replyLabel(r.replyWho, r.replyText)
+             + (indexOfId(r.replyId) >= 0 ? std::string(" \xE2\x80\x94 clic : aller au message") : std::string(" \xE2\x80\x94 le message n'est plus dans la liste"));
+    if (toggleRect(i).contains(mouse)) return collapsed(i) ? "Voir tout le message" : "R\xC3\xA9" "duire le message";
+    if (r.system) return "La session \xC2\xB7 " + r.time;
+    std::string t = (r.journal ? "Journal de la session \xC2\xB7 " : "Discussion \xC2\xB7 ") + r.who + " \xC2\xB7 " + r.time;
+    if (r.journal && r.count > 1) t += " \xC2\xB7 " + std::to_string(r.count) + " gestes";
+    return t;
+}
+
+// ------------------------------------------------------------------- 1.50.0 : ReplyBar ---
+ReplyBar::ReplyBar(std::string id) : ui::Widget(std::move(id)) {
+    auto b = std::make_unique<ui::Button>("Annuler la r\xC3\xA9ponse", this->id() + ".annuler");
+    b->setIcon(ui::Icon::Close);
+    b->setCompact(true);
+    b->setStyle(ui::Button::Style::Flat);
+    b->setTooltip("Annuler la r\xC3\xA9ponse (\xC3\x89" "chap)");
+    cancel_ = &static_cast<ui::Button&>(addChild(std::move(b)));
+    cancel_->clicked->connect([this] {
+        clear();
+        if (onCancel) onCancel();
+    }).release();
+}
+
+void ReplyBar::set(const Row& row) {
+    replyId_ = row.id;
+    label_ = replyLabel(row.who, session::chatExcerpt(row.text));
+    invalidateLayout();
+    invalidate();
+}
+
+void ReplyBar::clear() {
+    if (replyId_.empty() && label_.empty()) return;
+    replyId_.clear();
+    label_.clear();
+    shown_.clear();
+    invalidateLayout();
+    invalidate();
+}
+
+void ReplyBar::onLayout() {
+    const auto b = bounds();
+    const bool button = b.w >= 60.f && b.h >= 18.f;
+    cancel_->setVisibility(button ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    const float bw = std::min(24.f, b.h);
+    if (button) cancel_->setBounds({b.right() - bw - 1.f, b.y + std::floor((b.h - bw) * 0.5f), bw, bw});
+    const float left = b.x + 10.f;
+    const float right = button ? cancel_->bounds().x - 6.f : b.right() - 4.f;
+    textRect_ = {left, b.y, std::max(0.f, right - left), b.h};
+    shown_ = elide(label_, kText, textRect_.w);
+}
+
+void ReplyBar::onPaint(const ui::PaintContext& ctx) {
+    const auto& c = ctx.theme.color;
+    const auto b = bounds();
+    ctx.r.fillRoundedRect(b, c.inputBg, 4.f);
+    ctx.r.fillRect({b.x + 2.f, b.y + 4.f, 3.f, std::max(0.f, b.h - 8.f)}, c.accent);
+    if (!shown_.empty()) {
+        ctx.r.pushClip(textRect_);
+        ctx.r.drawText({textRect_.x, textRect_.y + (textRect_.h - ctx.r.lineHeight(kText)) * 0.5f}, shown_, kText, c.textMuted);
+        ctx.r.popClip();
+    }
+}
+
+std::string ReplyBar::liveTooltip(gfx::Point mouse) const {
+    if (textRect_.contains(mouse)) return label_;
     return {};
 }
 

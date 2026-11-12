@@ -93,6 +93,10 @@ public:
         std::string   from, text, time;
         std::uint32_t color{0};
         bool          system{false};
+        // 1.50.0 : son identifiant (le meme sur chaque PC ; vide : une ligne de la session) et le message auquel il
+        // repond (vide : aucun).
+        std::string        id{};
+        session::ChatReply reply{};
     };
 
     explicit SessionService(App&);
@@ -126,7 +130,8 @@ public:
 
     // ---- les deux ----
     void tick();
-    void say(const std::string& text);
+    // 1.50.0 : `replyTo` - l'identifiant du message auquel il repond (vide : aucun ; inconnu : un message simple).
+    void say(const std::string& text, const std::string& replyTo = {});
     // Ouvrir la vue d'un membre (Suivre).
     void follow(int member);
     // 1.45.0 : ce qui attend part tout de suite (Ctrl+S chez l'equipier).

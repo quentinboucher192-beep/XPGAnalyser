@@ -23,6 +23,12 @@
 //  (CSV) >>, << Exporter (CSV) >>, << CSV >> selon la place) ; un panneau tres
 //  bas garde le champ et Envoyer, puis la liste, puis l'en-tete.
 //
+//  1.50.0 : REPONDRE, REDUIRE, COPIER (SessionText) - << Repondre >> sur un
+//  message (le survol, le clic droit) montre << En reponse a Lea : << ... >> >>
+//  au-dessus du champ, sa croix (ou Echap dans le champ) l'annule ; le message
+//  envoye porte l'identifiant du message cite. Le journal seul : Copier
+//  seulement.
+//
 //  Sans ecran : les essais lisent les lignes montrees (rowCount, rowText) et
 //  ecrivent par send().
 // =============================================================================
@@ -52,8 +58,13 @@ public:
     // Les lignes montrees : "14:32 Lea : bonjour" ; le journal : "14:32 Lea : Vue_Accueil > Texte_Etat deplace (x3)".
     [[nodiscard]] std::size_t rowCount() const noexcept { return rows_.size(); }
     [[nodiscard]] std::string rowText(std::size_t i) const;
-    // Ecrire a l'equipe (le champ, Entree) ; faux : rien a envoyer.
+    // Ecrire a l'equipe (le champ, Entree) ; faux : rien a envoyer. 1.50.0 : en reponse au message choisi par
+    // << Repondre >> s'il y en a un (puis plus de reponse).
     bool send(const std::string& text);
+    // 1.50.0 : repondre a une ligne (ce que fait << Repondre >>) ; la barre << En reponse a ... >> ; l'annuler.
+    void replyTo(const sessionui::Row& row);
+    void cancelReply();
+    [[nodiscard]] sessionui::ReplyBar* replyBar() noexcept { return reply_; }
     [[nodiscard]] ui::InputText* field() noexcept { return field_; }
     // 1.47.0 : la liste (avant : un tableau, une ligne coupee au bord par message).
     [[nodiscard]] sessionui::LineList* list() noexcept { return list_; }
@@ -83,6 +94,7 @@ private:
     ui::Button* sendButton_{nullptr};
     ui::InputText* field_{nullptr};
     sessionui::LineList* list_{nullptr};
+    sessionui::ReplyBar* reply_{nullptr};   // 1.50.0
     std::string title_, titleShown_;
     gfx::Rect titleRect_{};
     bool host_{false};

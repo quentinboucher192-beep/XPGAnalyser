@@ -230,6 +230,117 @@ bool fromJson(const core::json::Value& v, Member& m) {
     return true;
 }
 
+// ---- 1.50.0 : les messages de la discussion ----
+std::string chatExcerpt(std::string_view text, std::size_t maxChars) {
+    // Les blancs du debut sautes ; la premiere ligne qui a du texte.
+    std::size_t start = 0;
+    while (start < text.size() && (text[start] == ' ' || text[start] == '\n' || text[start] == '\r' || text[start] == '\t')) ++start;
+    std::size_t end = text.find('\n', start);
+    if (end == std::string_view::npos) end = text.size();
+    std::string out;
+    std::size_t chars = 0, i = start;
+    for (; i < end && chars < maxChars;) {
+        const auto u = static_cast<unsigned char>(text[i]);
+        std::size_t len = u >= 0xF0 ? 4 : u >= 0xE0 ? 3 : u >= 0xC0 ? 2 : 1;
+        if (i + len > end) len = end - i;
+        if (u < 0x20 || u == 0x7F) out.push_back(' ');
+        else out.append(text.substr(i, len));
+        i += len;
+        ++chars;
+    }
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+    bool more = i < end;
+    for (std::size_t j = end; !more && j < text.size(); ++j) more = text[j] != ' ' && text[j] != '\n' && text[j] != '\r' && text[j] != '\t';
+    if (more && !out.empty()) out += "\xE2\x80\xA6";
+    return out;
+}
+
+std::string chatIdOf(std::string_view from, std::string_view time, std::string_view text) {
+    // FNV-1a sur 64 bits : un nom stable, pas un secret.
+    std::uint64_t h = 1469598103934665603ull;
+    const auto mix = [&h](std::string_view s) {
+        for (const char c : s) {
+            h ^= static_cast<unsigned char>(c);
+            h *= 1099511628211ull;
+        }
+        h ^= 0x1F;
+        h *= 1099511628211ull;
+    };
+    mix(from);
+    mix(time);
+    mix(text);
+    static const char* hex = "0123456789abcdef";
+    std::string out = "h";
+    for (int k = 15; k >= 0; --k) out.push_back(hex[(h >> (k * 4)) & 0xF]);
+    return out;
+}
+
+void writeReply(core::json::Value& out, const ChatReply& r) {
+    if (r.empty()) return;
+    core::json::Value v = core::json::Value::object();
+    v.set("id", r.id);
+    v.set("de", r.from);
+    v.set("extrait", r.excerpt);
+    out.set("reponse", std::move(v));
+}
+
+ChatReply readReply(const core::json::Value& message) {
+    ChatReply r;
+    const auto& v = message.at("reponse");
+    if (!v.isObject()) return r;
+    r.id = clean(v.str("id"), 40);
+    r.from = clean(v.str("de"), 64);
+    r.excerpt = chatExcerpt(clean(v.str("extrait"), 4 * kExcerptChars + 8));
+    return r;
+}
+
+void writeChat(core::json::Value& out, const ChatMessage& m) {
+    out.set("de", m.from);
+    out.set("couleur", static_cast<std::int64_t>(m.color));
+    out.set("texte", m.text);
+    out.set("heure", m.time);
+    if (!m.id.empty()) out.set("id", m.id);
+    writeReply(out, m.reply);
+}
+
+ChatMessage readChat(const core::json::Value& v) {
+    ChatMessage m;
+    m.from = v.str("de");
+    m.text = v.str("texte").substr(0, kMessageMax);
+    m.time = v.str("heure");
+    m.color = static_cast<std::uint32_t>(std::clamp<std::int64_t>(v.integer("couleur"), 0, 0xFFFFFF));
+    m.id = clean(v.str("id"), 40);
+    if (m.id.empty()) m.id = chatIdOf(m.from, m.time, m.text);
+    m.reply = readReply(v);
+    return m;
+}
+
+std::string quotedText(const ChatMessage& m) {
+    if (m.reply.empty()) return m.text;
+    return "En r\xC3\xA9ponse \xC3\xA0 " + (m.reply.from.empty() ? std::string("un message") : m.reply.from) + " : \xC2\xAB " + m.reply.excerpt + " \xC2\xBB\n" + m.text;
+}
+
+bool knowsReplies(std::string_view version) {
+    int part[3] = {0, 0, 0};
+    std::size_t k = 0;
+    bool digit = false;
+    for (const char c : version) {
+        if (c >= '0' && c <= '9') {
+            if (k < 3) part[k] = part[k] * 10 + (c - '0');
+            digit = true;
+            if (part[k < 3 ? k : 2] > 100000) return false;
+        } else if (c == '.') {
+            if (!digit) return false;
+            ++k;
+            digit = false;
+        } else {
+            break;   // "1.50.0-essai" : la suite ne compte pas
+        }
+    }
+    if (k < 1) return false;
+    return part[0] > 1 || (part[0] == 1 && part[1] >= 50);
+}
+
 std::string initials(std::string_view name) {
     std::string out;
     bool start = true;

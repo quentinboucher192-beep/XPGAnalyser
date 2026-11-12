@@ -1,0 +1,139 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>POINTER TO, choisir un type</title>
+<link rel="stylesheet" href="planches.css">
+<style>
+.main{display:grid;grid-template-columns:930px 1fr;gap:16px;align-items:start}
+.search{height:32px;border:1px solid var(--acc);box-shadow:0 0 0 3px rgba(15,118,110,.12);border-radius:8px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12.5px}
+.search .lp{color:var(--muted)}
+.sugg{border:1px solid var(--line);border-radius:8px;margin-top:6px;background:#fff;overflow:hidden}
+.sugg div{display:flex;align-items:center;gap:10px;padding:5px 10px;font-size:12px}
+.sugg div.on{background:var(--sel)}
+.sugg .k2{margin-left:auto;font-size:11px;color:var(--muted)}
+.formrow{display:grid;grid-template-columns:70px 1fr;gap:10px;align-items:center;margin-top:8px}
+.formrow>span:first-child{font-size:12px;color:var(--muted)}
+.acc .seg span{height:30px;padding:0 12px}
+.acc .seg span small{font-size:10.5px;opacity:.8;font-weight:400}
+.res{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:#fbfdfd}
+.res .rt{font:600 15px "JetBrains Mono",monospace;color:var(--ty)}
+.res .rt .k{font-weight:700}
+.desc{font-size:11.6px;color:var(--ink2);background:var(--head);border:1px solid var(--line);border-radius:8px;padding:7px 10px;margin-top:8px}
+.desc b{color:var(--ink)}
+.old .formrow{margin-top:5px}
+.mtx td{text-align:center}
+.mtx td:first-child{text-align:left}
+.mtx td:first-child{white-space:normal;width:44%}
+.mtx td.why{text-align:left;font-size:11px;color:var(--muted);white-space:normal}
+.wrapc{white-space:normal}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cmp .opt{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:#fff}
+.cmp .opt.on{border-color:var(--acc);box-shadow:0 0 0 2px rgba(15,118,110,.12)}
+.cmp .opt .mono{font-size:12px;color:var(--ty);font-weight:600}
+.msg{display:flex;gap:8px;align-items:flex-start;font-size:11.6px;padding:6px 9px;border-radius:7px;margin-top:5px}
+.msg.e{background:var(--err-50);color:#991b1b}.msg.w{background:var(--warn-50);color:#92400e}.msg.o{background:var(--ok-50);color:#166534}
+</style></head><body>
+
+<div class="hd">
+  <div class="num">03</div>
+  <div>
+    <div class="ov">IHM Studio · maquette 1.50.0 · planche 03</div>
+    <h1>« Choisir un type » : POINTER TO et REF_TO, choisis comme une forme</h1>
+    <p class="ask">Ta demande : <q>pourquoi dans choisir un type je n'ai aucune façon de faire 'POINTER OF', par exemple je voulais faire POINTER OF Object</q>. Ce qui existe : le langage connaît déjà <b>POINTER TO T</b> (ADR(x), p^, NULL) et <b>REF_TO T</b> (REF(x), r^ ; REFERENCE TO s'écrit REF_TO) — le registre des types les lit quand on les <i>tape</i> dans la case Type. Mais le sélecteur n'offre qu'une case « REF_TO (une référence) », et rien pour POINTER TO. Proposition : une ligne <b>Accès</b> à trois choix, à côté de la Forme.</p>
+  </div>
+  <div class="leg"><span class="tag now">Aujourd'hui</span><span class="tag prop">Proposé</span><span class="tag new">Nouveau</span></div>
+</div>
+
+<div class="main">
+  <div class="cols" style="grid-template-columns:1fr;gap:12px">
+    <!-- AUJOURD'HUI, en petit -->
+    <div class="card old" style="padding:10px 14px">
+      <h3><span class="tag now">Aujourd'hui</span> le bas du sélecteur</h3>
+      <div class="formrow"><span>Forme :</span><div class="chips"><span class="chip on">Simple</span><span class="chip">Tableau</span><span class="chip">Tableau 2D</span><span class="chip">Liste</span><span class="chip">Vecteur</span><span class="chip">Dictionnaire (MAP)</span><span class="chip">Tuple</span><span class="chip">Ensemble (SET)</span><span class="chip">Tampon (RING)</span></div></div>
+      <div class="formrow"><span></span><div style="display:flex;gap:14px;align-items:center"><span class="chk"><i></i>REF_TO (une référence)</span><span class="msg e" style="margin:0">✕ POINTER TO : nulle part — il faut le taper à la main dans la case Type de la grille</span></div></div>
+      <div class="formrow"><span>Résultat :</span><span class="mono" style="font-size:13px">Object</span></div>
+    </div>
+
+    <!-- PROPOSE : le selecteur -->
+    <div class="win">
+      <div class="tt">Choisir un type · « Type de Cible » <span class="muted" style="font-weight:400;margin-left:8px">pour : une locale de Carte.Allumer</span><span class="x">×</span></div>
+      <div class="bd">
+        <div class="search"><span class="lp">⌕</span><span>pointer to obj</span><span class="muted" style="margin-left:auto;font-size:11px">Rechercher un type (nom, catégorie, provenance) — ou l'écrire en entier</span></div>
+        <div class="sugg"><div class="on"><span class="n">1</span><span class="mono" style="font-weight:600;color:var(--ty)">POINTER TO Object</span><span class="muted">un pointeur vers un objet d'une vue</span><span class="k2">Entrée : le prendre</span></div></div>
+        <div class="chips" style="margin:10px 0 8px"><span class="chip">Tous</span><span class="chip">Récents</span><span class="chip">Élémentaires <b>21</b></span><span class="chip">Textes, durées et dates <b>9</b></span><span class="chip">Tableaux et collections <b>8</b></span><span class="chip">Structures IHM <b>6</b></span><span class="chip">Énumérations <b>3</b></span><span class="chip">DDT de l'API <b>12</b></span><span class="chip">Références <b>2</b></span><span class="chip on">Types de l'IHM <b>5</b></span><span class="chip">Génériques <b>1</b></span></div>
+        <table class="g" style="border:1px solid var(--line)">
+          <tr><th>Type</th><th>Catégorie</th><th>Provenance</th><th>Identifiant</th></tr>
+          <tr class="sel"><td><b>Object</b></td><td>Types de l'IHM</td><td>IHM Studio</td><td class="mono">ihm:Object</td></tr>
+          <tr><td>Font</td><td>Types de l'IHM</td><td>IHM Studio</td><td class="mono">ihm:Font</td></tr>
+          <tr><td>Texture</td><td>Types de l'IHM</td><td>IHM Studio</td><td class="mono">ihm:Texture</td></tr>
+          <tr><td>Sound</td><td>Types de l'IHM</td><td>IHM Studio</td><td class="mono">ihm:Sound</td></tr>
+          <tr><td>Style</td><td>Types de l'IHM</td><td>IHM Studio</td><td class="mono">ihm:Style</td></tr>
+        </table>
+        <div class="desc"><b>Object</b> : un objet d'une vue (bouton, voyant, tableau…) : Vue_Accueil.Pompe_1, ou Pompe_1 dans sa vue. Ses propriétés se lisent et s'écrivent (o.Fill, o.X) ; GetObject, ObjectsOf, AlignTop, ShowIf…</div>
+
+        <div class="formrow"><span>Forme :</span><div class="chips"><span class="chip on">Simple</span><span class="chip">Tableau</span><span class="chip">Tableau 2D</span><span class="chip">Liste</span><span class="chip">Vecteur</span><span class="chip">Dictionnaire (MAP)</span><span class="chip">Tuple</span><span class="chip">Ensemble (SET)</span><span class="chip">Tampon (RING)</span></div></div>
+        <div class="formrow acc"><span>Accès : <span class="nv">nv</span></span><div style="display:flex;align-items:center;gap:10px"><div class="seg"><span>Direct <small>la valeur</small></span><span>REF_TO <small>une référence</small></span><span class="on">POINTER TO <small>un pointeur</small></span></div><span class="n">2</span></div></div>
+        <div class="formrow"><span></span><div class="help" style="margin:0;font-size:11.3px;color:var(--ink2)">Un pointeur : <span class="mono">p := ADR(Pompe_1);</span> puis <span class="mono">p^.Fill</span> ; <span class="mono">NULL</span> : il ne vise rien. Comme <span class="mono">Object*</span> en C++. Il vit en mémoire de l'IHM (pas de place dans un équipement).</div></div>
+        <div class="res"><span style="font-size:12.5px">Résultat :</span><span class="rt"><span class="k">POINTER TO</span> Object</span><span class="tag ok" style="margin-left:auto">✓ permis ici : une locale</span><span class="n">3</span></div>
+        <div class="formrow" style="grid-template-columns:70px 1fr"><span>S'écrira :</span><span class="mono">Cible : <span class="k">POINTER TO</span> <span class="t">Object</span>;</span></div>
+      </div>
+      <div class="foot"><span class="why">Le type actuel (Object) était choisi d'office ; Échap : rien ne change.</span><span class="btn">Annuler</span><span class="btn">Ouvrir la définition</span><span class="btn pri">Choisir</span></div>
+    </div>
+    <div class="card notes">
+      <h3>Les choix</h3>
+      <div class="it"><span class="n">1</span><div><b>La recherche comprend un type écrit</b> : « pointer to obj », « ref_to t_pompe », « list of real » proposent le type entier, Entrée le prend. La case Type des grilles l'aide déjà (POINTER TO puis la liste des types).</div></div>
+      <div class="it"><span class="n">2</span><div><b>Accès</b> remplace la case REF_TO : Direct, REF_TO, POINTER TO. Les choix non permis ici sont grisés avec la raison.</div></div>
+      <div class="it"><span class="n">3</span><div><b>Résultat</b> vérifié en direct par le registre des types, comme aujourd'hui (une faute grise Choisir et dit pourquoi).</div></div>
+      <div class="it"><span class="n">4</span><div><b>Le pointeur vise</b> : seulement quand une Forme est choisie ; d'office « chaque élément » (le cas courant, celui de REF_TO aujourd'hui).</div></div>
+      <div class="it"><span class="n">5</span><div><b>Les mêmes règles qu'aujourd'hui pour REF_TO</b>, étendues à POINTER TO : dans un code (une déclaration, un retour), jamais là où il faut une place dans l'équipement.</div></div>
+    </div>
+  </div>
+
+  <!-- ============ A DROITE ============ -->
+  <div class="cols" style="grid-template-columns:1fr;gap:12px">
+    <div class="card">
+      <h3>Avec une forme : sur chaque élément, ou sur le tout <span class="n">4</span></h3>
+      <p style="margin-bottom:8px">Forme <b>Liste</b> + Accès <b>POINTER TO</b> : une petite ligne de plus, <b>Le pointeur vise</b> :</p>
+      <div class="cmp">
+        <div class="opt on"><span class="rad on"><i></i>chaque élément</span><div class="mono" style="margin-top:5px">LIST OF POINTER TO Object</div><div class="help">une liste de pointeurs (le cas courant)</div></div>
+        <div class="opt"><span class="rad"><i></i>le tout</span><div class="mono" style="margin-top:5px">POINTER TO LIST OF Object</div><div class="help">un pointeur vers une liste</div></div>
+      </div>
+      <p class="help" style="margin-top:7px">Et plus loin : « Composer l'élément… » (déjà là) pour MAP[STRING] OF POINTER TO T_Pompe, ARRAY[0..9] OF REF_TO I_Demarrable…</p>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="pt" style="height:32px;font-size:11.5px">Où c'est permis <span class="n">5</span><span class="r">les choix grisés disent pourquoi</span></div>
+      <table class="g mtx">
+        <tr><th style="text-align:left">Le type de…</th><th>Direct</th><th>REF_TO</th><th>POINTER TO</th><th style="text-align:left">si grisé</th></tr>
+        <tr><td>une locale, une variable de script, un paramètre d'une fonction</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="why"></td></tr>
+        <tr><td>le retour d'une fonction, d'une méthode</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="why">Trouver(…) : POINTER TO T_Moteur</td></tr>
+        <tr><td>une constante</td><td class="yes">✓</td><td class="no">—</td><td class="no">—</td><td class="why">une constante ne vise rien (NULL seul)</td></tr>
+        <tr><td>une variable IHM, un membre lié</td><td class="yes">✓</td><td class="no">—</td><td class="no">—</td><td class="why">elle a une place dans l'équipement</td></tr>
+        <tr><td>un paramètre de popup, de symbole</td><td class="yes">✓</td><td class="part">?</td><td class="part">?</td><td class="why">aujourd'hui non — question 2</td></tr>
+        <tr><td>un opérande d'opérateur</td><td class="yes">✓</td><td class="no">—</td><td class="no">—</td><td class="why">Simple seulement</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Ce que ça écrit, et ce que le Studio vérifie</h3>
+<pre class="code"><span class="k">VAR</span>
+    Cible   : <span class="k">POINTER TO</span> <span class="t">Object</span>;           <span class="cm">(* NULL au départ *)</span>
+    Pompe   : <span class="k">REF_TO</span> <span class="t">T_Pompe</span>;
+    Voyants : <span class="t">LIST OF</span> <span class="k">POINTER TO</span> <span class="t">Object</span>;
+<span class="k">END_VAR</span>
+Cible := <span class="fn">ADR</span>(Pompe_1);
+<span class="k">IF</span> Cible &lt;&gt; <span class="k">NULL</span> <span class="k">THEN</span> Cible^.Fill := <span class="nu">16#2E7D32</span>; <span class="k">END_IF</span>;</pre>
+      <div class="msg o">✓ POINTER TO Object : permis (une locale).</div>
+      <div class="msg w">⚠ Cible^.Fill sans « IF Cible &lt;&gt; NULL » : souligné en ambre (il peut ne rien viser).</div>
+      <div class="msg e">✕ Variable IHM « Selection » : POINTER TO n'est pas permis (elle a une place dans l'équipement) — Choisir grisé.</div>
+      <div class="msg e">✕ « I_Demarrable » seul : une interface s'emploie par REF_TO ou POINTER TO (déjà vérifié par Générer).</div>
+    </div>
+
+    <div class="q">
+      <h3>Questions pour toi</h3>
+      <ol>
+        <li>Object est déjà une poignée (o := Pompe_1 ; o.Fill). Pour toi, POINTER TO Object = « un objet ou NULL » (REF_TO suffit), ou un vrai pointeur vers une variable qui tient un objet ?</li>
+        <li>Permettre REF_TO / POINTER TO dans les paramètres de popup et de symbole ?</li>
+        <li>Afficher « POINTER TO » même si tu as tapé « POINTER OF » (le corriger tout seul, avec un avertissement) ?</li>
+      </ol>
+    </div>
+  </div>
+</div>
+</body></html>

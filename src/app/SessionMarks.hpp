@@ -74,6 +74,9 @@ struct Line {
     bool          system{false};          // une ligne de la session (entree, depart...)
     bool          mine{false};            // ecrite par ce PC
     int           count{1};               // le journal : les gestes fondus (x3)
+    // 1.50.0 : la discussion - l'identifiant du message (le meme sur chaque PC ; vide : une ligne de la session) et
+    // celui auquel il repond (vide : aucun), son auteur et le debut de son texte.
+    std::string   id{}, replyId{}, replyFrom{}, replyText{};
 };
 struct Board {
     std::string         sessionName, hostName;
@@ -89,12 +92,13 @@ void setBoard(Board board);
 [[nodiscard]] std::uint64_t boardRevision();
 
 struct Hooks {
-    std::function<void(const std::string&)> say;                // ecrire a l'equipe
+    std::function<void(const std::string&, const std::string&)> say;   // ecrire a l'equipe (1.50.0 : en reponse a un message)
     std::function<void(int)>                follow;             // suivre un membre (sa vue s'ouvre)
     std::function<std::string(std::string*)> exportJournal;     // le chemin ecrit (vide : `why`)
 };
 void setHooks(Hooks hooks);
-void say(const std::string& text);
+// 1.50.0 : `replyTo` - l'identifiant du message auquel il repond (vide : aucun).
+void say(const std::string& text, const std::string& replyTo = {});
 void follow(int member);
 [[nodiscard]] std::string exportJournal(std::string* why);
 

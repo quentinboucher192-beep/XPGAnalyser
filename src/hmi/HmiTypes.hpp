@@ -57,6 +57,8 @@ bool parseSpec(std::string_view text, Spec& out, std::string* why = nullptr);
 [[nodiscard]] std::string normalized(std::string_view type);
 [[nodiscard]] bool isElementary(std::string_view name) noexcept;     // BOOL, INT... (sans casse)
 [[nodiscard]] bool isComposite(std::string_view type) noexcept;      // un tableau ou un autre nom qu'un elementaire
+// 1.50.0 : le texte commence-t-il par ARRAY (un tableau, ses cases elles-memes un tableau ou non) ?
+[[nodiscard]] bool isArrayText(std::string_view type) noexcept;
 // Connu : elementaire, type IHM du projet, ou tableau de l'un d'eux, bornes lisibles ;
 // 1.12.2 : ou un type objet (isRich) que le registre lit pour une variable IHM.
 [[nodiscard]] bool validType(const Project&, std::string_view type, std::string* why = nullptr);
@@ -252,6 +254,10 @@ struct TypeStep {
     bool        property{false};     // une propriete (L.Count, T.Length) : lue seulement
 };
 [[nodiscard]] TypeStep stepIndex(const Project&, std::string_view type);
+// 1.50.0 : les indices que prend un pas entre crochets dans ce type : un tableau, ses dimensions (ARRAY[0..3, 0..9] OF
+// INT : 2 ; un tableau de tableaux, celles de son premier niveau : 1) ; une liste, une MAP : 1. a[i][j] et a[i, j]
+// designent la meme case dans l'un comme dans l'autre (les indices se prennent dans l'ordre, niveau par niveau).
+[[nodiscard]] std::size_t indexCount(std::string_view type);
 [[nodiscard]] TypeStep stepMember(const Project&, std::string_view type, std::string_view member);
 // 1.13.0 : un membre ou une methode PRIVE de `typeName` (ou d'un de ses parents), lu de l'exterieur de ses methodes :
 // le message ("Heures est prive dans T_Pompe : seules ses methodes le lisent et l'ecrivent") ; vide : permis. `owner`

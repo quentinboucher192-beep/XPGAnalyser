@@ -1,0 +1,240 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Dupliquer, 500 repères</title>
+<link rel="stylesheet" href="planches.css">
+<style>
+.top{display:grid;grid-template-columns:640px 1fr 1fr;gap:14px;align-items:stretch}
+.old{font-size:11.3px;position:relative}
+.old .ln{white-space:nowrap;overflow:hidden;position:relative;padding:2px 0;color:var(--ink2)}
+.old .ln:after{content:"";position:absolute;right:0;top:0;bottom:0;width:70px;background:linear-gradient(90deg,rgba(255,255,255,0),#fff)}
+.old .cut{color:var(--err);font-weight:600}
+.old table.g td,.old table.g th{max-width:150px;overflow:hidden;text-overflow:ellipsis;font-size:10.8px}
+.dlg{margin-top:16px}
+.band{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line);background:#fff}
+.band .lb{font:600 11px Inter;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.cnt{display:inline-flex;align-items:center;gap:6px;font-size:12px}
+.cnt .in{height:26px;width:46px;justify-content:center;padding:0 4px}
+.cnt .v{font:600 12.5px "JetBrains Mono",monospace;color:var(--ty)}
+.eq{font:600 13px Inter;color:var(--ink)}
+.body2{display:grid;grid-template-columns:900px 1fr;min-height:0}
+.body2>div:first-child{border-right:1px solid var(--line)}
+.fx{display:inline-flex;align-items:center;gap:6px;height:24px;border:1px solid var(--line2);border-radius:6px;padding:0 8px;font:12px "JetBrains Mono",monospace;background:#fff;color:var(--ink)}
+.fx:before{content:"ƒx";font:italic 600 11px Inter;color:var(--acc)}
+.fx.fixed{color:var(--muted);background:var(--alt)}
+.fx.fixed:before{content:"=";font-style:normal}
+.fx.focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(15,118,110,.14)}
+.vary{display:inline-flex;border:1px solid var(--line2);border-radius:6px;overflow:hidden;font-size:11px}
+.vary span{padding:0 8px;height:22px;display:inline-flex;align-items:center}
+.vary span.on{background:var(--acc);color:#fff;font-weight:600}
+.vary span.onf{background:#e2e8f0;color:var(--ink);font-weight:600}
+.letter{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:5px;background:var(--acc-50);color:var(--acc);font:700 11px "JetBrains Mono",monospace}
+.letter.f{background:#eef2f7;color:var(--muted)}
+.tool2{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.srch{height:28px;width:300px;border:1px solid var(--line2);border-radius:7px;display:flex;align-items:center;gap:7px;padding:0 9px;font-size:12px;color:var(--dis)}
+.tree td{font-size:11.6px}
+.tree .ind1{padding-left:24px}.tree .ind2{padding-left:44px}
+.tree .tw{display:inline-block;width:14px;color:var(--muted)}
+.tree .path{font:11.3px "JetBrains Mono",monospace}
+.tree tr.more td{color:var(--muted);font-style:italic;background:repeating-linear-gradient(135deg,#fff,#fff 6px,#f8fafc 6px,#f8fafc 12px)}
+.tree .cnt2{font:600 10.5px/16px Inter;padding:0 6px;border-radius:8px;background:#e8edf3;color:var(--ink2);margin-left:6px}
+.scrollbar{position:absolute;right:3px;width:6px;border-radius:3px;background:#cbd5e1}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.st{border:1px solid var(--line);border-radius:9px;padding:6px 10px;background:#fff}
+.st b{display:block;font:700 18px Inter;letter-spacing:-.02em}
+.st span{font-size:11px;color:var(--muted)}
+.st.e b{color:var(--err)}
+.pv td{font-size:11.3px}
+.pv td.m{font-family:"JetBrains Mono",monospace;font-size:10.8px}
+.pv tr.orig td{color:var(--muted);background:#f8fafc}
+.pv tr.gap td{text-align:center;color:var(--muted);font-style:italic;background:repeating-linear-gradient(135deg,#fff,#fff 6px,#f8fafc 6px,#f8fafc 12px)}
+.ba{padding:8px 12px;border-bottom:1px solid var(--line)}
+.ba .r{display:grid;grid-template-columns:150px 1fr;gap:8px;font-size:11.2px;padding:2px 0}
+.ba .r .w{color:var(--muted)}
+.ba .r .m{font-family:"JetBrains Mono",monospace;font-size:10.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ba del{color:var(--dis);text-decoration:none}
+.cf{display:flex;flex-direction:column;gap:6px;padding:8px 12px 10px}
+.cf .c{display:grid;grid-template-columns:20px 1fr auto;gap:7px;align-items:start;font-size:11.5px;padding:6px 8px;border-radius:7px}
+.cf .c.e{background:var(--err-50);color:#991b1b}
+.cf .c.w{background:var(--warn-50);color:#92400e}
+.cf .c .go{font-size:11px;font-weight:600;color:var(--acc);white-space:nowrap}
+.help2{position:absolute;background:#0f172a;color:#e2e8f0;border-radius:9px;padding:9px 12px;font-size:11.3px;line-height:1.5;box-shadow:var(--sh3);width:350px;z-index:5}
+.help2 b{color:#fff}
+.help2 code{font-size:11px;color:#99f6e4}
+.help2:before{content:"";position:absolute;left:30px;top:-6px;width:12px;height:12px;background:#0f172a;transform:rotate(45deg)}
+</style></head><body>
+
+<div class="hd">
+  <div class="num">04</div>
+  <div>
+    <div class="ov">IHM Studio · maquette 1.50.0 · planche 04</div>
+    <h1>« Dupliquer… » qui tient 500 repères : par profondeur, avec des formules</h1>
+    <p class="ask">Ta demande : <q>dans dupliquer si j'ai bcp de choses à dupliquer c'est tronqué, mieux gérer l'organisation pour que même si j'ai 500 placeholders ce soit facile à faire, optimiser les remplacements multi profondeur, pouvoir faire varier que certaines profondeurs, utiliser le même principe que les formules sur les adressages %MW %M</q>. Proposition : les repères en <b>liste groupée qui défile</b> (plus de ligne coupée ni de 500 colonnes), une <b>règle par profondeur</b> d'indice (varie / fixe) écrite comme les adresses — <span class="mono">%MW(1000 + 10 * i)</span> — avec des <b>compteurs i, j</b>, et l'<b>aperçu</b> des premières et dernières copies, conflits en tête.</p>
+  </div>
+  <div class="leg"><span class="tag now">Aujourd'hui</span><span class="tag prop">Proposé</span><span class="tag new">Nouveau</span></div>
+</div>
+
+<!-- ============ AUJOURD'HUI ============ -->
+<div class="top">
+  <div class="win flat old">
+    <div class="tt">Dupliquer…  Depart_0_0 (+11) <span class="tag now" style="margin-left:8px">Aujourd'hui</span></div>
+    <div class="tabs"><span class="tab on">Les copies et leurs repères</span><span class="tab">La disposition</span></div>
+    <div style="padding:8px 12px">
+      <div class="ln">Sélection : Depart_0_0, Titre_0, Voyant_V5, Afficheur_I5, …  (12 objets, 236 × 180 px)</div>
+      <div class="ln">Repères : $API.Armoires[0].Departs[0].Voies[5].Etat$ × 1 (variable, 1 endroit)   $API.Armoires[0].Departs[0].Voies[5].Courant$ × 1 (variable, 1 endroit)   $API.Armoires[0].Depa</div>
+      <div class="ln muted">Indices : API.Armoires[0] × 468 (0..3)   API.Armoires[0].Departs[0] × 448 (0..7)   API.Armoires[0].Departs[0].Voies[5] × 320 (0..15)   API.Armoires</div>
+      <div class="ln"><span class="chk on"><i></i>Suivre API.Armoires[0] (sinon garder)</span>&nbsp;&nbsp;<span class="chk on"><i></i>Suivre API.Armoires[0].Departs[0] (sinon garder)</span>&nbsp;&nbsp;<span class="chk"><i></i>Vide : garder $API.Armoi</span></div>
+      <div class="ln" style="display:flex;gap:6px;align-items:center;margin:4px 0"><b>Copies</b><span class="in" style="width:40px;height:22px">31</span><b>Remplir</b><span class="in" style="width:60px;height:22px">V1{n}</span>de<span class="in" style="width:34px;height:22px">02</span><span class="btn sm">Série</span><span class="btn sm">Tableau…</span><span class="btn sm">Coller (Excel)</span><span class="btn sm">Vider</span></div>
+      <table class="g"><tr><th>#</th><th>Nom</th><th>$API.Armoires[0].Departs[0].Voies[5].Etat$</th><th>$API.Arm…5].Courant$</th><th>$API.Arm…]</th><th>$A…</th></tr>
+        <tr><td>1  original</td><td>Depart_0_0</td><td>API.Armoires[0].Departs[0].Voies[5].Etat</td><td>API.Armoires[0].Dep…</td><td>API.Ar…</td><td>…</td></tr>
+        <tr><td>2</td><td>Depart_0_1</td><td>API.Armoires[0].Departs[1].Voies[5].Etat</td><td>API.Armoires[0].Dep…</td><td>API.Ar…</td><td>…</td></tr>
+      </table>
+      <div class="cut" style="margin-top:6px;font-size:11.3px">✕ 512 repères = 512 colonnes et 512 cases à cocher ; les lignes du haut sont coupées ; un seul pas pour tous (copie k : indice + k), toutes profondeurs liées.</div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Le principe : des compteurs, comme les adresses <span class="nv">nv</span></h3>
+    <p>« Modifier l'adresse dans toutes les cases… » range déjà un tableau par <b>une formule de i</b> plutôt que dix adresses :</p>
+    <pre class="code" style="margin:6px 0;font-size:11.5px">EXTRACTEURS[*].Retour = %MW(<span class="nu">1000</span> + <span class="nu">10</span> * i)
+EXTRACTEURS[*, *]      = %MW(<span class="nu">2000</span> + <span class="nu">8</span> * i + j)</pre>
+    <p><b>Dupliquer fait pareil.</b> Les copies sont rangées par des compteurs (i : 4 armoires, j : 8 départs = 32 places) ; chaque <b>profondeur</b> d'un chemin (Armoires[·], Departs[·], Voies[·]) reçoit <b>une formule</b> de i, j — ou reste <b>fixe</b>. Les 512 repères suivent la règle de leur profondeur : on règle 5 lignes, pas 512 colonnes.</p>
+  </div>
+  <div class="card">
+    <h3>Les formules <span class="muted" style="font-weight:400;font-size:11.5px">— la même écriture que les adresses</span></h3>
+    <table class="g" style="font-size:11.3px">
+      <tr><td class="mono">i, j, k</td><td>les compteurs (de 0 à …)</td></tr>
+      <tr><td class="mono">n</td><td>le rang de la copie (0 = l'original)</td></tr>
+      <tr><td class="mono">o</td><td>l'indice de l'original (Voies[5] : 5)</td></tr>
+      <tr><td class="mono">+ - * / MOD ( )</td><td>des entiers</td></tr>
+      <tr><td class="mono">%MW(1000 + 10 * i + j)</td><td>une adresse ; %M(200 + 8 * i + j) : un bit</td></tr>
+      <tr><td class="mono">'Départ {i+1}.{j+1}'</td><td>un texte : {…} calculé</td></tr>
+      <tr><td class="mono">'D{i}{j:02}'</td><td>sur deux chiffres : D007</td></tr>
+      <tr><td class="mono">o + n</td><td>« Suivre » d'aujourd'hui (d'office en mode suite)</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ============ PROPOSE : LA FENETRE ============ -->
+<div class="win dlg">
+  <div class="tt">Dupliquer…  Depart_0_0 (+11) <span class="tag prop" style="margin-left:8px">Proposé</span><span class="muted" style="font-weight:400;margin-left:12px">la fenêtre s'agrandit (et se garde) ; tout défile, rien n'est coupé</span><span class="x">×</span></div>
+  <div class="tabs"><span class="tab on">Les copies et leurs repères</span><span class="tab">La disposition</span><span class="tab">Tableau (Excel) <span class="c">512 × 32</span></span></div>
+  <div class="band">
+    <span class="lb">Les copies</span>
+    <div class="seg"><span>Une suite : n</span><span class="on">Une grille : i × j</span></div>
+    <span class="cnt"><span class="letter">i</span>de <span class="in">0</span> à <span class="in">3</span><span class="muted">(4 · les armoires)</span></span>
+    <span class="eq">×</span>
+    <span class="cnt"><span class="letter">j</span>de <span class="in">0</span> à <span class="in">7</span><span class="muted">(8 · les départs)</span></span>
+    <span class="btn sm gh">+ un compteur k</span>
+    <span class="eq">= 32 places : l'original (i = 0, j = 0) et <span style="color:var(--acc)">31 copies</span></span>
+    <span class="muted" style="margin-left:auto;font-size:11.5px">j varie le plus vite · <u>Préremplir depuis les bornes</u> <span class="n">1</span></span>
+  </div>
+  <div class="body2">
+    <!-- ===== gauche ===== -->
+    <div>
+      <div class="pt">Les profondeurs <span class="r">une règle par indice de chemin ; les repères la suivent</span><span class="n">2</span></div>
+      <table class="g" style="position:relative">
+        <tr><th>Prof.</th><th>Dans le chemin</th><th>Original</th><th>Varie ?</th><th style="width:290px">Règle</th><th>Donne (copies)</th><th>Bornes</th><th class="r">Repères</th></tr>
+        <tr><td>1</td><td class="mono">API.Armoires[<b>·</b>]</td><td class="mono">0</td><td><span class="vary"><span class="on">varie</span><span>fixe</span></span></td><td><span class="fx">i</span></td><td class="mono">0 → 3</td><td class="okc">0..3 ✓</td><td class="r">468</td></tr>
+        <tr class="sel"><td>2</td><td class="mono">….Departs[<b>·</b>]</td><td class="mono">0</td><td><span class="vary"><span class="on">varie</span><span>fixe</span></span></td><td><span class="fx focus">j</span></td><td class="mono">0 → 7</td><td class="okc">0..7 ✓</td><td class="r">448</td></tr>
+        <tr><td>3</td><td class="mono">….Voies[<b>·</b>]</td><td class="mono">5</td><td><span class="vary"><span>varie</span><span class="onf">fixe</span></span></td><td><span class="fx fixed">garder 5</span></td><td class="mono">5</td><td class="muted">0..15</td><td class="r">320</td></tr>
+        <tr><td>3</td><td class="mono">….Mesures[<b>·</b>]</td><td class="mono">0..3</td><td><span class="vary"><span>varie</span><span class="onf">fixe</span></span></td><td><span class="fx fixed">garder</span></td><td class="mono">0..3</td><td class="muted">0..3</td><td class="r">128</td></tr>
+        <tr class="wrn"><td>—</td><td>Adresses %MW, %M</td><td class="mono">%MW1000</td><td><span class="vary"><span class="on">varie</span><span>fixe</span></span></td><td><span class="fx">%MW(1000 + 10 * i + j)</span></td><td class="mono">%MW1000 → %MW1037</td><td class="warnc">⚠ 8 prises</td><td class="r">16</td></tr>
+        <tr><td>—</td><td>Textes</td><td class="mono">'Départ 1.1'</td><td><span class="vary"><span class="on">varie</span><span>fixe</span></span></td><td><span class="fx">'Départ {i+1}.{j+1}'</span></td><td class="mono">Départ 1.1 → 4.8</td><td class="muted">—</td><td class="r">28</td></tr>
+        <tr><td>—</td><td>Noms des objets</td><td class="mono">Depart_0_0</td><td><span class="vary"><span class="on">varie</span><span>fixe</span></span></td><td><span class="fx">'Depart_{i}_{j}'</span></td><td class="mono">Depart_0_0 → 3_7</td><td class="warnc">⚠ 1 pris</td><td class="r">12</td></tr>
+      </table>
+      <div class="help2" style="margin:10px 0 0 248px;position:relative">Les formules, comme les adresses : <b>i, j, k</b> les compteurs, <b>n</b> le rang, <b>o</b> l'indice de l'original ; <code>+ - * / MOD ( )</code>. Ici <code>j</code> : Departs[0], [1] … [7]. <code>o + j</code> partirait de l'indice de l'original.</div>
+
+      <div class="pt" style="margin-top:10px;border-top:1px solid var(--line)">Les repères <span class="cnt2" style="margin:0">512</span><span class="r">groupés par profondeur ; la liste défile (rien n'est coupé)</span><span class="n">3</span></div>
+      <div class="tool2">
+        <span class="srch">⌕ Chercher : chemin, repère, objet, propriété…</span>
+        <div class="chips"><span class="chip on">Tous <b>512</b></span><span class="chip">Indices <b>468</b></span><span class="chip">Adresses <b>16</b></span><span class="chip">Textes <b>28</b></span><span class="chip">À part <b>3</b></span><span class="chip" style="color:var(--err)">Avec un conflit <b style="color:var(--err)">3</b></span></div>
+        <span style="margin-left:auto;font-size:11.3px;color:var(--muted)">Grouper par</span><div class="seg"><span class="on">Profondeur</span><span>Objet</span><span>Rien</span></div>
+        <span class="btn sm gh">Tout déplier</span><span class="btn sm gh">Tout replier</span>
+      </div>
+      <div style="position:relative">
+      <table class="g tree">
+        <tr><th>Repère</th><th>Où (objet · propriété)</th><th>Règle</th><th>Dernière copie (i = 3, j = 7)</th></tr>
+        <tr class="grp"><td><span class="tw">▾</span><span class="path">API.Armoires[i].Departs[j]</span><span class="cnt2">448</span></td><td>1 344 endroits</td><td>varie avec i, j</td><td class="muted">…Armoires[3].Departs[7]…</td></tr>
+        <tr class="grp" style="font-weight:500"><td class="ind1"><span class="tw">▾</span><span class="path">.Voies[5]</span> <span class="muted">fixe</span><span class="cnt2">320</span></td><td></td><td>comme sa profondeur</td><td></td></tr>
+        <tr><td class="ind2 path">$…Departs[0].Voies[5].Etat$</td><td>Voyant_V5 · Fill, Tooltip</td><td class="muted">comme sa profondeur</td><td class="mono" style="font-size:10.8px">…Armoires[3].Departs[7].Voies[5].Etat</td></tr>
+        <tr><td class="ind2 path">$…Departs[0].Voies[5].Courant$</td><td>Afficheur_I5 · Value</td><td class="muted">comme sa profondeur</td><td class="mono" style="font-size:10.8px">…Armoires[3].Departs[7].Voies[5].Courant</td></tr>
+        <tr class="err"><td class="ind2 path">$…Departs[0].Voies[5].Seuil$</td><td>Afficheur_S5 · Max</td><td><span class="tag new" style="height:18px">à part</span> <span class="mono" style="font-size:10.8px">Voies : 5 + 4 * i</span></td><td class="errc mono" style="font-size:10.8px">…Voies[17].Seuil ✕ hors 0..15</td></tr>
+        <tr class="more"><td class="ind2" colspan="4">⋯ 317 autres repères de .Voies[5] — la liste défile (virtuelle : 500 ou 5 000, pareil)</td></tr>
+        <tr class="grp" style="font-weight:500"><td class="ind1"><span class="tw">▸</span><span class="path">.Mesures[0..3]</span> <span class="muted">fixe</span><span class="cnt2">128</span></td><td>384 endroits</td><td>comme sa profondeur</td><td></td></tr>
+        <tr class="grp"><td><span class="tw">▸</span><span class="path">API.Armoires[i]</span><span class="cnt2">20</span></td><td>40 endroits</td><td>varie avec i</td><td class="muted">…Armoires[3]…</td></tr>
+        <tr class="grp"><td><span class="tw">▾</span>Adresses<span class="cnt2">16</span></td><td>16 endroits</td><td class="mono" style="font-size:10.8px">%MW(1000 + 10 * i + j)</td><td></td></tr>
+        <tr class="wrn"><td class="ind1 path">$%MW1000$</td><td>Afficheur_P · Adresse</td><td class="muted">comme son groupe</td><td class="mono warnc" style="font-size:10.8px">%MW1037 ⚠ déjà à Compteurs[7]</td></tr>
+        <tr><td class="ind1 path">$%M200$</td><td>Voyant_Def · Adresse</td><td><span class="tag new" style="height:18px">à part</span> <span class="mono" style="font-size:10.8px">%M(200 + 8 * i + j)</span></td><td class="mono" style="font-size:10.8px">%M231</td></tr>
+        <tr class="more"><td class="ind1" colspan="4">⋯ 14 autres</td></tr>
+        <tr class="grp"><td><span class="tw">▸</span>Textes<span class="cnt2">28</span></td><td>56 endroits</td><td class="mono" style="font-size:10.8px">'Départ {i+1}.{j+1}'</td><td class="mono" style="font-size:10.8px">Départ 4.8</td></tr>
+      </table>
+      <span class="scrollbar" style="top:30px;height:60px"></span>
+      </div>
+      <div style="padding:7px 12px;font-size:11.3px;color:var(--muted);border-top:1px solid var(--line)">Clic droit sur un repère ou un groupe : <b style="color:var(--ink2)">Comme sa profondeur</b> · Formule… · Série (V1{n}) · Tableau… · Coller (Excel) · Garder · Vider — les « Remplir » d'aujourd'hui, par groupe. <span class="n">4</span></div>
+    </div>
+
+    <!-- ===== droite ===== -->
+    <div>
+      <div class="pt">Aperçu <span class="r">recalculé à chaque changement</span><span class="n">5</span></div>
+      <div class="stats">
+        <div class="st"><b>31</b><span>copies (32 places)</span></div>
+        <div class="st"><b>512</b><span>repères</span></div>
+        <div class="st"><b>15 872</b><span>remplacements</span></div>
+        <div class="st e"><b>3</b><span>conflits (1 faute)</span></div>
+      </div>
+      <table class="g pv">
+        <tr><th>#</th><th>i</th><th>j</th><th>Nom</th><th>Armoires · Departs</th><th>Seuil : Voies</th><th>%MW</th><th>Titre</th></tr>
+        <tr class="orig"><td>1 orig.</td><td>0</td><td>0</td><td>Depart_0_0</td><td class="m">[0] · [0]</td><td class="m">5</td><td class="m">%MW1000</td><td>Départ 1.1</td></tr>
+        <tr><td>2</td><td>0</td><td>1</td><td>Depart_0_1</td><td class="m">[0] · [1]</td><td class="m">5</td><td class="m">%MW1001</td><td>Départ 1.2</td></tr>
+        <tr><td>3</td><td>0</td><td>2</td><td>Depart_0_2</td><td class="m">[0] · [2]</td><td class="m">5</td><td class="m">%MW1002</td><td>Départ 1.3</td></tr>
+        <tr><td>4</td><td>0</td><td>3</td><td>Depart_0_3</td><td class="m">[0] · [3]</td><td class="m">5</td><td class="m">%MW1003</td><td>Départ 1.4</td></tr>
+        <tr><td>5</td><td>0</td><td>4</td><td>Depart_0_4</td><td class="m">[0] · [4]</td><td class="m">5</td><td class="m">%MW1004</td><td>Départ 1.5</td></tr>
+        <tr class="gap"><td colspan="8">⋯ 24 copies (6 à 29) · <u>Tout voir</u> · <u>Aller à la copie…</u></td></tr>
+        <tr class="wrn"><td>30</td><td>3</td><td>5</td><td>Depart_3_5</td><td class="m">[3] · [5]</td><td class="m errc">17 ✕</td><td class="m warnc">%MW1035 ⚠</td><td>Départ 4.6</td></tr>
+        <tr class="wrn"><td>31</td><td>3</td><td>6</td><td>Depart_3_6</td><td class="m">[3] · [6]</td><td class="m errc">17 ✕</td><td class="m warnc">%MW1036 ⚠</td><td>Départ 4.7</td></tr>
+        <tr class="sel"><td>32</td><td>3</td><td>7</td><td>Depart_3_7</td><td class="m">[3] · [7]</td><td class="m errc">17 ✕</td><td class="m warnc">%MW1037 ⚠</td><td>Départ 4.8</td></tr>
+      </table>
+      <div class="pt" style="border-top:1px solid var(--line)">Avant / après, ligne 32 (i = 3, j = 7)</div>
+      <div class="ba">
+        <div class="r"><span class="w">Nom</span><span class="m"><del>Depart_0_0</del> → Depart_3_7</span></div>
+        <div class="r"><span class="w">Voyant_V5 · Fill</span><span class="m"><del>…Armoires[0].Departs[0]…</del> → …Armoires[3].Departs[7].Voies[5].Etat</span></div>
+        <div class="r"><span class="w">Afficheur_P · Adresse</span><span class="m"><del>%MW1000</del> → %MW1037</span></div>
+        <div class="r"><span class="w">Titre_0 · Texte</span><span class="m"><del>'Départ 1.1'</del> → 'Départ 4.8'</span></div>
+        <div class="r"><span class="w">Afficheur_S5 · Max</span><span class="m errc"><del>…Voies[5].Seuil</del> → …Voies[17].Seuil ✕</span></div>
+        <div class="r"><span class="w muted">+ 507 autres</span><span class="m muted">dans l'ordre des objets</span></div>
+      </div>
+      <div class="pt">Conflits <span class="cnt2" style="margin:0;background:var(--err-50);color:var(--err)">3</span><span class="r">les fautes d'abord ; un clic mène à la ligne</span><span class="n">6</span></div>
+      <div class="cf">
+        <div class="c e"><span>✕</span><div><b>Voies[17] hors des bornes (0..15)</b> — $…Voies[5].Seuil$ (à part : 5 + 4 * i), lignes 25 à 32 (i = 3).</div><span class="go">Aller à · Corriger</span></div>
+        <div class="c w"><span>⚠</span><div><b>%MW1030 à %MW1037 déjà prises</b> par Compteurs[0..7] (lignes 25 à 32). Comme « Modifier l'adresse… » : permis, montré.</div><span class="go">Décaler la formule</span></div>
+        <div class="c w"><span>⚠</span><div><b>Depart_2_3 existe déjà</b> dans la vue : la copie s'appellera Depart_2_3_2.</div><span class="go">Aller à</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="why" style="color:var(--err)">Dupliquer est gris : 1 faute — Voies[17] hors des bornes (lignes 25 à 32). Les 2 avertissements ne bloquent pas.</span><span class="btn">Annuler</span><span class="btn pri off">Dupliquer (31 copies)</span></div>
+</div>
+
+<!-- ============ NOTES ============ -->
+<div class="sec">
+  <div class="cols" style="grid-template-columns:1fr 1fr 430px">
+    <div class="card notes">
+      <h3>Les choix</h3>
+      <div class="it"><span class="n">1</span><div><b>Les copies</b> : « Une suite » (n de 1 à N, comme aujourd'hui : chaque indice qui varie fait o + n) ou « Une grille » (i × j, jusqu'à 3 compteurs) ; « Préremplir depuis les bornes » propose i : 0..3, j : 0..7 d'après les tableaux trouvés.</div></div>
+      <div class="it"><span class="n">2</span><div><b>Une règle par profondeur</b> : les indices de tous les chemins regroupés par leur place (Armoires[·], Departs[·], Voies[·]). Varie (une formule) ou fixe (garder). Ne faire varier que certaines profondeurs = basculer leur ligne sur « fixe ».</div></div>
+      <div class="it"><span class="n">3</span><div><b>Les repères en liste</b>, groupés, comptés, repliables, cherchables, filtrables ; virtuelle (seules les lignes visibles sont dessinées) : 500 ou 5 000, pareil. Plus de colonne par repère.</div></div>
+    </div>
+    <div class="card notes">
+      <h3>Et encore</h3>
+      <div class="it"><span class="n">4</span><div><b>À part</b> : un repère (ou un groupe) peut avoir sa propre règle — une formule, une série, une liste collée d'Excel ; il est marqué et filtrable. Les outils Remplir d'aujourd'hui passent au clic droit.</div></div>
+      <div class="it"><span class="n">5</span><div><b>L'aperçu</b> : les 5 premières lignes, les 3 dernières, le total (copies, repères, remplacements) ; « Tout voir » ou « Aller à la copie… ». L'avant / après de la ligne choisie, comme aujourd'hui.</div></div>
+      <div class="it"><span class="n">6</span><div><b>Les conflits</b> : hors des bornes et chemin inconnu bloquent (avec « veux-tu dire ») ; adresse déjà prise, nom déjà pris, chevauchement : avertissent. L'onglet <b>Tableau (Excel)</b> garde la grille d'aujourd'hui, avec la 1re colonne figée et le défilement.</div></div>
+    </div>
+    <div class="q">
+      <h3>Questions pour toi</h3>
+      <ol>
+        <li>La grille : i est-il toujours la profondeur 1 (Armoires) et j la 2 (Departs), ou les relier toi-même (Departs = i) ?</li>
+        <li>Les formules de texte <span class="mono">{i+1}</span>, <span class="mono">{j:02}</span> : cette écriture te va, ou plutôt celle de la Série (V1{n}) ?</li>
+        <li>Une adresse déjà prise : avertir (comme Modifier l'adresse…) ou bloquer ?</li>
+        <li>Garder « Une suite » par défaut quand il n'y a qu'une profondeur ?</li>
+      </ol>
+    </div>
+  </div>
+</div>
+</body></html>

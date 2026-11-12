@@ -858,6 +858,10 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(erreurs_test PRIVATE xpg_hmi)
     xpg_add_test_executable(generiques_test tests/generiques_test.cpp)        # 1.13.0 : les fonctions generiques (TEMPLATE <T>)
     xpg_target_link_libraries(generiques_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(tableaux_test tests/tableaux_test.cpp)            # 1.50.0 : ARRAY OF ARRAY et ARRAY[a, b] partout, a[i][j] et a[i, j]
+    xpg_target_link_libraries(tableaux_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(scripts_c_test tests/scripts_c_test.cpp)          # 1.50.0 : les scripts C et C++ compiles et executes
+    xpg_target_link_libraries(scripts_c_test PRIVATE xpg_hmi)
     xpg_add_test_executable(tests_unitaires_test tests/tests_unitaires_test.cpp)   # 1.13.0 (lot J4) : les tests unitaires des fonctions
     xpg_target_link_libraries(tests_unitaires_test PRIVATE xpg_hmi)
     xpg_add_test_executable(donnees_test tests/donnees_test.cpp)              # 1.13.0 (lot J3) : JSON et expressions regulieres, le type ANY
@@ -1435,6 +1439,8 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME deployinstall COMMAND deploy_install_test)            # 1.29.0 : envoi par blocs et reprise, installation, poste lance/arrete, retour en arriere
     xpg_add_test(NAME erreurs      COMMAND erreurs_test)                     # ---- 1.13.0 : LEVER, RELEVER, WAIT_UNTIL ----
     xpg_add_test(NAME generiques   COMMAND generiques_test)                  # ---- 1.13.0 : les fonctions generiques (TEMPLATE) ----
+    xpg_add_test(NAME tableaux     COMMAND tableaux_test)                    # ---- 1.50.0 : ARRAY OF ARRAY et ARRAY[a, b] partout ----
+    xpg_add_test(NAME scriptsc     COMMAND scripts_c_test)                   # ---- 1.50.0 : les scripts C et C++ compiles et executes ----
     xpg_add_test(NAME testsunitaires COMMAND tests_unitaires_test)           # ---- 1.13.0 (lot J4) : les tests unitaires des fonctions ----
     xpg_add_test(NAME donnees      COMMAND donnees_test)                     # ---- 1.13.0 (lot J3) : JSON et expressions regulieres, le type ANY ----
     xpg_add_test(NAME objets       COMMAND objets_test)                      # ---- 1.13.0 (lot J1) : methodes, prive, heritage, interfaces ----

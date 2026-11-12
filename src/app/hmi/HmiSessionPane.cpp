@@ -14,11 +14,12 @@ namespace app {
 
 namespace {
 
-// Le champ : Entree envoie (pas la perte du focus).
+// Le champ : Entree envoie (pas la perte du focus). 1.50.0 : Echap annule la reponse en cours.
 class SessionField final : public ui::InputText {
 public:
     using ui::InputText::InputText;
     std::function<void()> onSubmit;
+    std::function<bool()> onEscape;
 
 protected:
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
@@ -26,6 +27,8 @@ protected:
             if (onSubmit) onSubmit();
             return ui::EventResult::Consumed;
         }
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape && focused() && !suggestionsOpen() && onEscape && onEscape())
+            return ui::EventResult::Consumed;
         return ui::InputText::onEvent(ev);
     }
 };
@@ -57,12 +60,21 @@ HmiSessionPane::HmiSessionPane(std::string id) : ui::Widget(std::move(id)) {
         if (said) said(path.empty() ? "Le journal ne s'exporte pas : " + why + "." : "Journal export\xC3\xA9 : " + path, !path.empty());
     });
     list_ = &static_cast<sessionui::LineList&>(addChild(std::make_unique<sessionui::LineList>(this->id() + ".lignes")));
+    // 1.50.0 : Repondre (le survol, le clic droit) ; la barre << En reponse a ... >> au-dessus du champ, sa croix.
+    list_->onReply = [this](const Row& r) { replyTo(r); };
+    reply_ = &static_cast<sessionui::ReplyBar&>(addChild(std::make_unique<sessionui::ReplyBar>(this->id() + ".reponse")));
+    reply_->onCancel = [this] { cancelReply(); };
     auto field = std::make_unique<SessionField>(this->id() + ".message");
     field->setPlaceholder("\xC3\x89" "cris \xC3\xA0 l'\xC3\xA9quipe\xE2\x80\xA6 (Entr\xC3\xA9" "e)");
     field->setMaxLength(2000);
     auto* raw = field.get();
     field_ = &static_cast<ui::InputText&>(addChild(std::move(field)));
     raw->onSubmit = [this] { (void)send(field_->text()); };
+    raw->onEscape = [this] {
+        if (!reply_->active()) return false;
+        cancelReply();
+        return true;
+    };
     sendButton_ = button("Envoyer", "envoyer", ui::Button::Style::Primary);
     links_ += sendButton_->clicked->connect([this] { (void)send(field_->text()); });
     refresh();
@@ -83,9 +95,25 @@ bool HmiSessionPane::send(const std::string& text) {
     std::string t = text;
     while (!t.empty() && (t.back() == ' ' || t.back() == '\n')) t.pop_back();
     if (t.empty() || !sessionmarks::active()) return false;
-    sessionmarks::say(t);
+    sessionmarks::say(t, reply_ && reply_->active() ? reply_->replyId() : std::string{});   // 1.50.0 : la reponse
     if (field_) field_->setText({});
+    cancelReply();
     return true;
+}
+
+void HmiSessionPane::replyTo(const sessionui::Row& row) {
+    if (!sessionui::canReply(row)) return;
+    reply_->set(row);
+    if (field_ && field_->visible()) field_->takeFocus();
+    invalidateLayout();
+    invalidate();
+}
+
+void HmiSessionPane::cancelReply() {
+    if (!reply_ || (!reply_->active() && reply_->label().empty())) return;
+    reply_->clear();
+    invalidateLayout();
+    invalidate();
 }
 
 void HmiSessionPane::refresh() {
@@ -103,7 +131,14 @@ void HmiSessionPane::rebuild() {
     rows_.clear();
     std::vector<Row> chat, journal;
     if (filter_ != Filter::Journal)
-        for (const auto& l : b.chat) chat.push_back(Row{l.time, l.from, l.text, l.color, false, l.system, l.mine, 1});
+        for (const auto& l : b.chat) {
+            Row row{l.time, l.from, l.text, l.color, false, l.system, l.mine, 1};
+            row.id = l.id;   // 1.50.0 : repondre a un message ; la citation d'une reponse
+            row.replyId = l.replyId;
+            row.replyWho = l.replyFrom;
+            row.replyText = l.replyText;
+            chat.push_back(std::move(row));
+        }
     if (filter_ != Filter::Chat)
         for (const auto& l : b.journal) journal.push_back(Row{l.time, l.from, l.text, l.color, true, false, l.mine, l.count});
     // Meles dans l'ordre des heures (chacun l'est deja) ; a la meme heure, la discussion d'abord.
@@ -113,6 +148,7 @@ void HmiSessionPane::rebuild() {
         else rows_.push_back(std::move(journal[j++]));
     }
     if (list_) {
+        list_->setRepliesEnabled(filter_ != Filter::Journal);   // 1.50.0 : le journal seul - Copier seulement
         list_->setEmptyText(filter_ == Filter::Chat      ? "Aucun message encore : \xC3\xA9" "cris \xC3\xA0 l'\xC3\xA9quipe dans le champ du bas (Entr\xC3\xA9" "e)."
                             : filter_ == Filter::Journal ? "Aucun changement encore : chaque changement de la session s'inscrit ici (qui, quand, quoi)."
                                                          : "Rien encore : la discussion et le journal de la session s'inscrivent ici.");
@@ -126,8 +162,10 @@ void HmiSessionPane::onLayout() {
     const auto r = bounds();
     const float w = std::max(0.f, r.w - 2.f * kPad);
     const float x = r.x + kPad;
-    // Ce qui reste a un panneau tres bas : le champ et Envoyer d'abord, puis la liste, puis l'en-tete.
-    const bool header = r.h >= kPad + kHeaderH + kPad + kFooterH + kPad;
+    // Ce qui reste a un panneau tres bas : le champ et Envoyer d'abord, puis la liste, puis l'en-tete. 1.50.0 : une
+    // reponse en cours (<< En reponse a ... >>) vient juste apres le champ.
+    const float replyH = reply_->active() ? sessionui::ReplyBar::kHeight + kPad : 0.f;
+    const bool header = r.h >= kPad + kHeaderH + kPad + kFooterH + kPad + replyH;
     const bool footer = r.h >= kFooterH + 2.f * kPad;
     // ---- l'en-tete : les filtres a gauche, Exporter a droite (l'hote), le titre entre les deux ----
     for (auto* b : {all_, chat_, journal_}) b->setVisibility(header ? ui::Visibility::Visible : ui::Visibility::Collapsed);
@@ -193,8 +231,16 @@ void HmiSessionPane::onLayout() {
         field_->setBounds({x, footerTop, std::max(0.f, w - sw - 6.f), kFooterH});
         sessionui::fitPlaceholder(*field_, std::max(0.f, w - sw - 6.f), sessionui::messagePlaceholders());
     }
+    // ---- 1.50.0 : << En reponse a ... >> au-dessus du champ (s'il reste de quoi lire la liste ; sinon a la place) ----
+    float bottomEdge = footerTop;
+    const bool replyShown = footer && reply_->active() && footerTop - (headerBottom + kPad) >= replyH;
+    reply_->setVisibility(replyShown ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    if (replyShown) {
+        bottomEdge = footerTop - kPad - sessionui::ReplyBar::kHeight;
+        reply_->setBounds({x, bottomEdge, w, sessionui::ReplyBar::kHeight});
+    }
     // ---- la liste entre les deux ----
-    const float top = headerBottom + kPad, bottom = footerTop - kPad;
+    const float top = headerBottom + kPad, bottom = bottomEdge - kPad;
     const bool listShown = bottom - top >= 16.f;
     list_->setVisibility(listShown ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     if (listShown) list_->setBounds({r.x, top, r.w, bottom - top});

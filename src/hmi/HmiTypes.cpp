@@ -183,6 +183,32 @@ std::vector<std::string> arrayInitials(std::string_view initial, bool& bracketed
     return splitList(t);
 }
 
+// 1.50.0 : les valeurs d'un tableau de tableaux, une par case du premier niveau, sans deplier les listes du dessous :
+// [[1, 2], [3, 4]] -> [1, 2] et [3, 4] ; une valeur seule (0) : pour toutes.
+std::vector<std::string> outerInitials(std::string_view initial, bool& bracketed) {
+    const std::string t = trimmed(initial);
+    bracketed = false;
+    if (t.size() >= 2 && t.front() == '[' && t.back() == ']') {
+        int depth = 0;
+        bool quoted = false, whole = true;
+        for (std::size_t i = 0; i < t.size(); ++i) {
+            const char c = t[i];
+            if (c == '\'') quoted = !quoted;
+            if (quoted) continue;
+            if (c == '[') ++depth;
+            else if (c == ']' && --depth == 0 && i + 1 < t.size()) whole = false;
+        }
+        if (whole) {
+            bracketed = true;
+            std::vector<std::string> out;
+            for (auto& item : splitList(std::string_view(t).substr(1, t.size() - 2)))
+                if (!item.empty()) out.push_back(std::move(item));
+            return out;
+        }
+    }
+    return {t};
+}
+
 // 1.12.10 (lot F) : la valeur `lit` peut-elle aller dans un membre de type `type` ? Faux (et `why`) : elle ne
 // s'appliquera pas (le membre garde la valeur de son type). Une structure, un tableau, une liste : leur
 // forme seulement (leurs elements se verifient en les depliant).
@@ -292,7 +318,8 @@ struct Walker {
             // 1.12.10 (lot F) : un tableau de structures prend aussi un litteral par element,
             // [(Nom := 'Cuve A', Niveau := 4.2), (...)] - avant, chacun les valeurs de son type, en silence.
             bool bracketed = false;
-            const auto list = arrayInitials(initial, bracketed);
+            // 1.50.0 : un tableau de tableaux - chaque case recoit sa liste ([[1, 2], [3, 4]] : [1, 2] puis [3, 4]).
+            const auto list = isArrayText(s.element) ? outerInitials(initial, bracketed) : arrayInitials(initial, bracketed);
             const bool perElement = list.size() > 1 || bracketed;   // 1.12.2 : [5] : la premiere case seule
             if (perElement && static_cast<long long>(list.size()) > s.length() && (!simple || !rel.empty()))
                 note(path + " : " + std::to_string(list.size()) + " valeurs initiales pour " + std::to_string(s.length())
@@ -468,6 +495,15 @@ bool isElementary(std::string_view name) noexcept {
         && e->category != typereg::Category::Callback && sameText(e->name, name);   // 1.12.19 : un rappel est un objet de l'IHM
 }
 
+bool isArrayText(std::string_view type) noexcept {
+    std::size_t a = 0;
+    while (a < type.size() && std::isspace(static_cast<unsigned char>(type[a]))) ++a;
+    if (type.size() - a < 5) return false;
+    for (std::size_t k = 0; k < 5; ++k)
+        if (std::toupper(static_cast<unsigned char>(type[a + k])) != "ARRAY"[k]) return false;
+    return a + 5 == type.size() || !(std::isalnum(static_cast<unsigned char>(type[a + 5])) || type[a + 5] == '_');
+}
+
 bool isComposite(std::string_view type) noexcept {
     const std::string t = trimmed(type);
     return !t.empty() && !isElementary(t);
@@ -540,17 +576,33 @@ bool parseSpec(std::string_view text, Spec& out, std::string* why) {
     if (upperOf(rest).rfind("OF", 0) != 0 || rest.size() < 3 || !std::isspace(static_cast<unsigned char>(rest[2])))
         return fail(why, "tableau \xC2\xAB " + t + " \xC2\xBB : il manque OF (ARRAY[0..9] OF REAL)");
     const std::string element = trimmed(std::string_view(rest).substr(2));
-    if (upperOf(element).rfind("ARRAY", 0) == 0)
-        return fail(why, "un tableau de tableaux : \xC3\xA9" "crire ARRAY[0..3, 0..9] OF ... (deux dimensions)");
-    if (!typeWord(element)) return fail(why, "tableau \xC2\xAB " + t + " \xC2\xBB : type des cases illisible");
+    // 1.50.0 : UN TABLEAU DE TABLEAUX (ARRAY[0..3] OF ARRAY[0..15] OF BOOL) est permis, comme deux dimensions
+    // (ARRAY[0..3, 0..15] OF BOOL) : l'element est lui-meme un tableau, lu par la meme regle (ses bornes verifiees),
+    // et le depliage descend d'un niveau (X[1][2]). Avant : refuse ici seulement (le moteur et le registre l'acceptaient).
+    const bool nested = isArrayText(element);
+    Spec inner;
+    if (nested) {
+        std::string innerWhy;
+        if (!parseSpec(element, inner, &innerWhy)) return fail(why, "tableau \xC2\xAB " + t + " \xC2\xBB : ses cases : " + innerWhy);
+    } else if (!typeWord(element)) {
+        return fail(why, "tableau \xC2\xAB " + t + " \xC2\xBB : type des cases illisible");
+    }
     const auto parts = splitList(inside);
-    if (parts.size() > 2) return fail(why, "un tableau a une ou deux dimensions (ARRAY[0..3, 0..9] OF INT)");
+    if (parts.size() > 2)
+        return fail(why, "un tableau a une ou deux dimensions (ARRAY[0..3, 0..9] OF INT) ; plus : un tableau de tableaux "
+                         "(ARRAY[0..1] OF ARRAY[0..3, 0..9] OF INT)");
     for (std::size_t d = 0; d < parts.size(); ++d)
         if (!rangeOf(parts[d], out.low[d], out.high[d], why)) return false;
     out.dims = static_cast<int>(parts.size());
-    out.element = isElementary(element) ? upperOf(element) : genericText(element);
-    if (out.length() > kMaxElements)
-        return fail(why, "tableau de " + std::to_string(out.length()) + " cases : " + std::to_string(kMaxElements) + " au plus");
+    out.element = nested ? specText(inner) : isElementary(element) ? upperOf(element) : genericText(element);
+    long long cells = out.length();
+    for (Spec level = inner; nested && level.array();) {        // les cases de tous les niveaux
+        cells *= level.length();
+        const std::string next = level.element;
+        if (cells > kMaxElements || !parseSpec(next, level)) break;
+    }
+    if (out.length() > kMaxElements || cells > kMaxElements)
+        return fail(why, "tableau de " + std::to_string(cells) + " cases : " + std::to_string(kMaxElements) + " au plus");
     return true;
 }
 
@@ -580,6 +632,7 @@ bool validType(const Project& p, std::string_view type, std::string* why) {
     Spec s;
     if (!parseSpec(type, s, why)) return false;
     if (isElementary(s.element)) return true;
+    if (s.array() && isArrayText(s.element)) return validType(p, s.element, why);   // 1.50.0 : un tableau de tableaux
     if (!genericUse(p, s.element, why)) return false;          // 1.12.20 (lot G)
     if (!p.hmiTypeByName(s.element)) return fail(why, "type inconnu \xC2\xAB " + s.element + " \xC2\xBB");
     return true;
@@ -730,7 +783,7 @@ std::vector<std::string> usersOf(const Project& p, std::string_view typeName) {
         }
         Spec s;
         // 1.12.20 (lot G) : T_Mesure<REAL> - le nom parmi ses mots (la structure generique, ses types).
-        if (parseSpec(type, s) && s.element.find('<') == std::string::npos) return sameText(s.element, typeName);
+        if (parseSpec(type, s) && s.element.find('<') == std::string::npos && !isArrayText(s.element)) return sameText(s.element, typeName);
         // 1.12.2 : un type objet (LIST OF T_Four, TUPLE(T_Four, INT)) : le nom parmi ses mots.
         const std::string t(type);
         for (std::size_t i = 0; i < t.size();) {
@@ -1439,6 +1492,14 @@ bool propertyValue(const Aggregate& a, std::string_view name, sim::Value& out) {
 }
 
 // ------------------------------------------------------ les chemins ---------
+// 1.50.0 : les indices que prend un pas entre crochets dans ce type - un tableau : ses dimensions (ARRAY[0..3, 0..9] : 2 ;
+// un tableau de tableaux : 1, celles de son premier niveau) ; une liste, une MAP... : 1.
+std::size_t indexCount(std::string_view type) {
+    const auto sh = typeform::decompose(normalized(type));
+    if (sh.reference || (sh.form != typeform::Form::Array && sh.form != typeform::Form::Array2D)) return 1;
+    return std::max<std::size_t>(1, splitList(sh.parameter).size());
+}
+
 // 1.12.14 : les pas dans un type, a toute profondeur (voir HmiTypes.hpp).
 TypeStep stepIndex(const Project& p, std::string_view type) {
     (void)p;
@@ -1594,6 +1655,9 @@ std::string typeOfPath(const Project& p, std::string_view path) {
     const auto* v = p.variable(path.substr(0, i));
     if (!v) return {};
     std::string type = normalized(v->type);
+    // 1.50.0 : les indices pas encore pris - a[i][j] sur deux dimensions (le second groupe complete le premier), a[i, j]
+    // sur un tableau de tableaux (un indice par niveau) : les deux ecritures designent la meme case.
+    std::size_t pending = 0;
     // 1.12.14 : chaque pas, a toute profondeur (Parc['a'][1].Niveau : MAP, VECTOR, T_Cuve, REAL).
     while (i < path.size()) {
         const char c = path[i];
@@ -1610,12 +1674,19 @@ std::string typeOfPath(const Project& p, std::string_view path) {
                 else if (path[j] == ']' && --depth == 0) break;
             }
             if (j >= path.size()) return {};
-            const auto st = stepIndex(p, type);
-            if (st.type.empty()) return {};
-            type = st.type;
+            pending += splitList(path.substr(i + 1, j - i - 1)).size();
             i = j + 1;
+            while (pending > 0) {
+                const std::size_t need = indexCount(type);
+                if (pending < need) break;                      // le groupe suivant complete la case
+                const auto st = stepIndex(p, type);
+                if (st.type.empty()) return {};
+                type = st.type;
+                pending -= need;
+            }
             continue;
         }
+        if (pending > 0) return {};                             // une case pas complete (a[1] sur deux dimensions)
         if (c == '.') {
             std::size_t j = i + 1;
             while (j < path.size() && (std::isalnum(static_cast<unsigned char>(path[j])) || path[j] == '_')) ++j;
@@ -1627,7 +1698,7 @@ std::string typeOfPath(const Project& p, std::string_view path) {
         }
         return {};
     }
-    return type;
+    return pending > 0 ? std::string{} : type;
 }
 
 const HmiType* typeFrom(const Project& p, std::string_view nsIn, std::string_view nameIn, const HmiType* self) {
@@ -1825,6 +1896,7 @@ std::vector<PathProblem> pathProblems(const Project& p, std::string_view source)
         std::string type = normalized(v->type);
         std::string path(name);
         const int at = line;
+        std::vector<std::string> pending;          // 1.50.0 : les indices pas encore pris (une case a completer)
         while (true) {
             // 1.12.14 : un objet (une LIST, une MAP, un tuple, a toute profondeur) : ses indices et ses
             // membres (L[0], M['cle'][2].Niveau, T.Item1, L.Count) se verifient ici aussi - ils
@@ -1896,22 +1968,42 @@ std::vector<PathProblem> pathProblems(const Project& p, std::string_view source)
                     i = e + 1;
                     break;
                 }
-                const auto parts = splitList(inside);
-                if (static_cast<int>(parts.size()) != s.dims) {
-                    out.push_back({at, path + " a " + std::to_string(s.dims) + " dimension" + (s.dims > 1 ? "s" : "") + " : " + std::to_string(s.dims)
-                                           + " indice" + (s.dims > 1 ? "s" : "") + " entre crochets (" + specText(s) + ")"});
-                } else {
+                // 1.50.0 : les indices se prennent niveau par niveau, groupes ou non - M[i][j] sur deux dimensions (le
+                // groupe colle suivant complete), T[i, j] sur un tableau de tableaux (un indice par niveau).
+                for (auto& part : splitList(inside)) pending.push_back(std::move(part));
+                i = e + 1;
+                bool stop = false;
+                while (!pending.empty() && !stop) {
+                    if (!parseSpec(type, s) || !s.array()) {
+                        out.push_back({at, path + " n'est pas un tableau : pas d'indice entre crochets"});
+                        stop = true;
+                        break;
+                    }
+                    if (static_cast<int>(pending.size()) < s.dims) {
+                        std::size_t q = i;
+                        while (q < n && (code[q] == ' ' || code[q] == '\t')) ++q;
+                        if (q < n && code[q] == '[') break;            // le groupe suivant complete la case
+                        out.push_back({at, path + " a " + std::to_string(s.dims) + " dimension" + (s.dims > 1 ? "s" : "") + " : " + std::to_string(s.dims)
+                                               + " indice" + (s.dims > 1 ? "s" : "") + " entre crochets (" + specText(s) + ") - "
+                                               + path + "[i, j] ou " + path + "[i][j]"});
+                        stop = true;
+                        break;
+                    }
+                    std::string cell;
                     for (int d = 0; d < s.dims; ++d) {
+                        const std::string& part = pending[static_cast<std::size_t>(d)];
+                        cell += (d ? ", " : "") + part;
                         long long x = 0;
-                        if (!integerOf(parts[static_cast<std::size_t>(d)], x)) continue;
+                        if (!integerOf(part, x)) continue;
                         if (x < s.low[d] || x > s.high[d])
                             out.push_back({at, path + "[" + inside + "] : l'indice " + std::to_string(x) + " est hors des bornes du tableau ("
                                                    + std::to_string(s.low[d]) + ".." + std::to_string(s.high[d]) + ")"});
                     }
+                    pending.erase(pending.begin(), pending.begin() + s.dims);
+                    path += "[" + cell + "]";
+                    type = s.element;
                 }
-                path += "[" + inside + "]";
-                type = s.element;
-                i = e + 1;
+                if (stop) break;
                 continue;
             }
             if (k < n && code[k] == '.' && k + 1 < n && (isStart(code[k + 1]) || std::isdigit(static_cast<unsigned char>(code[k + 1])))) {

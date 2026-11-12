@@ -107,6 +107,40 @@ bool fromJson(const core::json::Value&, Member&);
 // La premiere couleur de la palette que personne n'a (`wanted` d'abord, si elle est libre).
 [[nodiscard]] std::uint32_t freeColor(const std::vector<Member>& members, std::uint32_t wanted = 0);
 
+// ---- 1.50.0 : les messages de la discussion (MESSAGE), et la reponse a un message ----
+//  MESSAGE porte toujours `de`, `couleur`, `texte`, `heure` (ce que lit un Studio d'avant). La 1.50.0 y ajoute,
+//  FACULTATIFS (un Studio plus ancien les ignore et lit le texte) : `id` (donne par l'hote, le meme pour tous) et
+//  `reponse` {id, de, extrait} : le message auquel il repond, son auteur, le debut de son texte (l'extrait voyage avec
+//  la reponse : il se montre meme si le message cite n'est plus dans la liste). Un message sans `id` (un hote d'avant)
+//  recoit un identifiant tire de son auteur, son heure et son texte : le meme sur chaque PC. A un Studio d'avant la
+//  1.50, la reponse part avec la citation en premiere ligne du texte (quotedText).
+inline constexpr std::size_t kMessageMax = 2000;     // le texte (octets)
+inline constexpr std::size_t kExcerptChars = 80;     // l'extrait cite (caracteres)
+struct ChatReply {
+    std::string id;        // le message cite
+    std::string from;      // son auteur
+    std::string excerpt;   // le debut de son texte (sa premiere ligne, raccourcie)
+    [[nodiscard]] bool empty() const noexcept { return id.empty() && excerpt.empty(); }
+};
+struct ChatMessage {
+    std::string   id, from, text, time;
+    std::uint32_t color{0};
+    ChatReply     reply{};
+};
+// La premiere ligne de `text`, `maxChars` caracteres au plus (<< ... >> si elle est coupee), sans caractere de controle.
+[[nodiscard]] std::string chatExcerpt(std::string_view text, std::size_t maxChars = kExcerptChars);
+// L'identifiant d'un message qui n'en porte pas (un hote d'avant la 1.50) : "h" + 16 hexadecimaux.
+[[nodiscard]] std::string chatIdOf(std::string_view from, std::string_view time, std::string_view text);
+// Les champs de MESSAGE (de, couleur, texte, heure ; id et reponse s'ils sont la) ; et dans l'autre sens.
+void writeChat(core::json::Value& out, const ChatMessage&);
+[[nodiscard]] ChatMessage readChat(const core::json::Value& message);
+void writeReply(core::json::Value& out, const ChatReply&);
+[[nodiscard]] ChatReply readReply(const core::json::Value& message);   // vide : pas une reponse
+// Le texte d'une reponse pour un Studio d'avant la 1.50 : << En reponse a Lea : << extrait >> >> puis le texte.
+[[nodiscard]] std::string quotedText(const ChatMessage&);
+// Ce Studio (sa version, "1.50.0") connait-il les reponses ? Vide ou illisible : non.
+[[nodiscard]] bool knowsReplies(std::string_view version);
+
 // ---- les identifiants : chaque membre cree dans son bloc ----
 //  Le membre n cree a partir de n x 2^28 ; une session d'avant a pu y laisser des objets : le
 //  premier libre est 1 + le plus grand identifiant du projet dans le bloc.

@@ -29,6 +29,10 @@
 //     dans l'infobulle ;
 //   - l'equipe et la discussion defilent (la molette, la barre qu'on tire).
 //
+//  1.50.0 : REPONDRE, REDUIRE, COPIER dans la discussion (la liste de
+//  SessionText) ; << En reponse a Lea : << ... >> >> au-dessus du champ
+//  (replyBar), dans le cadre comme le reste.
+//
 //  CE QU'ELLE MONTRE est un Snapshot (des donnees simples), rempli par
 //  SessionDialogs depuis le service des sessions : les essais posent la fenetre
 //  a toutes les tailles sans session (tests/session_ui_test.cpp).
@@ -104,6 +108,8 @@ public:
 
     // La discussion ou le journal (enfant, cree ici).
     [[nodiscard]] sessionui::LineList* lines() noexcept { return lines_; }
+    // 1.50.0 : << En reponse a ... >> au-dessus du champ (enfant, cree ici ; cache sans reponse en cours).
+    [[nodiscard]] sessionui::ReplyBar* replyBar() noexcept { return reply_; }
     // Les essais : le cadre, s'il est en deux colonnes ; les textes raccourcis avec << ... >> (le texte entier, celui
     // de l'infobulle).
     [[nodiscard]] gfx::Rect panel() const noexcept { return panel_; }
@@ -146,6 +152,7 @@ private:
 
     Snapshot snap_;
     sessionui::LineList* lines_{nullptr};
+    sessionui::ReplyBar* reply_{nullptr};   // 1.50.0
     gfx::Rect panel_{}, teamArea_{}, teamView_{}, chatBox_{}, codeBox_{};
     bool two_{true};
     std::vector<Label> labels_;   // les textes poses (fixes, et ceux de l'equipe qui defilent)

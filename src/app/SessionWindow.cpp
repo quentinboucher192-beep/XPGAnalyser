@@ -39,6 +39,8 @@ float step(gfx::FontId f) { return std::ceil(ui::lineHeight(f)) + 4.f; }
 
 Body::Body(std::string id) : ui::Widget(std::move(id)) {
     lines_ = &static_cast<sessionui::LineList&>(addChild(std::make_unique<sessionui::LineList>(this->id() + ".lignes")));
+    reply_ = &static_cast<sessionui::ReplyBar&>(addChild(std::make_unique<sessionui::ReplyBar>(this->id() + ".reponse")));   // 1.50.0
+    reply_->setVisibility(ui::Visibility::Collapsed);
 }
 
 void Body::setSnapshot(Snapshot s) {
@@ -46,6 +48,7 @@ void Body::setSnapshot(Snapshot s) {
     lines_->setEmptyText(snap_.showJournal ? "Aucun changement encore : chaque changement de la session s'inscrit ici (qui, quand, quoi)."
                                            : "Aucun message encore : \xC3\xA9" "cris \xC3\xA0 l'\xC3\xA9quipe dans le champ du bas (Entr\xC3\xA9" "e).");
     lines_->setRows(snap_.showJournal ? snap_.journal : snap_.chat);
+    lines_->setRepliesEnabled(!snap_.showJournal);   // 1.50.0 : le journal - Copier seulement
     invalidateLayout();
     invalidate();
 }
@@ -248,7 +251,15 @@ void Body::layoutChat(const gfx::Rect& area) {
     }
     if (field) sessionui::fitPlaceholder(*field, field->bounds().w, sessionui::messagePlaceholders());
     const float top = area.y + headerH + 6.f;
-    chatBox_ = {area.x, top, area.w, std::max(0.f, fy - 8.f - top)};
+    // 1.50.0 : << En reponse a ... >> juste au-dessus du champ, s'il y a la place (la discussion garde 28 px).
+    float listBottom = fy;
+    const bool replyShown = field && reply_->active() && fy - 6.f - sessionui::ReplyBar::kHeight - top >= 8.f + 28.f;
+    reply_->setVisibility(replyShown ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    if (replyShown) {
+        listBottom = fy - 6.f - sessionui::ReplyBar::kHeight;
+        reply_->setBounds({area.x, listBottom, area.w, sessionui::ReplyBar::kHeight});
+    }
+    chatBox_ = {area.x, top, area.w, std::max(0.f, listBottom - 8.f - top)};
     const bool shown = chatBox_.h >= 28.f;
     lines_->setVisibility(shown ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     if (shown) lines_->setBounds(chatBox_.inset(3.f, 3.f));
@@ -306,6 +317,7 @@ void Body::onLayout() {
     if (!snap_.active) {
         // Hors session (on entre, un refus) : ce qui se passe, retourne a la ligne ; rien d'autre.
         lines_->setVisibility(ui::Visibility::Collapsed);
+        reply_->setVisibility(ui::Visibility::Collapsed);
         const std::size_t fit = static_cast<std::size_t>(std::max(1.f, std::floor(content.h / step(kUi))));
         (void)addWrapped(cx, top, snap_.progress, kUi, cw, 0, fit);
         two_ = false;

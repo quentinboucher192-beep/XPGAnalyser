@@ -252,13 +252,14 @@ struct SessionService::Impl {
     std::vector<std::uint64_t> journalDirty;
     std::string hostFolder;
     std::int64_t startedAt{0};
+    std::uint64_t chatSerial{0};   // 1.50.0 : l'hote - le numero du dernier message (son identifiant "m<n>")
 };
 
 SessionService::SessionService(App& app) : d_(std::make_unique<Impl>()), app_(app) {
     sessionmarks::setRefusedNotice([this](const std::string& t) { app_.events().publish(StatusNotice{t, 5.0}); });
     // 1.45.0 : ce que l'interface demande (le panneau du bas, l'arbre du projet).
     sessionmarks::Hooks h;
-    h.say = [this](const std::string& t) { say(t); };
+    h.say = [this](const std::string& t, const std::string& replyTo) { say(t, replyTo); };   // 1.50.0 : la reponse
     h.follow = [this](int n) { follow(n); };
     h.exportJournal = [this](std::string* why) { return exportJournal(why); };
     sessionmarks::setHooks(std::move(h));
@@ -496,6 +497,55 @@ struct SessionServiceAccess {
             (void)m;
             if (conn != except) s.d_->host.send(conn, h, data);
         }
+    }
+
+    // ---- 1.50.0 : la discussion - l'identifiant de chaque message, la reponse a un message ----
+    // Le message auquel `id` renvoie, tel que ce PC l'a (son auteur, son extrait) ; vide : inconnu.
+    static session::ChatReply replyOf(const SessionService& s, const std::string& id) {
+        session::ChatReply r;
+        if (id.empty()) return r;
+        for (auto it = s.chat_.rbegin(); it != s.chat_.rend(); ++it)
+            if (!it->system && it->id == id) {
+                r.id = id;
+                r.from = it->from;
+                r.excerpt = session::chatExcerpt(it->text);
+                break;
+            }
+        return r;
+    }
+    // Un message dans la discussion de ce PC (la borne : les plus anciens tombent).
+    static void keep(SessionService& s, const session::ChatMessage& m) {
+        s.chat_.push_back({m.from, m.text, m.time, m.color, false, m.id, m.reply});
+        if (s.chat_.size() > kChatMax) s.chat_.erase(s.chat_.begin());
+    }
+    // L'hote : le message part a chacun - avec `id` et `reponse` ; a un Studio d'avant la 1.50, la reponse part avec
+    // la citation en premiere ligne du texte (il ignore `reponse`).
+    static void broadcastChat(SessionService& s, const session::ChatMessage& m) {
+        core::json::Value now = op("MESSAGE");
+        session::writeChat(now, m);
+        core::json::Value old = now;
+        if (!m.reply.empty()) {
+            old.erase("reponse");
+            old.set("texte", session::quotedText(m));
+        }
+        for (const auto& [conn, n] : s.d_->memberOfConn) {
+            const auto* mem = s.member(n);
+            s.d_->host.send(conn, m.reply.empty() || (mem && session::knowsReplies(mem->version)) ? now : old, {});
+        }
+    }
+    // L'hote : le message d'un membre (le sien ou celui d'un equipier) - son identifiant, la reponse d'apres sa copie.
+    static session::ChatMessage hostMessage(SessionService& s, const std::string& from, std::uint32_t color, const std::string& text,
+                                            const session::ChatReply& asked) {
+        session::ChatMessage m;
+        m.id = "m" + std::to_string(++s.d_->chatSerial);
+        m.from = from;
+        m.color = color;
+        m.text = text;
+        m.time = clock();
+        // Le message cite tel que l'hote l'a (il fait foi) ; inconnu de lui (tombe de la liste) : ce que l'equipier en dit.
+        m.reply = replyOf(s, asked.id);
+        if (m.reply.empty() && !asked.empty()) m.reply = asked;
+        return m;
     }
 
     static void sendMembers(SessionService& s) {
@@ -748,13 +798,17 @@ struct SessionServiceAccess {
         e.set("bloc", static_cast<std::int64_t>(session::firstFreeInBlock(doc->project, n)));
         core::json::Value chat = core::json::Value::array();
         const std::size_t from = s.chat_.size() > 50 ? s.chat_.size() - 50 : 0;
+        const bool replies = session::knowsReplies(m.version);   // 1.50.0 : un Studio d'avant lit la citation dans le texte
         for (std::size_t i = from; i < s.chat_.size(); ++i) {
             if (s.chat_[i].system) continue;
             core::json::Value c = core::json::Value::object();
-            c.set("de", s.chat_[i].from);
-            c.set("couleur", static_cast<std::int64_t>(s.chat_[i].color));
-            c.set("texte", s.chat_[i].text);
-            c.set("heure", s.chat_[i].time);
+            const auto& l = s.chat_[i];
+            session::ChatMessage cm{l.id, l.from, l.text, l.time, l.color, l.reply};
+            if (!replies) {
+                cm.text = session::quotedText(cm);
+                cm.reply = {};
+            }
+            session::writeChat(c, cm);
             chat.push(std::move(c));
         }
         e.set("messages", std::move(chat));
@@ -960,16 +1014,12 @@ struct SessionServiceAccess {
             return;
         }
         if (kind == "MESSAGE") {
-            std::string text = h.str("texte").substr(0, 2000);
+            std::string text = h.str("texte").substr(0, session::kMessageMax);
             if (text.empty()) return;
-            core::json::Value out = op("MESSAGE");
-            out.set("de", m->name);
-            out.set("couleur", static_cast<std::int64_t>(m->color));
-            out.set("texte", text);
-            out.set("heure", clock());
-            broadcast(s, out, {});
-            s.chat_.push_back({m->name, text, clock(), m->color, false});
-            if (s.chat_.size() > kChatMax) s.chat_.erase(s.chat_.begin());
+            // 1.50.0 : l'identifiant (donne ici, le meme pour tous) et la reponse ; un Studio d'avant : la citation.
+            const auto msg = hostMessage(s, m->name, m->color, text, session::readReply(h));
+            broadcastChat(s, msg);
+            keep(s, msg);
             ++s.messagesIn_;   // 1.45.0 : le non lu de l'onglet Session
             ++s.revision_;
             return;
@@ -1114,8 +1164,7 @@ struct SessionServiceAccess {
             const auto b = h.integer("bloc");
             s.d_->block = b > 0 && b <= 0xFFFFFFFFll ? static_cast<hmi::Id>(b) : session::blockStart(me.number);
             s.chat_.clear();
-            for (const auto& x : h.at("messages").items())
-                s.chat_.push_back({x.str("de"), x.str("texte"), x.str("heure"), static_cast<std::uint32_t>(x.integer("couleur")), false});
+            for (const auto& x : h.at("messages").items()) keep(s, session::readChat(x));   // 1.50.0 : id, reponse
             s.progress_ = (s.hostName_.empty() ? std::string("L'h\xC3\xB4te") : s.hostName_) + " t'a fait entrer. Le projet arrive\xE2\x80\xA6";
             s.d_->incoming.clear();
             s.d_->received = 0;
@@ -1222,8 +1271,7 @@ struct SessionServiceAccess {
             return;
         }
         if (kind == "MESSAGE") {
-            s.chat_.push_back({h.str("de"), h.str("texte"), h.str("heure"), static_cast<std::uint32_t>(h.integer("couleur")), false});
-            if (s.chat_.size() > kChatMax) s.chat_.erase(s.chat_.begin());
+            keep(s, session::readChat(h));   // 1.50.0 : son identifiant (celui de l'hote, ou tire du message), la reponse
             if (h.str("de") != myName()) ++s.messagesIn_;   // 1.45.0 : le non lu de l'onglet Session
             ++s.revision_;
             return;
@@ -1597,6 +1645,10 @@ void SessionService::publishBoard() {
         x.color = l.color;
         x.system = l.system;
         x.mine = !l.system && mine && l.from == mine->name;
+        x.id = l.id;   // 1.50.0 : repondre a un message
+        x.replyId = l.reply.id;
+        x.replyFrom = l.reply.from;
+        x.replyText = l.reply.excerpt;
         b.chat.push_back(std::move(x));
     }
     for (const auto& e : journal_.entries()) {
@@ -1834,23 +1886,30 @@ void SessionService::tick() {
     }
 }
 
-void SessionService::say(const std::string& text) {
+void SessionService::say(const std::string& text, const std::string& replyTo) {
     if (text.empty() || !active()) return;
     const auto* me = member(me_);
+    // 1.50.0 : la reponse a un message de la discussion (inconnu ici : un message simple).
+    const session::ChatReply reply = SessionServiceAccess::replyOf(*this, replyTo);
     if (mode_ == Mode::Host) {
-        core::json::Value out = op("MESSAGE");
-        out.set("de", hostName_);
-        out.set("couleur", static_cast<std::int64_t>(me ? me->color : 0));
-        out.set("texte", text);
-        out.set("heure", clock());
-        SessionServiceAccess::broadcast(*this, out, {});
-        chat_.push_back({hostName_, text, clock(), me ? me->color : 0, false});
+        const auto msg = SessionServiceAccess::hostMessage(*this, hostName_, me ? me->color : 0, text.substr(0, session::kMessageMax), reply);
+        SessionServiceAccess::broadcastChat(*this, msg);
+        SessionServiceAccess::keep(*this, msg);
     } else {
         core::json::Value out = op("MESSAGE");
-        out.set("texte", text);
+        const auto* host = member(0);
+        if (!reply.empty() && host && !session::knowsReplies(host->version)) {
+            // Un hote d'avant la 1.50 ne garderait pas `reponse` : la citation part dans le texte, pour tous.
+            session::ChatMessage m;
+            m.text = text;
+            m.reply = reply;
+            out.set("texte", session::quotedText(m));
+        } else {
+            out.set("texte", text);
+            session::writeReply(out, reply);
+        }
         d_->guest.send(out);   // il revient par l'hote, pour tous
     }
-    if (chat_.size() > kChatMax) chat_.erase(chat_.begin());
     ++revision_;
 }
 

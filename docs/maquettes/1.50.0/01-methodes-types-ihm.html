@@ -1,0 +1,225 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Méthodes des types IHM</title>
+<link rel="stylesheet" href="planches.css">
+<style>
+.a-grid{grid-template-columns:1fr 1fr}
+.mini .win>.bd{padding:10px 14px}
+.mini .f{grid-template-columns:78px 1fr;margin-bottom:6px}
+.legend{font-size:11px;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--line);background:#fff}
+.legend b{color:var(--ty);font-weight:600}
+.cross{position:relative}
+.diff{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.diff div{font-size:11.6px;color:#7f1d1d;background:var(--err-50);border-radius:6px;padding:3px 8px}
+.b-grid{grid-template-columns:450px 1fr}
+.ed{display:grid;grid-template-columns:372px 1fr;min-height:0}
+.ed .l{border-right:1px solid var(--line)}
+.props td:first-child{color:var(--muted);width:44%}
+.mtx th:first-child,.mtx td:first-child{position:sticky;left:0}
+table.g.mtx td{text-align:center;white-space:normal;font-size:11.3px}
+table.g.mtx th{white-space:normal}
+.ed table.g td,.ed table.g th{white-space:normal}
+table.g.mtx td:first-child{text-align:left;width:33%}
+.mtx td:first-child{text-align:left;font-weight:600;color:var(--ink)}
+.mtx th{text-align:center}
+.mtx th.pr{background:var(--acc-50);color:var(--acc)}
+.mtx td.pr{background:#f3fbfa}
+.mtx td.bad{color:var(--err);font-weight:600}
+.c-grid{grid-template-columns:1fr 1fr 1fr}
+.self{display:inline-flex;align-items:center;gap:5px}
+.q ol{padding-left:18px}
+.self svg{width:11px;height:11px}
+</style></head><body>
+
+<div class="hd">
+  <div class="num">01</div>
+  <div>
+    <div class="ov">IHM Studio · maquette 1.50.0 · planche 01</div>
+    <h1>Les méthodes des types IHM deviennent des fonctions comme les autres</h1>
+    <p class="ask">Ta demande : <q>méthodes dans types IHM, pas pareil que les méthodes dans les symboles, il n'y a pas les onglets paramètres, constantes, locales, tests, uniformiser et proposer maquette</q>. Proposition : <b>une seule fenêtre de création</b> (celle des fonctions du symbole) et <b>les cinq mêmes onglets</b> — Code, Paramètres, Locales, Constantes, Tests — pour une fonction du projet, d'une vue, d'une popup, d'un symbole <b>et</b> pour une méthode de type IHM.</p>
+  </div>
+  <div class="leg"><span class="tag now">Aujourd'hui</span><span class="tag prop">Proposé</span><span class="tag new">Nouveau</span></div>
+</div>
+
+<!-- ============ A. AUJOURD'HUI ============ -->
+<div class="sec">
+  <h2><span class="tag now">Aujourd'hui</span> Deux façons de faire la même chose <span class="sub">— la fonction d'un symbole (à gauche) et la méthode d'un type IHM (à droite)</span></h2>
+  <div class="cols a-grid mini">
+    <!-- fonction de symbole -->
+    <div class="cols" style="grid-template-columns:1fr;gap:10px">
+      <div class="win flat">
+        <div class="tt">Nouvelle fonction du symbole Carte</div>
+        <div class="bd">
+          <p class="expl">Une fonction du symbole s'appelle par son nom dans le symbole, et ailleurs par Vue.Instance.Nom(…) (l'instance posée dans une vue). Virtuelle, une instance peut la redéfinir.</p>
+          <div class="f"><label>Nom</label><div><div class="in focus">Fonction2</div></div></div>
+          <div class="f"><label>Génériques</label><div><div class="in"><span class="ph">vide, ou T, T : ANY_NUM, K…</span></div></div></div>
+          <div class="f"><label>Retour</label><div><div class="in">Aucun<span class="act">Choisir un type…</span></div></div></div>
+          <div class="f"><label>Unité</label><div><div class="in">sans<span class="act dis">Choisir une unité…</span></div></div></div>
+          <div class="f"><label>Redéfinir</label><div><span class="chk"><i></i>Virtuelle : une instance peut la redéfinir</span></div></div>
+          <div class="f"><label>Description</label><div><div class="in"><span class="ph">ce qu'elle calcule ou fait (son infobulle dans l'aide à la saisie)</span></div></div></div>
+          <div class="writes"><div class="l">Elle s'écrira</div><div class="s"><span class="k">FUNCTION</span> Fonction2 &nbsp;&nbsp;<span class="cm">(* une procédure *)</span></div><div class="w">Dans le symbole : Fonction2(…) &nbsp;·&nbsp; ailleurs : Vue.Instance.Fonction2(…)</div></div>
+          <p class="help">Ses paramètres, ses locales et ses constantes se déclarent ensuite dans ses onglets. Ctrl+Z la retire.</p>
+        </div>
+        <div class="foot"><span class="btn">Annuler</span><span class="btn pri">Créer</span></div>
+      </div>
+      <div class="win flat">
+        <div class="pt">Éditeur <span class="r">Carte.Allumer(Couleur : DINT) : BOOL</span></div>
+        <div class="tabs"><span class="tab">Code</span><span class="tab on">Paramètres <span class="c">1</span></span><span class="tab">Locales <span class="c">2</span></span><span class="tab">Constantes <span class="c">0</span></span><span class="tab">Tests <span class="c">3</span></span></div>
+        <table class="g"><tr><th>Nom</th><th>Type</th><th>Unité</th><th>Mode</th><th>Défaut</th><th>Documentation</th></tr>
+          <tr class="sel"><td>Couleur</td><td>DINT</td><td></td><td>Entrée</td><td>16#2E7D32</td><td>la couleur du voyant</td></tr>
+          <tr class="add"><td colspan="6">+ Nouveau paramètre (Inser)</td></tr></table>
+      </div>
+    </div>
+    <!-- methode de type -->
+    <div class="cols" style="grid-template-columns:1fr;gap:10px">
+      <div class="win flat">
+        <div class="tt">Nouvelle méthode de T_Pompe</div>
+        <div class="bd">
+          <div class="f"><label>Nom</label><div><div class="in focus">Methode</div></div></div>
+          <div class="f"><label>Retour</label><div style="display:grid;grid-template-columns:1fr auto;gap:6px"><div class="in"><span class="ph">vide : une procédure</span></div><span class="btn sm" style="height:28px">Choisir…</span></div></div>
+          <div class="f"><label style="font-size:10.5px;letter-spacing:.04em">PARAMÈTRES</label><div><div class="in"><span class="ph">Consigne : REAL; VAR_IN_OUT Cible : T_Pompe</span></div><div class="help">(nom : type, séparés par ;) — une ligne de texte, pas de grille, pas d'unité, pas de défaut</div></div></div>
+          <div class="f"><label></label><div style="display:flex;flex-direction:column;gap:5px"><span class="chk"><i></i>Privée (vue des seules méthodes du type)</span><span class="chk"><i></i>Redéfinissable (virtuelle)</span></div></div>
+          <div class="writes"><div class="s">T_Pompe.Methode()</div></div>
+          <p class="help">Son corps s'ouvre prérempli dans l'éditeur. Ctrl+Z annule la création.</p>
+          <div class="diff">
+            <div>✕ une autre fenêtre : pas de Génériques, pas d'Unité, pas de Description, pas de « Elle s'écrira »</div>
+            <div>✕ « Créer la méthode » au lieu de « Créer » ; « Redéfinissable » au lieu de « Virtuelle »</div>
+          </div>
+        </div>
+        <div class="foot"><span class="btn">Annuler</span><span class="btn pri">Créer la méthode</span></div>
+      </div>
+      <div class="win flat">
+        <div class="pt">Corps · T_Pompe.Demarrer(Consigne : REAL) : BOOL</div>
+        <div class="legend"><b>SELF</b> : T_Pompe · membres : Debit, Pression, EnMarche, EnDefaut · retour : BOOL</div>
+        <div class="tabs"><span class="tab on">(le corps seul)</span><span class="tab miss">Paramètres</span><span class="tab miss">Locales</span><span class="tab miss">Constantes</span><span class="tab miss">Tests</span></div>
+        <pre class="code" style="border:0;border-radius:0;font-size:11.5px"><span class="k">VAR</span> Ecart : <span class="t">REAL</span>; <span class="k">END_VAR</span>   <span class="cm">(* les locales, à la main dans le corps *)</span>
+<span class="k">IF</span> EnDefaut <span class="k">THEN</span> <span class="k">RETURN</span> <span class="k">FALSE</span>; <span class="k">END_IF</span>;
+Ecart := Consigne - Pression;</pre>
+        <div class="diff" style="padding:0 10px 10px">
+          <div>✕ les paramètres : une case de texte dans les propriétés ; pas d'Unité, de Mode en clair, de Défaut, de Documentation</div>
+          <div>✕ pas d'onglet Locales ni Constantes, pas de Tests (ni « Lancer les tests »)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ B. PROPOSE ============ -->
+<div class="sec">
+  <h2><span class="tag prop">Proposé</span> Une méthode = une fonction portée par le type <span class="sub">— la même fenêtre, les mêmes onglets ; seul SELF en plus</span></h2>
+  <div class="cols b-grid">
+    <div class="win">
+      <div class="tt">Nouvelle méthode du type T_Pompe <span class="n" style="margin-left:4px">1</span><span class="x">×</span></div>
+      <div class="bd">
+        <p class="expl">Une méthode du type s'appelle sur une instance : Pompe1.Nom(…) ; dans le type, par son nom (ou SELF.Nom(…)). Elle voit SELF, les membres par leur nom, ses paramètres. Virtuelle, un sous-type peut la redéfinir (SUPER y rappelle ce corps).</p>
+        <div class="f"><label>Nom</label><div><div class="in focus">Demarrer</div><div class="help">Des lettres, des chiffres et _ ; un nom déjà pris fait une surcharge.</div></div></div>
+        <div class="f"><label>Génériques <span class="nv">nv</span></label><div><div class="in"><span class="ph">vide, ou T, T : ANY_NUM, K…</span></div><div class="help">Vide : une méthode ordinaire. Les génériques du type (T_Mesure&lt;T&gt;) sont déjà là.</div></div></div>
+        <div class="f"><label>Retour</label><div><div class="in">BOOL<span class="act">Choisir un type…</span></div><div class="help">Aucun : une procédure, appelée seule sur sa ligne.</div></div></div>
+        <div class="f"><label>Unité <span class="nv">nv</span></label><div><div class="in">sans<span class="act dis">Choisir une unité…</span></div><div class="help">Seulement pour un retour numérique (REAL, INT…).</div></div></div>
+        <div class="f"><label>Portée</label><div><span class="rad on"><i></i>Publique</span><span class="rad"><i></i>Privée : seulement depuis une méthode du type</span></div></div>
+        <div class="f"><label>Redéfinir</label><div><span class="chk on"><i></i>Virtuelle : un sous-type peut la redéfinir</span><div class="help">OVERRIDE dans le sous-type, SUPER.Demarrer() y rappelle ce corps.</div></div></div>
+        <div class="f"><label>Description <span class="nv">nv</span></label><div><div class="in">démarre la pompe en rampe ; FALSE si elle est en défaut</div></div></div>
+        <div class="writes"><div class="l">Elle s'écrira</div><div class="s"><span class="k">METHOD</span> <span class="k">PUBLIC</span> <span class="k">VIRTUAL</span> Demarrer : <span class="t">BOOL</span></div><div class="w">Dans le type : Demarrer(…) ou SELF.Demarrer(…) &nbsp;·&nbsp; ailleurs : Pompe1.Demarrer(…)</div></div>
+        <p class="help">Ses paramètres, ses locales et ses constantes se déclarent ensuite dans ses onglets (Paramètres s'ouvre). Ctrl+Z la retire.</p>
+      </div>
+      <div class="foot"><span class="btn">Annuler</span><span class="btn pri">Créer</span></div>
+    </div>
+
+    <div class="win flat">
+      <div class="pt">Types IHM · T_Pompe <span class="r">Structure · EXTENDS T_Equipement · IMPLEMENTS I_Demarrable</span></div>
+      <div class="tools">
+        <span class="tl b">+ Ajouter une méthode…</span><span class="tl">Redéfinir</span><span class="tl">Dupliquer</span><span class="tl">Supprimer</span><span class="tl">Monter</span><span class="tl">Descendre</span><span class="tsep"></span><span class="tl">Compiler (F7)</span><span class="tl">Essayer</span><span class="tl b">▶ Lancer les tests <span class="nv">nv</span></span>
+      </div>
+      <div class="ed">
+        <div class="l">
+          <div class="pt">Méthodes de T_Pompe (5)</div>
+          <table class="g"><tr><th>Méthode</th><th>Genre</th><th>Paramètres</th><th>Retour</th><th>Tests</th></tr>
+            <tr class="sel"><td>Demarrer</td><td>virtuelle</td><td>Consigne, Rampe</td><td>BOOL</td><td class="okc">3 ✓</td></tr>
+            <tr><td>Arreter</td><td>publique</td><td>—</td><td>—</td><td class="okc">1 ✓</td></tr>
+            <tr><td>Debit_m3h</td><td>publique</td><td>—</td><td>REAL</td><td class="errc">2 · 1 ✕</td></tr>
+            <tr><td>Purger</td><td>privée</td><td>Duree</td><td>—</td><td class="dis">—</td></tr>
+            <tr class="inh"><td>EnService</td><td>héritée</td><td>—</td><td>BOOL</td><td>—</td></tr>
+          </table>
+          <div class="pt" style="border-top:1px solid var(--line)">Propriétés de la méthode</div>
+          <table class="g props">
+            <tr><td>Nom</td><td>Demarrer</td></tr>
+            <tr><td>Retour</td><td>BOOL</td></tr>
+            <tr><td>Paramètres</td><td>2 <span class="muted">(onglet Paramètres)</span></td></tr>
+            <tr><td>Locales</td><td>1 <span class="muted">(onglet Locales)</span></td></tr>
+            <tr><td>Visibilité</td><td>Publique</td></tr>
+            <tr><td>Virtuelle</td><td>TRUE · redéfinie par T_PompeDoublee</td></tr>
+            <tr><td>Fonction interne</td><td class="mono" style="font-size:10.5px">METHODE_T_POMPE_DEMARRER</td></tr>
+          </table>
+        </div>
+        <div>
+          <div class="pt">Éditeur <span class="r mono" style="font-size:11px">T_Pompe.Demarrer(Consigne : REAL [bar]; Rampe : TIME) : BOOL</span></div>
+          <div class="tabs"><span class="tab">Code</span><span class="tab on">Paramètres <span class="c">2</span></span><span class="tab">Locales <span class="c">1</span></span><span class="tab">Constantes <span class="c">1</span></span><span class="tab">Tests <span class="c">3</span></span><span class="n" style="margin:0 0 6px 6px">2</span></div>
+          <table class="g"><tr><th>Nom</th><th>Type</th><th>Unité</th><th>Mode</th><th>Défaut</th><th>Documentation</th></tr>
+            <tr class="lock"><td><span class="self"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect width="16" height="10" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>SELF</span></td><td>T_Pompe</td><td></td><td>Entrée/sortie</td><td>—</td><td>l'instance, toujours là (THIS en est l'alias) <span class="n">3</span></td></tr>
+            <tr class="sel"><td>Consigne</td><td>REAL</td><td>bar</td><td>Entrée</td><td>6.0</td><td>la pression visée</td></tr>
+            <tr><td>Rampe</td><td>TIME</td><td></td><td>Entrée</td><td>T#5s</td><td>la montée, de 0 à la consigne</td></tr>
+            <tr class="add"><td colspan="6">+ Nouveau paramètre (Inser)</td></tr>
+          </table>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px">
+            <div>
+              <div class="tabs" style="border-radius:7px 7px 0 0;border:1px solid var(--line)"><span class="tab on">Locales <span class="c">1</span></span></div>
+              <table class="g" style="border:1px solid var(--line);border-top:0"><tr><th>Nom</th><th>Type</th><th>Unité</th><th>Initiale</th></tr><tr><td>Ecart</td><td>REAL</td><td>bar</td><td>0.0</td></tr></table>
+            </div>
+            <div>
+              <div class="tabs" style="border-radius:7px 7px 0 0;border:1px solid var(--line)"><span class="tab on">Constantes <span class="c">1</span></span></div>
+              <table class="g" style="border:1px solid var(--line);border-top:0"><tr><th>Nom</th><th>Type</th><th>Unité</th><th>Valeur</th></tr><tr><td>PRESSION_MAX</td><td>REAL</td><td>bar</td><td>12.0</td></tr></table>
+            </div>
+          </div>
+          <div style="padding:0 10px 10px">
+            <div class="tabs" style="border-radius:7px 7px 0 0;border:1px solid var(--line)"><span class="tab on">Tests <span class="c">3</span></span><span style="margin-left:auto;display:flex;gap:4px;padding-bottom:4px"><span class="tl b">+ Nouveau cas…</span><span class="tl b">Lancer tout</span></span></div>
+            <table class="g" style="border:1px solid var(--line);border-top:0"><tr><th>Cas</th><th>SELF avant <span class="n">4</span></th><th>Arguments</th><th>Attendu</th><th>Verdict</th><th>Détail</th></tr>
+              <tr><td>démarre à vide</td><td class="mono">Debit := 0.0</td><td class="mono">6.0 ; T#2s</td><td class="mono">TRUE</td><td class="okc">réussi</td><td class="muted">obtenu TRUE</td></tr>
+              <tr><td>refuse en défaut</td><td class="mono">EnDefaut := TRUE</td><td class="mono">6.0 ; T#2s</td><td class="mono">FALSE</td><td class="okc">réussi</td><td class="muted">obtenu FALSE</td></tr>
+              <tr class="err"><td class="errc">consigne trop haute</td><td class="mono">—</td><td class="mono">15.0 ; T#2s</td><td class="mono">FALSE</td><td class="errc">échec</td><td class="errc">obtenu TRUE</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ C. MATRICE + NOTES ============ -->
+<div class="sec">
+  <div class="cols" style="grid-template-columns:900px 1fr">
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="pt" style="height:32px;font-size:11.5px">Ce qui devient pareil partout <span class="r">✓ : oui · — : sans objet</span></div>
+      <table class="g mtx">
+        <tr><th style="text-align:left">Fonction de…</th><th>projet</th><th>vue / popup</th><th>symbole</th><th>type IHM (aujourd'hui)</th><th class="pr">type IHM (proposé)</th></tr>
+        <tr><td>Fenêtre de création</td><td>Nouvelle fonction</td><td>Nouvelle fonction</td><td>Nouvelle fonction</td><td class="bad">Nouvelle méthode (autre)</td><td class="pr">la même</td></tr>
+        <tr><td>Génériques · Unité du retour · Description</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="bad">✕ · ✕ · propriétés</td><td class="pr yes">✓</td></tr>
+        <tr><td>« Elle s'écrira »</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="part">la signature</td><td class="pr yes">✓</td></tr>
+        <tr><td>Portée (publique / privée)</td><td>—</td><td class="yes">✓</td><td>—</td><td class="part">case Privée</td><td class="pr yes">✓ Portée</td></tr>
+        <tr><td>Virtuelle (redéfinir)</td><td>—</td><td>—</td><td class="yes">✓ instance</td><td class="part">Redéfinissable</td><td class="pr yes">✓ sous-type</td></tr>
+        <tr><td>Onglet Code</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="part">le corps seul</td><td class="pr yes">✓</td></tr>
+        <tr><td>Onglet Paramètres (Nom, Type, Unité, Mode, Défaut, Doc.)</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="bad">une ligne de texte</td><td class="pr yes">✓ + SELF</td></tr>
+        <tr><td>Onglets Locales et Constantes</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="bad">✕ (VAR dans le corps)</td><td class="pr yes">✓</td></tr>
+        <tr><td>Onglet Tests, Lancer les tests</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="bad">✕</td><td class="pr yes">✓ SELF posé</td></tr>
+        <tr><td>Surcharge, Dupliquer, Essayer, Historique</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="part">Dupliquer seul</td><td class="pr yes">✓</td></tr>
+        <tr><td>Une signature d'interface (I_Demarrable)</td><td>—</td><td>—</td><td>—</td><td class="part">pas de corps</td><td class="pr">Paramètres seul</td></tr>
+      </table>
+    </div>
+    <div class="cols" style="grid-template-columns:1fr;gap:12px">
+      <div class="card notes">
+        <h3>Ce que ça change</h3>
+        <div class="it"><span class="n">1</span><div><b>Une seule fenêtre.</b> « Ajouter une méthode… » ouvre la fenêtre des fonctions (HmiNewFunctionDialog), avec un 5e propriétaire : le type. Le titre dit « Nouvelle méthode du type T_Pompe » ; le bouton reste « Créer ». « Redéfinissable » devient « Virtuelle », comme pour un symbole.</div></div>
+        <div class="it"><span class="n">2</span><div><b>Les cinq onglets</b> Code · Paramètres · Locales · Constantes · Tests, les mêmes grilles (le type, l'unité, le mode, le défaut, la documentation, « Choisir un type… »), les mêmes fautes soulignées, le même Ctrl+Z.</div></div>
+        <div class="it"><span class="n">3</span><div><b>SELF</b> en tête des paramètres, grisé et verrouillé : on le voit, on ne peut ni le renommer ni le retirer. Une signature d'interface n'a que l'onglet Paramètres.</div></div>
+        <div class="it"><span class="n">4</span><div><b>Les tests d'une méthode</b> partent d'une instance d'essai du type (ses membres à leur valeur initiale) : « SELF avant » pose des membres, « Vérifier après » peut lire SELF.EnMarche.</div></div>
+        <div class="it"><span class="n">·</span><div><b>Les projets existants</b> : à l'ouverture, la ligne « Consigne : REAL; VAR_IN_OUT Cible : T_Pompe » passe dans l'onglet Paramètres et les VAR du corps dans Locales (le bandeau « Migrer » des fonctions, déjà là). Le fichier garde la même méthode.</div></div>
+      </div>
+      <div class="q">
+        <h3>Questions pour toi</h3>
+        <ol>
+          <li>« METHOD » dans « Elle s'écrira » (comme CODESYS) ou « FUNCTION », comme les fonctions de symbole ?</li>
+          <li>Les génériques par méthode (Convertir&lt;T&gt;) : utiles, ou ceux du type suffisent ?</li>
+          <li>Une méthode privée : la cacher de l'aide à la saisie hors du type, ou la montrer grisée ?</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+</body></html>

@@ -82,8 +82,14 @@ sessionwin::Snapshot snapshotOf(const SessionService& s, bool journal) {
     for (const auto& k : s.knocks())
         sn.knocks.push_back({k.name, k.machine + (k.machineId.empty() ? std::string{} : " \xC2\xB7 " + k.machineId) + " \xC2\xB7 " + k.address});
     const auto* me = s.member(s.me());
-    for (const auto& l : s.chat())
-        sn.chat.push_back(sessionui::Row{l.time, l.from, l.text, l.system ? 0u : l.color, false, l.system, !l.system && me && l.from == me->name, 1});
+    for (const auto& l : s.chat()) {
+        sessionui::Row row{l.time, l.from, l.text, l.system ? 0u : l.color, false, l.system, !l.system && me && l.from == me->name, 1};
+        row.id = l.id;   // 1.50.0 : repondre a un message ; la citation d'une reponse
+        row.replyId = l.reply.id;
+        row.replyWho = l.reply.from;
+        row.replyText = l.reply.excerpt;
+        sn.chat.push_back(std::move(row));
+    }
     for (const auto& e : s.journal().entries())
         sn.journal.push_back(sessionui::Row{session::clockText(e.t), e.who, e.text, e.color, true, e.member < 0, e.member == s.me(), e.count});
     sn.showJournal = journal;
@@ -118,6 +124,11 @@ public:
     ui::EventResult HandleEvent(const ui::InputEvent& ev) override {
         if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
             if (k->key == ui::Key::Escape) {
+                // 1.50.0 : Echap annule d'abord la reponse en cours (<< En reponse a ... >>).
+                if (!reply_.id.empty()) {
+                    cancelReply();
+                    return ui::EventResult::Consumed;
+                }
                 manager().CloseDialog(menu::DialogResult{menu::DialogResult::Button::Cancel, {}});
                 return ui::EventResult::Consumed;
             }
@@ -149,6 +160,8 @@ private:
     void rebuild() {
         built_ = structure();
         const std::string typed = field_ ? field_->text() : std::string{};
+        // 1.50.0 : la liste refaite garde les messages deballes et le message choisi (la reponse en cours : reply_).
+        const auto view = body_ && body_->lines() ? body_->lines()->viewState() : sessionui::LineList::ViewState{};
         links_.clear();
         auto body = std::make_unique<sessionwin::Body>("dialog.session.corps");
         auto& s = app_.session();
@@ -238,6 +251,18 @@ private:
         body->close = button("Fermer", "fermer", ui::Button::Style::Default);
         links_ += body->close->clicked->connect([this] { manager().CloseDialog(menu::DialogResult{menu::DialogResult::Button::Ok, {}}); });
         body->setSnapshot(snapshotOf(s, journal_));
+        // 1.50.0 : Repondre (le survol, le clic droit d'un message) ; << En reponse a ... >> et sa croix.
+        body->lines()->setViewState(view);
+        body->lines()->onReply = [this](const sessionui::Row& r) {
+            reply_ = r;
+            if (body_) {
+                body_->replyBar()->set(r);
+                body_->invalidateLayout();
+            }
+            if (field_) field_->takeFocus();
+        };
+        body->replyBar()->onCancel = [this] { cancelReply(); };
+        if (!reply_.id.empty()) body->replyBar()->set(reply_);
         seen_ = s.revision();
         body_ = body.get();
         setRoot(std::move(body));
@@ -251,8 +276,18 @@ private:
         if (!field_) return;
         const std::string t = field_->text();
         if (t.empty()) return;
-        app_.session().say(t);
+        app_.session().say(t, reply_.id);   // 1.50.0 : en reponse au message choisi (vide : un message simple)
         field_->setText({});
+        cancelReply();
+    }
+
+    // 1.50.0 : plus de reponse en cours.
+    void cancelReply() {
+        reply_ = {};
+        if (body_) {
+            body_->replyBar()->clear();
+            body_->invalidateLayout();
+        }
     }
 
     // 1.45.0 : retirer un equipier - la question, puis le retrait.
@@ -276,6 +311,7 @@ private:
     std::string built_;
     std::uint64_t seen_{~0ull};
     bool journal_{false};   // 1.45.0 : la vue de droite (le Journal)
+    sessionui::Row reply_;  // 1.50.0 : le message auquel on repond (id vide : aucun)
 };
 
 std::string label(const session::Found& f) {
