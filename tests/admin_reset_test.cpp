@@ -67,11 +67,14 @@ bool present(const fs::path& p) {
 }
 // Un appel au service signe par la cle de l'editeur (les verifications de l'essai).
 namespace online = license_admin::online;
-online::Reply ask(const std::string& url, const lic::SigningKey& key, const std::string& method, const std::string& path, bool signed_ = true) {
+// La cle se relit a chaque appel : reload() la recharge (une reference gardee pendrait).
+online::Reply ask(const std::string& url, const gui::Workspace& ws, const std::string& method, const std::string& path, bool signed_ = true) {
     online::Options o;
     o.now = lic::systemNow();
     o.tool = "admin_reset_test";
-    online::Client c(url, key, o);
+    online::Client c(url, *ws.signingKey(), o);
+    std::string why;
+    (void)c.connect(&why);
     return c.call(method, path, {}, signed_);
 }
 
@@ -175,7 +178,6 @@ int main(int argc, char** argv) {
         return 1;
     }
     std::printf("   service local : %s (%.1f s)\n", svc.url().c_str(), svc.startSeconds());
-    const lic::SigningKey& editor = *plus.signingKey();
     const fs::path A = fx.admin;
 
     std::printf("-- un admin+ bien rempli\n");
@@ -230,7 +232,7 @@ int main(int argc, char** argv) {
         registryBefore = readFile(A / "archive" / "registre" / "registre.xpgreg");
         check(plus.licences().size() == 2 && present(A / "activations.jsonl") && present(A / "codes-activation") && present(A / "journal-admins.jsonl"),
               "deux licences, le registre des activations, un code, le journal");
-        const auto l = ask(svc.url(), editor, "GET", "/admin/licences");
+        const auto l = ask(svc.url(), plus, "GET", "/admin/licences");
         check(l.status == 200 && has(l.body, "XPG-2026-RZ101"), "le service a la licence en ligne (" + std::to_string(l.status) + " " + l.error + " " + l.body.substr(0, 200) + ")");
     }
 
@@ -242,7 +244,7 @@ int main(int argc, char** argv) {
         r = plus.startOver("REPARTIR");
         check(!r.ok && has(r.message, "sauvegarde"), "sans sauvegarde reglee : refuse (" + r.message + ")");
         plus.reload();
-        check(plus.licences().size() == 2 && has(ask(svc.url(), editor, "GET", "/admin/licences").body, "XPG-2026-RZ101"), "rien n'est efface (ici et sur le service)");
+        check(plus.licences().size() == 2 && has(ask(svc.url(), plus, "GET", "/admin/licences").body, "XPG-2026-RZ101"), "rien n'est efface (ici et sur le service)");
         la::KeyBackupOptions weak;   // les essais : Argon2id au plus bas permis
         weak.opsLimit = 2;
         weak.memLimit = 64u * 1024u * 1024u;
@@ -299,11 +301,11 @@ int main(int argc, char** argv) {
 
     std::printf("-- le service : vide, le journal reparti\n");
     {
-        const auto l = ask(svc.url(), editor, "GET", "/admin/licences");
+        const auto l = ask(svc.url(), plus, "GET", "/admin/licences");
         check(l.status == 200 && !has(l.body, "XPG-2026-RZ101"), "le service n'a plus de licence (" + std::to_string(l.status) + " " + l.error + " " + l.body.substr(0, 300) + ")");
-        const auto a = ask(svc.url(), editor, "GET", "/v1/admins", false);
+        const auto a = ask(svc.url(), plus, "GET", "/v1/admins", false);
         check(a.status == 200 && has(a.body, "\"admins\":[]"), "la liste publique des admins : vide");
-        check(ask(svc.url(), editor, "GET", "/v1/certificat", false).status == 200, "le certificat du service : garde");
+        check(ask(svc.url(), plus, "GET", "/v1/certificat", false).status == 200, "le certificat du service : garde");
         check(plus.fetchJournal().ok, "le journal releve de nouveau");
         const gui::JournalView v = plus.journalLines();
         check(!v.rows.empty() && v.rows.front().line.number == 1 && v.rows.front().line.previous.empty() && has(v.rows.front().line.entry, "\"reinitialisation\"") &&
@@ -322,7 +324,7 @@ int main(int argc, char** argv) {
         check(r.ok && rep.serviceRestored, "restauree : le dossier et le service (" + r.text() + ")");
         plus.reload();
         check(plus.licences().size() == 2 && plus.adminList() && plus.adminList()->admins.size() == 1, "les licences et l'admin reviennent sur le poste");
-        check(has(ask(svc.url(), editor, "GET", "/admin/licences").body, "XPG-2026-RZ101"), "la licence en ligne revient sur le service");
+        check(has(ask(svc.url(), plus, "GET", "/admin/licences").body, "XPG-2026-RZ101"), "la licence en ligne revient sur le service");
     }
     return finish();
 }

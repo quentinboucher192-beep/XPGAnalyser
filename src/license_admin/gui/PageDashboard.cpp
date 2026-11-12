@@ -691,20 +691,6 @@ protected:
             deploy_->setBounds(beside ? Rect{x0 + w - 14.f - bw, y + (h - 34.f) * 0.5f, bw, 34.f} : Rect{x0 + 44.f, y + 14.f + textH + 8.f, bw, 34.f});
             y += h + 16.f;
         }
-        // 1.49.0 : le bandeau << La 1.49 peut repartir de zero >> (le texte, les deux boutons dessous).
-        offerRect_ = {};
-        offerLines_.clear();
-        if (offer_) {
-            offerLines_ = wrap(kOfferText, kF15, w - 64.f);
-            const float textH = static_cast<float>(offerLines_.size()) * 20.f;
-            const float h = textH + 34.f + 28.f + 8.f;
-            offerRect_ = {x0, y, w, h};
-            const float bw1 = offerOpen_->sizeHint().preferred.w + 8.f, bw2 = offerClose_->sizeHint().preferred.w + 8.f;
-            offerOpen_->setBounds({x0 + 44.f, y + 14.f + textH + 8.f, bw1, 34.f});
-            offerClose_->setBounds({x0 + 44.f + bw1 + 8.f, y + 14.f + textH + 8.f, bw2, 34.f});
-            y += h + 16.f;
-        }
-
         // Les quatre grandes tuiles, puis les quatre petites.
         const float gap = 16.f;
         const float bigH = compact ? 104.f : 126.f, smallH = compact ? 46.f : 52.f;
@@ -727,6 +713,28 @@ protected:
             strip_->setBounds({x0, y, w - rw - gap, 150.f});
             globe_->setBounds({x0 + w - rw, y, rw, 150.f});
             y += 150.f + gap;
+        }
+
+        // 1.49.0 : le bandeau << La 1.49 peut repartir de zero >> (le texte, les deux boutons a droite ou dessous) : SOUS la
+        // rangee de courbes, pris sur la place de l'activite - il ne pousse ni les tuiles ni la rangee.
+        offerRect_ = {};
+        offerLines_.clear();
+        if (offer_) {
+            const float bw1 = offerOpen_->sizeHint().preferred.w + 8.f, bw2 = offerClose_->sizeHint().preferred.w + 8.f;
+            const bool beside = w - bw1 - bw2 - 8.f - 64.f > 420.f;
+            offerLines_ = wrap(kOfferText, kF15, beside ? w - bw1 - bw2 - 8.f - 72.f : w - 64.f);
+            const float textH = static_cast<float>(offerLines_.size()) * 20.f;
+            const float h = beside ? std::max(textH, 34.f) + 28.f : textH + 34.f + 28.f + 8.f;
+            offerRect_ = {x0, y, w, h};
+            if (beside) {
+                const float by = y + (h - 34.f) * 0.5f;
+                offerClose_->setBounds({x0 + w - 14.f - bw2, by, bw2, 34.f});
+                offerOpen_->setBounds({x0 + w - 14.f - bw2 - 8.f - bw1, by, bw1, 34.f});
+            } else {
+                offerOpen_->setBounds({x0 + 44.f, y + 14.f + textH + 8.f, bw1, 34.f});
+                offerClose_->setBounds({x0 + 44.f + bw1 + 8.f, y + 14.f + textH + 8.f, bw2, 34.f});
+            }
+            y += h + gap;
         }
 
         // En bas : l'activite a gauche ; a droite, les editions puis l'etat du poste.
