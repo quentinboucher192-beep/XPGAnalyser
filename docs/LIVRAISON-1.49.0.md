@@ -40,7 +40,21 @@ Les demandes d'avant la 1.49 (un Admin plus ancien) se valident toujours avec l'
 
 **Repartir de zéro**
 
-@@REPARTIR@@
+**Service en ligne › Repartir de zéro…** (l'Admin+ seul ; un bandeau te le propose une fois au premier lancement de
+l'Admin+ 1.49 ; XPG Admin ne l'a jamais). Pas d'effacement automatique : c'est toi qui décides.
+
+- **D'abord une sauvegarde complète exacte** (celle de la 1.44) ; la fenêtre dit où elle est ; « Restaurer une
+  sauvegarde… » remet tout. Sans sauvegarde réglée, ou sans le mot **REPARTIR** tapé, rien ne se fait.
+- **Effacé, sur le service et sur ton PC** : les licences et leurs fichiers, les activations, les jetons flottants, les PC
+  (Découverte compris), les clients, les demandes de licence, les commandes et leurs articles, les révocations (une liste
+  neuve, vide), les admins (une liste neuve, vide ; leurs demandes, les invitations, la dérogation, le trousseau), les
+  messages aux PC, les statistiques, le journal des admins (il repart avec la ligne « réinitialisation par l'admin+ »).
+- **Gardé** : ta clé d'éditeur, ton identité d'admin+, la clé de synchro, la configuration du service (son adresse, son
+  certificat, les adresses de secours), le catalogue (offres, options, fonctionnalités, réductions), les réglages de la
+  boutique et tes produits Stripe, les versions publiées et leurs fichiers, tes réglages.
+- Les Studios déjà activés perdent leur licence à leur prochaine vérification (le service ne la connaît plus).
+- Après une restauration : publie une fois la liste des admins (n'importe quel changement) pour que les Studios qui
+  ont vu la liste vide acceptent de nouveau les licences signées par un admin (docs/ADMINS.md § 13).
 
 ## 1. Ce qu'il te reste à faire
 
