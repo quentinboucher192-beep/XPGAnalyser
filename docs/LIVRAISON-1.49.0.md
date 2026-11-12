@@ -69,17 +69,55 @@ l'Admin+ 1.49 ; XPG Admin ne l'a jamais). Pas d'effacement automatique : c'est t
 
 ## 2. Les essais
 
-@@ESSAIS@@
+- **Linux : 194 suites sur 194 réussies** (`ctest`, sur la version livrée ; journal `essais-1.49.0.txt`). Celles de cette version :
+  - **le service** (`node --test`, 259 sur 259) : les invitations (créée par l'admin+ seul ; un code inconnu, périmé,
+    déjà servi : refusé avec sa phrase ; le service n'en garde que l'empreinte), le code de 6 chiffres calculé pareil en
+    JavaScript et en C++ (une valeur connue), les trois sortes de versions (l'Admin+ ne se télécharge qu'avec la clé de
+    l'éditeur ; chacun ne voit que la sienne ; les Studios d'avant voient toujours la version), « Repartir de zéro »
+    (tout ce qui est effacé l'est, tout ce qui est gardé reste ; refusé sans l'admin+ ou sans le mot ; la sauvegarde
+    remet tout) ;
+  - **l'Admin contre le vrai service local** : `admininvitation` (39 contrôles : l'invitation, XPG Admin lit le code et
+    envoie sa demande, ses 6 chiffres ; l'admin+ tape un mauvais code : rien n'est signé ; la case seule ne suffit plus ;
+    le bon code : XPG Admin se voit admin ; un code inconnu puis retapé, déjà servi, périmé), `adminguiedition` (42 :
+    XPG Admin n'a rien de l'admin+, même avec la clé de l'éditeur dans son dossier ; l'Admin+ sans la clé : seulement
+    Restaurer et Créer), `adminrepartir` (85 : « Repartir de zéro » de bout en bout, l'archive du PC vidée, le reste
+    intact, le bandeau une seule fois, XPG Admin ne l'a jamais), `adminguiversions` (87 : les trois emplacements),
+    `adminguiadmins` (139).
+- **Sous Wine** : les trois programmes construits ; les Studios installés en silencieux par-dessus la 1.48.1 (ta clé
+  d'API gardée) ; l'Admin+ par-dessus la 1.48.1 (mise à jour, désinstallation, réinstallation) ; **XPG Admin** installé
+  en silencieux avec un code fictif (`/INVITATION=inv-abcd-efgh` → `INV-ABCD-EFGH` écrit pour le premier lancement).
+  Captures : les pages de l'installateur XPG Admin (`1490_8_…page-1` à `page-6`, la page « Code d'invitation » avec un
+  code fictif tapé, jusqu'au Récapitulatif, jamais l'installation) et celles de l'Admin+ (`1490_9_…page-1` à `page-5`) ;
+  l'Admin+ avec le vrai service local : Versions (`1490_01`), « Ajouter un admin » et le code d'invitation montré une
+  fois (`1490_02` ; sur ce service d'essai, aucune version n'est publiée : l'Admin le dit en rouge), la fenêtre
+  « Repartir de zéro » (`1490_03`, jamais confirmée), l'Admin+ sans la clé de l'éditeur (`1490_04`) ; le premier
+  lancement de XPG Admin (`1490_05`) ; le Studio livré (`1490_00`), lancé avec une adresse locale où rien ne répond :
+  **ton service n'a pas été appelé**.
 
 ## 3. Installer
 
-@@EMPREINTES@@
+**Les Studios** : lance `API-IHM-Studio-Setup-1.49.0.exe` (dans le zip) par-dessus la 1.48.1. Tes projets, tes
+réglages et ta clé d'API restent.
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `API-IHM-Studio-Setup-1.49.0.exe` | `7020941C9169F393B69BCBD954B2ADFBE110B33516247A06E1682E715559ADD1` | 63 815 725 octets |
+| `API-Studio-1.49.0-portable.zip` | `960373097E6CDB68F9FB69B1D5D32B917672DD5D47CEA3EA2833EB5214DC9CFC` | 250 fichiers |
+| `IHM-Studio-1.49.0-portable.zip` | `5330EB66AACC48949B02EA0B8EA183A9EF8B643A325DCC94F414F1C21342FC21` | 251 fichiers |
+
+**L'Admin (pour toi seul, envoyé à part)** : lance `XPG-License-Admin-Setup-1.49.0-EDITEUR.exe` par-dessus la 1.48.1 ;
+le dossier de ta clé n'est pas touché. Ne le donne à personne : pour un nouvel admin, Administrateurs › Ajouter un
+admin… lui envoie l'installateur publié dans Versions (sans ta clé).
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `XPG-License-Admin-Setup-1.49.0-EDITEUR.exe` | `F42B7266A6D49045D1D1C84C8AF16AA0D1D0A9F4B736E6BEE45A5714746970BA` | 8 888 314 octets |
 
 **XPG Admin** (pour tes admins, à publier dans Versions) : `XPG-Admin-Setup-1.49.0.exe` (dans le zip).
 
 | Fichier | SHA-256 | Taille |
 |---|---|---|
-@@XPGADMIN@@
+| `XPG-Admin-Setup-1.49.0.exe` | `9AD62080F41A30E1559DB617B62F12D5056D3C1AF8AA7AF45AD45839EADDB96D` | 8 170 174 octets |
 
 ## 4. Limites
 
