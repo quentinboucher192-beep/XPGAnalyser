@@ -4454,6 +4454,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   choix-type-tableau "1..4" (vide : decoche) | choix-type-reference oui|non | choix-type-map oui|non
     //   choix-type-forme "Liste" (1.12.2 : Simple, Tableau, Tableau 2D, Liste, Vecteur, Dictionnaire (MAP), Tuple)
     //   choix-type-etat "ARRAY[1..4] OF T_Four" (le type qu'on choisirait ; echoue s'il differe)
+    //   choix-type-acces "POINTER TO" (1.50.0 : Direct, REF_TO, POINTER TO) | choix-type-vise tout|element
     //   choix-type-valider | choix-type-definition | choix-type-annuler
     if (cmd.rfind("choix-type-", 0) == 0) {
         auto* picker = dynamic_cast<HmiTypePicker*>(app_.menus().top());
@@ -4465,6 +4466,9 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         else if (cmd == "choix-type-reference") picker->setReference(arg(1) != "non");
         else if (cmd == "choix-type-map") picker->setMap(arg(1) != "non");
         else if (cmd == "choix-type-forme") { if (!picker->setForm(arg(1))) fail("forme inconnue ou pas permise ici : " + arg(1)); }   // 1.12.2
+        // 1.50.0 (planche 03) : l'Acces (Direct, REF_TO, POINTER TO) ; ce que le pointeur vise avec une forme (tout, element).
+        else if (cmd == "choix-type-acces") { if (!picker->setAccess(arg(1))) fail("acc\xC3\xA8s inconnu ou gris\xC3\xA9 ici : " + arg(1) + " " + picker->accessProblem(arg(1))); }
+        else if (cmd == "choix-type-vise") picker->setPointsWhole(arg(1) == "tout");
         else if (cmd == "choix-type-etat") {
             std::printf("[script] choix de type : %s%s\n", picker->result().c_str(),
                         picker->resultProblem().empty() ? "" : (" (" + picker->resultProblem() + ")").c_str());

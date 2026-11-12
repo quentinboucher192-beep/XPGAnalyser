@@ -1002,6 +1002,21 @@ Validation validate(const View& v, const Scan& s, const Plan& plan, const Valida
                                  {}, true});
             break;
         }
+    // 1.50.0 (500 reperes x 30 copies) : les cles et les colonnes une fois ; les bornes d'un chemin, une fois.
+    std::vector<std::string> keys, columns;
+    keys.reserve(s.markers.size());
+    columns.reserve(s.markers.size());
+    for (const auto& m : s.markers) {
+        keys.push_back(markerKey(m.name));
+        columns.push_back("$" + m.name + "$");
+    }
+    std::map<std::string, std::optional<Bounds>> boundsMemo;
+    const auto boundsOf = [&](const std::string& path) -> const std::optional<Bounds>& {
+        auto it = boundsMemo.find(path);
+        if (it == boundsMemo.end()) it = boundsMemo.emplace(path, opt.bounds(path)).first;
+        return it->second;
+    };
+    static const std::string kNone;
     for (std::size_t r = 0; r < plan.rows.size(); ++r) {
         const Row& row = plan.rows[r];
         const int rowNo = static_cast<int>(r);
@@ -1025,10 +1040,12 @@ Validation validate(const View& v, const Scan& s, const Plan& plan, const Valida
             }
             planNames.insert(up);
         }
-        for (const auto& m : s.markers) {
-            const std::string key = markerKey(m.name), column = "$" + m.name + "$";
+        for (std::size_t mi = 0; mi < s.markers.size(); ++mi) {
+            const auto& m = s.markers[mi];
+            const std::string& key = keys[mi];
+            const std::string& column = columns[mi];
             const auto it = row.markers.find(key);
-            const std::string value = it == row.markers.end() ? std::string{} : it->second;
+            const std::string& value = it == row.markers.end() ? kNone : it->second;
             if (value.empty()) {
                 // 1.11.1 (REP-11) : l'original, vide, garde son repere quand il y a des copies - le repere
                 // entoure deja la vraie valeur ($Exploitation$) ; sans copie ("Remplacer..." de Compiler),
@@ -1059,7 +1076,7 @@ Validation validate(const View& v, const Scan& s, const Plan& plan, const Valida
             bool outside = false;
             if (opt.bounds)
                 for (const auto& u : indicesIn(value)) {
-                    const auto b = opt.bounds(u.path);
+                    const auto& b = boundsOf(u.path);
                     if (!b || (u.value >= b->first && u.value <= b->second)) continue;
                     out.cells.push_back({rowNo, column, CellState::OutOfBounds,
                                          value + " : hors des bornes de " + u.path + " (" + std::to_string(b->first) + ".." +

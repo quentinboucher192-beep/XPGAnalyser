@@ -43853,6 +43853,28 @@ void methodes150() {
         types.selectType(pompeId);
         check(!tabs.tabHidden(app::HmiMethodsPane::CodeTabCode) && !tabs.tabHidden(app::HmiMethodsPane::CodeTabTests), "T_Pompe : les cinq onglets reviennent");
     }
+
+    // ---- 8. L'aide a la saisie : Pompe1. propose les methodes ; une privee, grisee (la reponse 1) ----
+    {
+        app::HmiNewFunctionDialog::Answer j;
+        j.name = "Journal";
+        j.pub = false;
+        const Id jid = methods->createMethod(j, &why);
+        const auto items = app::assist::suggest(p, nullptr, "Pompe1.", "", true);
+        const app::assist::Item* dm = nullptr;
+        const app::assist::Item* jm = nullptr;
+        for (const auto& it : items) {
+            if (it.text == "Demarrer") dm = &it;
+            if (it.text == "Journal") jm = &it;
+        }
+        check(jid != kNoId && dm && !dm->muted && jm && jm->muted && jm->detail.find("priv\xC3\xA9" "e") != std::string::npos,
+              "Pompe1. : Demarrer propos\xC3\xA9" "e, Journal (priv\xC3\xA9" "e) gris\xC3\xA9" "e");
+        std::vector<ui::MultiLineText::Completion> shown;
+        app::assist::toCompletions(items, shown);
+        const auto grey = std::find_if(shown.begin(), shown.end(), [](const ui::MultiLineText::Completion& c) { return c.text == "Journal"; });
+        check(grey != shown.end() && grey->badge.accent && grey->badge.color.r == grey->badge.color.g && grey->badge.color.g == grey->badge.color.b,
+              "dans la liste : son nom et sa pastille en gris");
+    }
     core::CommandGroupScope::registerStack(nullptr);
 }
 
