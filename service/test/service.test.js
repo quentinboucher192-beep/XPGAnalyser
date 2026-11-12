@@ -78,7 +78,7 @@ describe("l'etat public, avant tout certificat", () => {
         assert.ok(r.type.startsWith("application/json"));
         assert.deepEqual(Object.keys(r.json), ["service", "version", "heure", "cle_service", "certifie", "registre", "revocations", "changements", "admins", "version_publiee", "boutique"]);
         assert.equal(r.json.service, "xpg-licences");
-        assert.equal(r.json.version, "1.49.0");
+        assert.equal(r.json.version, "1.50.0");
         assert.equal(r.json.revocations, 0);
         assert.equal(r.json.changements, 0);
         assert.ok(Math.abs(r.json.heure - now()) < 30);
@@ -1312,7 +1312,7 @@ describe("ce que l'outil de l'editeur voit bouger (GET /admin/etat)", () => {
         codes.push(c);
         assert.equal((await deposerLicence(L, { code_hash: c.hash })).statut, 200);
         let e = await etatAdmin();
-        assert.equal(e.version, "1.49.0");
+        assert.equal(e.version, "1.50.0");
         let n = e.activite;
         const x = pc();
         assert.equal((await activer(x, c.code)).statut, 200);
