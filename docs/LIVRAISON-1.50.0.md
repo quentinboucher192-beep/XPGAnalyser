@@ -110,17 +110,71 @@ BOOL et pas à d'autres »)
 
 ## 2. Les essais
 
-@@ESSAIS@@
+- **Linux : 198 suites sur 198 réussies** (`ctest`, sur la version livrée ; journal `essais-1.50.0.txt`). Celles de cette version :
+  - **les méthodes** (`hmieditor`, 11 341 contrôles en tout, dont la partie `methodes150`) : « Ajouter une méthode… » ouvre la
+    fenêtre des fonctions, les cinq onglets, SELF en tête des Paramètres, une méthode privée / virtuelle, ses tests
+    lancés sur une instance d'essai, un projet d'avant converti à l'ouverture (ses VAR dans Locales / Constantes, ses
+    tests réussis avant et après, le même format de fichier, relu sans rien bouger une 2e fois), Ctrl+Z ;
+  - **Étirer** (`hmieditor`, ses deux parties « Étirer - le moteur » et « l'éditeur ») : chaque cible (les quatre bords, toute la
+    largeur / hauteur / vue, l'objet voisin, la sélection, un repère, une colonne), l'aperçu sans rien bouger, un seul
+    Ctrl+Z, un groupe, un objet tourné, une ligne, un objet verrouillé grisé, Ctrl+Alt+Maj+flèche ;
+  - **Dupliquer** (`hmidupliquer`, 121 contrôles) : les formules (i, j, k, n, o), un nom pris (avertit), un indice hors
+    des bornes (bloque, en tête des conflits), sans rien régler le même résultat qu'avant, **512 repères × 31 copies** (les compteurs, les profondeurs, les formules ; ouvrir 284 ms, la grille 4 × 8
+    139 ms, une règle 124 ms, Dupliquer 314 ms, dans la version de mise au point, plus lente que la livrée), l'écran
+    (le texte dans son cadre, la liste et le tableau qui ne dessinent que ce qui se voit) ;
+  - **POINTER TO** (`pointeurs`, 54 contrôles) : la ligne Accès de « Choisir un type », chaque élément / le
+    tout, les grisés et leur raison, `ADR` et `p^` en lecture et en écriture (INT et Object), NULL, un pointeur qui ne
+    vise plus rien, l'avertissement de `POINTER OF` ;
+  - **les tableaux** (`tableaux`, 86 contrôles) : `ARRAY[0..3] OF ARRAY[0..15] OF BOOL` et `ARRAY[0..3, 0..15]`
+    dans les variables, les paramètres, les locales, les constantes, les types IHM, les champs, « Choisir un type », les
+    expressions ; `M[i][j]` = `M[i, j]` ; les fautes de bornes ;
+  - **les scripts C/C++** (`scriptsc`, 76 contrôles) : compilés, exécutés, une variable IHM changée par le script,
+    une faute à la bonne ligne, ce qui est refusé ;
+  - **le chat** (`session`, 201 contrôles ; `sessionui`, 46) : une réponse et sa citation, un
+    Studio plus ancien qui reçoit la citation en première ligne, réduire / déballer, copier (avec l'auteur et l'heure),
+    le texte dans son cadre ;
+  - **l'Admin+** : `adminrepartir` (85 : la proposition de « Repartir de zéro » aussi en passant directement à
+    la 1.50) ;
+  - après la suite complète, une ligne corrigée dans une commande des captures (`dupliquer-exemple`, prise pour une
+    commande de la fenêtre Dupliquer) : les six suites qui emploient le lanceur de scripts relancées sur la version
+    livrée, 6 sur 6.
+- **Sous Wine** : les trois programmes construits ; les Studios installés en silencieux par-dessus la 1.49.0 (ta clé
+  d'API gardée) ; l'Admin+ par-dessus la 1.49.0 ; **XPG Admin** installé en silencieux avec un code fictif.
+  Captures : les pages de l'installateur XPG Admin (`1500_8_…`, la page « Code d'invitation » avec un code fictif tapé,
+  jusqu'au Récapitulatif, jamais l'installation) et celles de l'Admin+ (`1500_9_…`) ; **le Studio livré, installé**,
+  sur des projets fictifs créés pour l'essai : les méthodes (`1500_11` la fenêtre « Ajouter une méthode… », `1500_12` ses onglets,
+  SELF en tête des Paramètres), Étirer (`1500_21` le menu et l'aperçu « + 1350 px », `1500_22` la courbe étirée,
+  « largeur 520 → 1870 px (marge 10 px gardée) »), POINTER TO (`1500_31`), le tableau de tableaux accepté (`1500_33`),
+  un script C compilé sans faute (`1500_32`) puis exécuté (`1500_34` : « compte = 2 » dans la Console), Dupliquer
+  (`1500_41` : la grille 4 × 8, les règles, le repère à part, l'aperçu, les conflits ; `1500_42` : l'onglet Tableau).
+  Dans le projet d'essai de Dupliquer, `Armoires` n'est qu'un tableau d'entiers : la fenêtre dit « Armoires[0].Nom
+  n'existe pas » et grise Dupliquer — c'est le blocage voulu, pas une panne ; le Studio livré (`1500_00`) ; lancé avec une adresse locale où rien ne répond :
+  **ton service n'a pas été appelé**.
 
 ## 3. Installer
 
-@@EMPREINTES@@
+**Les Studios** : lance `API-IHM-Studio-Setup-1.50.0.exe` (dans le zip) par-dessus la 1.49.0. Tes projets, tes
+réglages et ta clé d'API restent.
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `API-IHM-Studio-Setup-1.50.0.exe` | `D3CDC36740EA5A56227E527797631EA202D18F3C5BB47C2E71C8E707F9CD4ED7` | 64 308 622 octets |
+| `API-Studio-1.50.0-portable.zip` | `01FB9C35AAEEF0CCCCBED527E544CB54220D97A9677219DC0651E1D440CB3B78` | 250 fichiers |
+| `IHM-Studio-1.50.0-portable.zip` | `E6C186B771883C2D8EF84E710F3AD2DF4F1A6FE33585F6DB3893F27F79966811` | 251 fichiers |
+
+**L'Admin (pour toi seul, envoyé à part)** : lance `XPG-License-Admin-Setup-1.50.0-EDITEUR.exe` par-dessus la 1.49.0 ;
+le dossier de ta clé n'est pas touché. Ne le donne à personne : pour un nouvel admin, Administrateurs › Ajouter un
+admin… lui envoie l'installateur publié dans Versions (sans ta clé).
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `XPG-License-Admin-Setup-1.50.0-EDITEUR.exe` | `89D8CDD2FF68D51B14A58414A76433C85B58C89B68B1009B919BF0B277F101B3` | 8 888 168 octets |
 
 **XPG Admin** (pour tes admins, à publier dans Versions) : `XPG-Admin-Setup-1.50.0.exe` (dans le zip).
 
 | Fichier | SHA-256 | Taille |
 |---|---|---|
-@@XPGADMIN@@
+| `XPG-Admin-Setup-1.50.0.exe` | `3594DEFDDC5BECD5BA5B169A5EFED2B8ECA20B8A019BB903B8DDD85804E88312` | 8 168 878 octets |
 
 ## 4. Limites
 
