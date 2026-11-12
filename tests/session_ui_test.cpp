@@ -20,6 +20,14 @@
 //  chaque bouton tient dans le bouton ; les mots ne sont coupes que s'ils sont
 //  plus longs que la ligne.
 //
+//  1.50.0 : la discussion - repondre (l'extrait cite au-dessus de la reponse, la
+//  barre << En reponse a ... >> au-dessus du champ), reduire / deballer (un
+//  message de huit lignes), copier : tout cela aussi dans le cadre a chaque
+//  taille (l'onglet, la fenetre, une reponse en cours) ; puis, entre deux membres
+//  (les messages passes par le protocole : writeChat / readChat), la reference
+//  d'une reponse, un message a l'ancienne, l'etat reduit qui suit le message,
+//  le texte copie (session_ui_discussion.inl).
+//
 //  --captures <dossier> [--prefixe P] [--ancien] : en plus, des images PNG (le meme dessin
 //  logiciel, rasterise : ce n'est PAS une capture de la fenetre de l'application)
 //  aux tailles etroite, moyenne et large, avec des noms et des messages longs
@@ -31,6 +39,7 @@
 #include "../src/app/StartPage.hpp"
 #include "../src/app/hmi/HmiSessionPane.hpp"
 #include "../src/platform/FontAtlas.hpp"
+#include "../src/session/SessionProtocol.hpp"   // 1.50.0 : les messages passes par le protocole
 #include "../src/ui/Theme.hpp"
 #include "../src/ui/Widget.hpp"
 #include "../src/ui/widgets/Controls.hpp"
@@ -260,16 +269,17 @@ private:
     mutable std::map<int, gfx::FontAtlas> faces_;
 };
 
-// Les mesures de la mise en page (ui::measureWidth) sont celles du dessin.
+// Les mesures de la mise en page (ui::measureWidth) sont celles du dessin. 1.50.0 : le presse-papiers est note (Copier).
 SoftRenderer* g_metrics = nullptr;
+std::string g_clipboard;
 void installMetrics(SoftRenderer& r) {
     g_metrics = &r;
     ui::PlatformServices s;
     s.measureWidth = [](std::string_view t, gfx::FontId f) { return g_metrics->measure(t, f).width; };
     s.lineHeight = [](gfx::FontId f) { return g_metrics->lineHeight(f); };
     s.surfaceSize = [] { return g_metrics->surfaceSize(); };
-    s.clipboardGet = [] { return std::string{}; };
-    s.clipboardSet = [](std::string_view) {};
+    s.clipboardGet = [] { return g_clipboard; };
+    s.clipboardSet = [](std::string_view t) { g_clipboard = std::string(t); };
     ui::installPlatformServices(std::move(s));
 }
 
@@ -365,6 +375,12 @@ const std::string kSessionName = "Mise en service de l'armoire gaz du b\xC3\xA2t
 const std::string kLongMessage = "Bonjour L\xC3\xA9" "a ! Peux-tu d\xC3\xA9placer le texte d'\xC3\xA9tat de la vue d'accueil sous les compteurs, puis v\xC3\xA9rifier que "
                                  "rien ne d\xC3\xA9" "borde du cadre quand la fen\xC3\xAAtre est \xC3\xA9troite ?";
 const std::string kLongWord = "Vue_Accueil_Texte_Etat_Principal_Avec_Un_Nom_Tres_Tres_Long_Pour_Voir_La_Coupure_Des_Mots_Trop_Longs";
+// 1.50.0 : un message de huit lignes (reduit a toute largeur) et une reponse.
+const std::string kReport = "Compte rendu de l'essai de 14 h :\n1. Vue_Accueil : le texte d'\xC3\xA9tat est sous les compteurs.\n2. Les alarmes de l'armoire "
+                            "gaz s'affichent dans l'ordre.\n3. Le voyant de d\xC3\xA9" "faut clignote \xC3\xA0 1 Hz.\n4. La fen\xC3\xAAtre \xC3\xA9troite "
+                            "garde tout dans son cadre.\n5. Les boutons ne se chevauchent plus.\n6. Le journal s'exporte en CSV.\n7. Reste : relire les "
+                            "libell\xC3\xA9s avec l'atelier.";
+const std::string kReplyText = "Merci ! Je relis les libell\xC3\xA9s avec l'atelier demain matin.";
 
 app::sessionmarks::Board board() {
     namespace sm = app::sessionmarks;
@@ -379,6 +395,17 @@ app::sessionmarks::Board board() {
     b.chat.push_back({"14:31", kCamille, kLongWord, 0xE67E22, false, true, 1});
     b.chat.push_back({"14:33", kLea, "C'est fait : j'ai d\xC3\xA9plac\xC3\xA9 le texte d'\xC3\xA9tat. Dans la fen\xC3\xAAtre \xC3\xA9troite, la colonne de droite coupait "
                                      "les phrases au milieu des mots.", 0x2E86DE, false, false, 1});
+    // 1.50.0 : les identifiants (donnes par l'hote) ; un compte rendu de huit lignes (reduit) ; une reponse a ce compte rendu.
+    b.chat[1].id = "m1";
+    b.chat[2].id = "m2";
+    b.chat[3].id = "m3";
+    b.chat.push_back({"14:36", kLea, kReport, 0x2E86DE, false, false, 1});
+    b.chat.back().id = "m4";
+    b.chat.push_back({"14:37", kCamille, kReplyText, 0xE67E22, false, true, 1});
+    b.chat.back().id = "m5";
+    b.chat.back().replyId = "m4";
+    b.chat.back().replyFrom = kLea;
+    b.chat.back().replyText = session::chatExcerpt(kReport);
     b.journal.push_back({"14:32", kLea, "Vue_Accueil \xE2\x80\xBA Texte_Etat d\xC3\xA9plac\xC3\xA9", 0x2E86DE, false, false, 12});
     b.journal.push_back({"14:34", kCamille, "ressource logo_de_la_societe_d_essai_en_haute_definition.png ajout\xC3\xA9" "e", 0xE67E22, false, true, 1});
     b.messages = 2;
@@ -404,6 +431,60 @@ void ongletSession(SoftRenderer& r) {
             bad += textsOutside(r, frame, where) + buttonProblems(pane, frame, where);
         }
     check(bad == 0, "l'onglet Session : tout tient dans son cadre, de 200 x 60 a 2400 x 600 (" + std::to_string(bad) + " ecart(s))");
+    // 1.50.0 : une reponse en cours (<< En reponse a Lea Essai-Longuenom... : << Compte rendu... >> >> au-dessus du champ),
+    // l'extrait cite, << ... voir tout >>, et les pictogrammes du survol de chaque ligne : dans le cadre a chaque taille.
+    {
+        app::sessionui::Row target{"14:36", kLea, kReport, 0x2E86DE, false, false, false, 1};
+        target.id = "m4";
+        pane.replyTo(target);
+        int bad150 = 0, replySeen = 0, quoteSeen = 0, toggleSeen = 0;
+        for (const float w : {200.f, 240.f, 320.f, 400.f, 520.f, 700.f, 943.f, 1280.f, 1600.f, 2400.f})
+            for (const float h : {60.f, 90.f, 140.f, 240.f, 600.f}) {
+                const gfx::Rect frame{10.f, 20.f, w, h};
+                pane.setBounds(frame);
+                pane.invalidateLayout();
+                paintInto(r, pane, theme, {0.f, 0.f, 4000.f, 4000.f});
+                const std::string where = "onglet (une reponse en cours) " + num(w) + "x" + num(h);
+                bad150 += textsOutside(r, frame, where) + buttonProblems(pane, frame, where);
+                auto* bar = pane.replyBar();
+                if (bar->visible()) {
+                    ++replySeen;
+                    const auto rb = bar->bounds();
+                    for (const auto& t : r.texts)
+                        if (t.text == bar->shown() && (t.rect.x < rb.x - 0.5f || t.rect.right() > rb.right() + 0.5f)) {
+                            std::printf("   %s : << %s >> hors de la barre %s\n", where.c_str(), t.text.c_str(), rectText(rb).c_str());
+                            ++bad150;
+                        }
+                    if (bar->cancelButton()->visible() && !rb.contains({bar->cancelButton()->bounds().x + 1.f, bar->cancelButton()->bounds().y + 1.f})) ++bad150;
+                }
+                auto* list = pane.list();
+                if (!list->visible()) continue;
+                const auto lb = list->bounds();
+                for (std::size_t i = 0; i < list->rows().size(); ++i) {
+                    for (int k = 0; k < 2; ++k) {
+                        const auto hb = list->hoverButton(i, k);
+                        if (hb.w > 0.f && (hb.x < lb.x - 0.5f || hb.right() > lb.right() + 0.5f)) {
+                            std::printf("   %s : le pictogramme %d de la ligne %zu %s hors de la liste %s\n", where.c_str(), k, i, rectText(hb).c_str(), rectText(lb).c_str());
+                            ++bad150;
+                        }
+                    }
+                    const auto q = list->quoteRect(i), t = list->toggleRect(i);
+                    if (q.w > 0.f) ++quoteSeen;
+                    if (t.w > 0.f) ++toggleSeen;
+                    for (const auto& x : {q, t})
+                        if (x.w > 0.f && (x.x < lb.x - 0.5f || x.right() > lb.right() + 0.5f)) {
+                            std::printf("   %s : l'extrait ou << voir tout >> de la ligne %zu %s hors de la liste %s\n", where.c_str(), i, rectText(x).c_str(), rectText(lb).c_str());
+                            ++bad150;
+                        }
+                }
+            }
+        check(bad150 == 0, "l'onglet Session (1.50) : la reponse en cours, l'extrait cite, << voir tout >>, le survol - dans le cadre a chaque taille ("
+                               + std::to_string(bad150) + " ecart(s))");
+        check(replySeen > 0 && quoteSeen > 0 && toggleSeen > 0, "l'onglet Session (1.50) : la barre de reponse, l'extrait et << voir tout >> bien montres");
+        pane.setBounds({0.f, 0.f, 640.f, 300.f});
+        capture(pane, {640.f, 300.f}, "onglet_session_640x300_reponse.png");
+        pane.cancelReply();
+    }
     pane.setBounds({0.f, 0.f, 320.f, 96.f});
     capture(pane, {320.f, 96.f}, "onglet_session_320x96.png");
     pane.setBounds({0.f, 0.f, 640.f, 220.f});
@@ -472,6 +553,7 @@ void encartLicence(SoftRenderer& r) {
 #include "session_ui_window.inl"
 #include "session_ui_ancien.inl"   // la fenetre telle qu'en 1.46 : l'image << avant >> seulement
 #endif
+#include "session_ui_discussion.inl"   // 1.50.0 : repondre, reduire, copier (deux membres)
 
 } // namespace
 
@@ -499,6 +581,7 @@ int main(int argc, char** argv) {
 #endif
     ongletSession(r);
     encartLicence(r);
+    discussion150(r);   // 1.50.0
 #ifdef XPG_SESSION_WINDOW
     fenetreSession(r);
     fenetresDemarrerRejoindre(r);

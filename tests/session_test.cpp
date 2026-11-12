@@ -20,6 +20,11 @@
 //      autres le savent, il revient avec la meme empreinte), un equipier part
 //      (l'hote le voit), l'hote arrete (tous coupes) ; le service trop vieux (404
 //      << route >> : la phrase qui dit de le redeployer), a l'ouverture et a l'entree.
+//    - 1.50.0 : la discussion - repondre a un message (l'identifiant donne par l'hote,
+//      `reponse` {id, de, extrait}), l'extrait, l'identifiant d'un message d'avant
+//      (sans `id` : le meme sur chaque PC), la version qui connait les reponses ; de
+//      vrais liens : l'hote, Lea (1.50) et Hugo (un Studio 1.49 : la citation dans le
+//      texte), une reponse qui traverse, un message a l'ancienne.
 // =============================================================================
 #include "../src/session/SessionJournal.hpp"   // 1.45.0
 #include "../src/session/SessionLink.hpp"
@@ -1047,6 +1052,211 @@ void serviceTropVieux() {
 
 } // namespace
 
+// ---- 1.50.0 : repondre a un message de la discussion ----
+void discussion150() {
+    std::printf("-- 1.50.0 : la discussion - repondre a un message (protocole, puis de vrais liens a trois)\n");
+    // L'extrait : la premiere ligne, 80 caracteres au plus (jamais au milieu d'un caractere accentue), << ... >> s'il y a la suite.
+    check(chatExcerpt("Bonjour L\xC3\xA9" "a") == "Bonjour L\xC3\xA9" "a", "l'extrait d'un message court : lui-meme");
+    check(chatExcerpt("  premi\xC3\xA8re ligne\nseconde") == "premi\xC3\xA8re ligne\xE2\x80\xA6", "l'extrait : la premiere ligne, << ... >> (la suite)");
+    check(chatExcerpt("fin\n  \n") == "fin", "l'extrait : des lignes vides apres ne comptent pas");
+    std::string accents;
+    for (int i = 0; i < 100; ++i) accents += "\xC3\xA9";
+    const std::string cut = chatExcerpt(accents, 10);
+    check(cut.size() == 10 * 2 + 3 && cut.substr(20) == "\xE2\x80\xA6", "l'extrait : 10 caracteres accentues entiers, puis << ... >>");
+    // L'identifiant d'un message sans `id` (un hote d'avant) : le meme partout, different d'un autre message.
+    const std::string h1 = chatIdOf("Camille", "14:32", "On d\xC3\xA9marre ?");
+    check(h1.size() == 17 && h1[0] == 'h' && h1 == chatIdOf("Camille", "14:32", "On d\xC3\xA9marre ?"), "un message d'avant : un identifiant stable (h + 16)");
+    check(h1 != chatIdOf("Camille", "14:33", "On d\xC3\xA9marre ?") && h1 != chatIdOf("L\xC3\xA9" "a", "14:32", "On d\xC3\xA9marre ?"),
+          "... qui depend de l'heure et de l'auteur");
+    check(!knowsReplies("1.49.0") && knowsReplies("1.50.0") && knowsReplies("1.51.2") && knowsReplies("2.0.0") && !knowsReplies("") && !knowsReplies("abc")
+              && !knowsReplies("0.99.0"),
+          "les reponses : depuis la 1.50.0 (une version vide ou illisible : non)");
+    // Aller-retour (writeChat / readChat) ; un Studio d'avant la 1.50 : la citation dans le texte, pas de `reponse`.
+    ChatMessage q;
+    q.id = "m7";
+    q.from = "L\xC3\xA9" "a";
+    q.color = 0x2E86DE;
+    q.text = "C'est fait.";
+    q.time = "14:35";
+    q.reply = {"m3", "Camille", "Peux-tu d\xC3\xA9placer le texte d'\xC3\xA9tat ?"};
+    core::json::Value fr = chatFrame(q, "1.50.0");
+    core::json::Value back;
+    check(core::json::parse(core::json::write(fr, false), back, nullptr), "MESSAGE (1.50) se relit");
+    const ChatMessage got = readChat(back);
+    check(back.str("op") == "MESSAGE" && got.id == "m7" && got.text == q.text && got.reply.id == "m3" && got.reply.from == "Camille"
+              && got.reply.excerpt == q.reply.excerpt && got.color == 0x2E86DE && got.time == "14:35",
+          "une reponse : l'identifiant, le texte, le message cite (id, auteur, extrait)");
+    const core::json::Value oldFr = chatFrame(q, "1.49.0");
+    check(!oldFr.has("reponse") && oldFr.str("texte") == "En r\xC3\xA9ponse \xC3\xA0 Camille : \xC2\xAB " + q.reply.excerpt + " \xC2\xBB\nC'est fait.",
+          "pour un Studio 1.49 : << En reponse a Camille : << ... >> >> en premiere ligne du texte, sans `reponse`");
+    // Un message a l'ancienne (de, couleur, texte, heure) : lu, un identifiant tire du message, pas de reponse.
+    core::json::Value ancient = core::json::Value::object();
+    ancient.set("op", "MESSAGE");
+    ancient.set("de", "Camille");
+    ancient.set("couleur", static_cast<std::int64_t>(0xE67E22));
+    ancient.set("texte", "On d\xC3\xA9marre ?");
+    ancient.set("heure", "14:32");
+    const ChatMessage a = readChat(ancient);
+    check(a.id == h1 && a.reply.empty() && a.text == "On d\xC3\xA9marre ?" && a.from == "Camille", "un message a l'ancienne : lu, son identifiant tire du message");
+    // Ce que l'equipier envoie : le texte et la reponse ; a un hote d'avant la 1.50, la citation dans le texte.
+    const ChatReply toA{a.id, a.from, chatExcerpt(a.text)};
+    const auto say150 = sayFrame("Oui, j'y vais.", toA, "1.50.0");
+    const auto say149 = sayFrame("Oui, j'y vais.", toA, "1.49.0");
+    check(say150.str("texte") == "Oui, j'y vais." && readReply(say150).id == a.id && readReply(say150).from == "Camille", "a un hote 1.50 : texte et `reponse`");
+    check(!say149.has("reponse") && say149.str("texte").rfind("En r\xC3\xA9ponse \xC3\xA0 Camille : \xC2\xAB On d\xC3\xA9marre ? \xC2\xBB\n", 0) == 0,
+          "a un hote 1.49 : la citation dans le texte (il ne garderait pas `reponse`)");
+    check(!sayFrame("Seul", {}, "1.49.0").has("reponse") && sayFrame("Seul", {}, "1.49.0").str("texte") == "Seul", "un message simple : inchange, pour tous");
+    // Des champs inconnus ignores, des valeurs trop longues bornees.
+    core::json::Value big = core::json::Value::object();
+    core::json::Value rr = core::json::Value::object();
+    rr.set("id", std::string(500, 'x'));
+    rr.set("de", std::string(500, 'y'));
+    rr.set("extrait", std::string(2000, 'z'));
+    rr.set("autre", "ignore");
+    big.set("reponse", std::move(rr));
+    const auto br = readReply(big);
+    check(br.id.size() <= 40 && br.from.size() <= 64 && br.excerpt.size() <= kExcerptChars + 3, "une reponse demesuree : bornee (id, auteur, extrait)");
+
+    // ---- DE VRAIS LIENS : l'hote (1.50), Lea (1.50), Hugo (un Studio 1.49) ----
+    deploy::TlsIdentity hostId, leaId, hugoId;
+    std::string why;
+    check(deploy::TlsIdentity::generate("XPG-Studio PC-BUREAU-01", hostId, &why), "l'identite de l'hote");
+    check(deploy::TlsIdentity::generate("XPG-Studio PC-ATELIER-02", leaId, &why), "l'identite de Lea");
+    check(deploy::TlsIdentity::generate("XPG-Studio PC-ATELIER-03", hugoId, &why), "l'identite de Hugo");
+    const auto wait = [](const std::function<bool()>& cond, int ms) {
+        const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+        while (std::chrono::steady_clock::now() < end) {
+            if (cond()) return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        return cond();
+    };
+    HostLink host;
+    HostConfig cfg;
+    cfg.bindAddress = "127.0.0.1";
+    cfg.port = 0;
+    cfg.discoveryPort = -1;
+    cfg.hostName = "Camille";
+    cfg.sessionId = "fedcba9876543210";
+    check(host.start(cfg, hostId, &why), "l'hote ecoute (" + why + ")");
+    std::vector<LinkEvent> hostEvents;
+    const auto pumpHost = [&] { for (auto& e : host.poll()) hostEvents.push_back(std::move(e)); };
+    const auto knock = [&](GuestLink& g, const deploy::TlsIdentity& who, const std::string& name, int& conn) {
+        GuestConfig c;
+        c.address = "127.0.0.1";
+        c.port = host.port();
+        c.fingerprint = hostId.fingerprintHex();
+        c.sessionId = cfg.sessionId;
+        c.hello = core::json::Value::object();
+        c.hello.set("nom", name);
+        std::string w;
+        if (!g.start(c, who, &w)) return false;
+        conn = 0;
+        return wait([&] {
+            pumpHost();
+            for (auto it = hostEvents.begin(); it != hostEvents.end(); ++it)
+                if (it->kind == LinkEvent::Kind::Knock && it->header.str("nom") == name) {
+                    conn = it->conn;
+                    hostEvents.erase(it);
+                    return true;
+                }
+            return false;
+        }, 6000);
+    };
+    GuestLink lea, hugo;
+    int leaConn = 0, hugoConn = 0;
+    check(knock(lea, leaId, "L\xC3\xA9" "a", leaConn), "Lea frappe");
+    check(knock(hugo, hugoId, "Hugo", hugoConn), "Hugo frappe");
+    std::vector<LinkEvent> leaEvents, hugoEvents;
+    const auto lastMessage = [](GuestLink& g, std::vector<LinkEvent>& evs) -> const LinkEvent* {
+        for (auto& e : g.poll()) evs.push_back(std::move(e));
+        for (auto it = evs.rbegin(); it != evs.rend(); ++it)
+            if (it->kind == LinkEvent::Kind::Frame && it->header.str("op") == "MESSAGE") return &*it;
+        return nullptr;
+    };
+    // Ce que fait l'hote (app/SessionService) : chaque membre recoit la trame de sa version.
+    const auto broadcast = [&](const ChatMessage& m) {
+        host.send(leaConn, chatFrame(m, "1.50.0"));
+        host.send(hugoConn, chatFrame(m, "1.49.0"));
+    };
+    // 1) Camille ecrit (m1).
+    ChatMessage m1;
+    m1.id = "m1";
+    m1.from = "Camille";
+    m1.color = 0xE67E22;
+    m1.text = "Peux-tu d\xC3\xA9placer le texte d'\xC3\xA9tat de la vue d'accueil ?\nEt v\xC3\xA9rifier la fen\xC3\xAAtre \xC3\xA9troite.";
+    m1.time = "14:31";
+    broadcast(m1);
+    const LinkEvent* atLea = nullptr;
+    check(wait([&] { return (atLea = lastMessage(lea, leaEvents)) != nullptr; }, 5000), "Lea recoit le message de Camille");
+    const ChatMessage leaM1 = atLea ? readChat(atLea->header) : ChatMessage{};
+    check(leaM1.id == "m1" && leaM1.text == m1.text, "Lea : son identifiant (celui de l'hote) et son texte");
+    // 2) Lea repond a m1 : sa trame porte `reponse` {m1, Camille, l'extrait}.
+    leaEvents.clear();
+    lea.send(sayFrame("C'est fait : le texte est sous les compteurs.", ChatReply{leaM1.id, leaM1.from, chatExcerpt(leaM1.text)}, "1.50.0"));
+    const LinkEvent* said = nullptr;
+    check(wait([&] {
+              pumpHost();
+              for (const auto& e : hostEvents)
+                  if (e.kind == LinkEvent::Kind::Frame && e.conn == leaConn && e.header.str("op") == "MESSAGE") said = &e;
+              return said != nullptr;
+          }, 5000),
+          "l'hote recoit la reponse de Lea");
+    const ChatReply asked = said ? readReply(said->header) : ChatReply{};
+    check(asked.id == "m1" && asked.from == "Camille" && asked.excerpt == "Peux-tu d\xC3\xA9placer le texte d'\xC3\xA9tat de la vue d'accueil ?\xE2\x80\xA6",
+          "la reponse porte la reference : m1, Camille, la premiere ligne (<< ... >>)");
+    // 3) L'hote la renvoie a tous (m2, la reponse) : Lea la lit avec la reference ; Hugo (1.49) avec la citation dans le texte.
+    ChatMessage m2;
+    m2.id = "m2";
+    m2.from = "L\xC3\xA9" "a";
+    m2.color = 0x2E86DE;
+    m2.text = said ? said->header.str("texte") : std::string{};
+    m2.time = "14:33";
+    m2.reply = asked;
+    hugoEvents.clear();
+    broadcast(m2);
+    check(wait([&] { atLea = lastMessage(lea, leaEvents); return atLea && atLea->header.str("id") == "m2"; }, 5000), "Lea recoit sa reponse (m2)");
+    const ChatMessage leaM2 = atLea ? readChat(atLea->header) : ChatMessage{};
+    check(leaM2.reply.id == "m1" && leaM2.reply.from == "Camille" && leaM2.text == "C'est fait : le texte est sous les compteurs.",
+          "chez Lea : la reponse renvoie a m1 (le message cite se retrouve), le texte seul");
+    const LinkEvent* atHugo = nullptr;
+    check(wait([&] { atHugo = lastMessage(hugo, hugoEvents); return atHugo && atHugo->header.str("id") == "m2"; }, 5000), "Hugo recoit la reponse");
+    // Hugo est un Studio 1.49 : il ne lit que de, couleur, texte, heure.
+    const std::string hugoText = atHugo ? atHugo->header.str("texte") : std::string{};
+    check(atHugo && !atHugo->header.has("reponse")
+              && hugoText == "En r\xC3\xA9ponse \xC3\xA0 Camille : \xC2\xAB Peux-tu d\xC3\xA9placer le texte d'\xC3\xA9tat de la vue d'accueil ?\xE2\x80\xA6 \xC2\xBB\n"
+                             "C'est fait : le texte est sous les compteurs.",
+          "chez Hugo (1.49) : la citation en premiere ligne du texte, puis la reponse");
+    // 4) Un message a l'ancienne (un hote 1.49 : ni id ni reponse) : Lea le lit, lui donne l'identifiant tire du message,
+    //    et y repond ; a cet hote-la, sa reponse part avec la citation dans le texte.
+    core::json::Value plain = core::json::Value::object();
+    plain.set("op", "MESSAGE");
+    plain.set("de", "Hugo");
+    plain.set("couleur", static_cast<std::int64_t>(0x27AE60));
+    plain.set("texte", "J'ai fini les alarmes.");
+    plain.set("heure", "14:40");
+    host.send(leaConn, plain);
+    check(wait([&] { atLea = lastMessage(lea, leaEvents); return atLea && atLea->header.str("texte") == "J'ai fini les alarmes."; }, 5000),
+          "Lea recoit un message a l'ancienne");
+    const ChatMessage old = atLea ? readChat(atLea->header) : ChatMessage{};
+    check(old.id == chatIdOf("Hugo", "14:40", "J'ai fini les alarmes.") && old.reply.empty(), "... son identifiant : tire du message (le meme chez chacun)");
+    hostEvents.clear();
+    lea.send(sayFrame("Merci !", ChatReply{old.id, old.from, chatExcerpt(old.text)}, "1.49.0"));
+    said = nullptr;
+    check(wait([&] {
+              pumpHost();
+              for (const auto& e : hostEvents)
+                  if (e.kind == LinkEvent::Kind::Frame && e.conn == leaConn && e.header.str("op") == "MESSAGE") said = &e;
+              return said != nullptr;
+          }, 5000),
+          "l'hote (1.49) recoit la reponse de Lea");
+    check(said && !said->header.has("reponse") && said->header.str("texte") == "En r\xC3\xA9ponse \xC3\xA0 Hugo : \xC2\xAB J'ai fini les alarmes. \xC2\xBB\nMerci !",
+          "... la citation dans le texte : chacun la lit, meme cet hote");
+    lea.stop();
+    hugo.stop();
+    host.stop();
+}
+
 int main() {
     protocole();
     lignes();
@@ -1057,6 +1267,7 @@ int main() {
     copies145();
     departs145();
     serviceTropVieux();
+    discussion150();       // 1.50.0 : repondre a un message
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

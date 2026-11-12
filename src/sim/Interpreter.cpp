@@ -4967,10 +4967,49 @@ private:
                             return dialectError("un indice de tableau est un entier");
                         idx.push_back(i.v.asInteger());
                     }
+                    // 1.50.0 : a[i, j] SUR UN TABLEAU DE TABLEAUX - les indices se prennent niveau par niveau (a[i][j]).
+                    Place at = p;
+                    while (idx.size() > at.obj->type->bounds.size() && at.obj->type->element
+                           && at.obj->type->element->kind == TypeDesc::Kind::Array) {
+                        const auto& level = *at.obj->type;
+                        const std::vector<std::int64_t> head(idx.begin(), idx.begin() + static_cast<std::ptrdiff_t>(level.bounds.size()));
+                        std::size_t cell = 0;
+                        std::string why;
+                        if (!flatIndex(level, head, cell, &why)) return dialectError(why);
+                        idx.erase(idx.begin(), idx.begin() + static_cast<std::ptrdiff_t>(level.bounds.size()));
+                        at = Place{at.obj->items[cell], {}, at.constant, at.temp};
+                        if (!at.obj || !at.obj->type) return dialectError("case vide");
+                    }
+                    const auto& arrayType = *at.obj->type;
+                    // 1.50.0 : a[i][j] SUR DEUX DIMENSIONS - a[i] seul est la ligne i : un tableau des cases restantes, les
+                    // MEMES cases (une ecriture a[i][j] := x ecrit a[i, j]).
+                    if (idx.size() < arrayType.bounds.size()) {
+                        std::size_t first = 0, span = 1;
+                        for (std::size_t d = 0; d < arrayType.bounds.size(); ++d) {
+                            const auto [lo, hi] = arrayType.bounds[d];
+                            const auto extent = static_cast<std::size_t>(hi - lo + 1);
+                            if (d < idx.size()) {
+                                if (idx[d] < lo || idx[d] > hi)
+                                    return dialectError("indice " + std::to_string(idx[d]) + " hors des bornes " + std::to_string(lo) + ".."
+                                                        + std::to_string(hi) + " (dimension " + std::to_string(d + 1) + ")");
+                                first = first * extent + static_cast<std::size_t>(idx[d] - lo);
+                            } else {
+                                first *= extent;
+                                span *= extent;
+                            }
+                        }
+                        auto rowType = std::make_shared<TypeDesc>(arrayType);
+                        rowType->bounds.erase(rowType->bounds.begin(), rowType->bounds.begin() + static_cast<std::ptrdiff_t>(idx.size()));
+                        auto row = std::make_shared<Obj>();
+                        row->type = TypeRef(rowType);
+                        row->items.assign(at.obj->items.begin() + static_cast<std::ptrdiff_t>(first),
+                                          at.obj->items.begin() + static_cast<std::ptrdiff_t>(first + span));
+                        return Place{row, {}, at.constant, false};
+                    }
                     std::size_t flat = 0;
                     std::string why;
-                    if (!flatIndex(type, idx, flat, &why)) return dialectError(why);
-                    return Place{p.obj->items[flat], {}, p.constant, p.temp};
+                    if (!flatIndex(arrayType, idx, flat, &why)) return dialectError(why);
+                    return Place{at.obj->items[flat], {}, at.constant, at.temp};
                 }
                 if (type.kind == TypeDesc::Kind::Map) {
                     if (indices.size() != 1) return dialectError("une MAP prend une seule cl\xC3\xA9 : m[cl\xC3\xA9]");

@@ -35,7 +35,13 @@ app::sessionwin::Snapshot hostSnapshot(bool journal, bool journalEmpty, std::siz
         s.people.push_back({static_cast<int>(3 + i), "Nina Essai " + std::to_string(i + 1), "", "NE", "PC-ESSAI-0" + std::to_string(i + 4) + " \xC2\xB7 modifie", 0x8E44AD});
     s.knocks.push_back({"Nina Essai-Longuenom de la Soci\xC3\xA9t\xC3\xA9 d'essai", "PC-ESSAI-LONGUENOM-04 \xC2\xB7 M-9D9D \xC2\xB7 192.168.100.240"});
     const auto b = board();
-    for (const auto& l : b.chat) s.chat.push_back({l.time, l.from, l.text, l.system ? 0u : l.color, false, l.system, l.mine, 1});
+    for (const auto& l : b.chat) {
+        s.chat.push_back({l.time, l.from, l.text, l.system ? 0u : l.color, false, l.system, l.mine, 1});
+        s.chat.back().id = l.id;   // 1.50.0 : comme SessionDialogs (snapshotOf) - la reponse et son extrait
+        s.chat.back().replyId = l.replyId;
+        s.chat.back().replyWho = l.replyFrom;
+        s.chat.back().replyText = l.replyText;
+    }
     if (!journalEmpty)
         for (const auto& l : b.journal) s.journal.push_back({l.time, l.from, l.text, l.color, true, false, l.mine, l.count});
     s.showJournal = journal;
@@ -124,6 +130,14 @@ void fenetreSession(SoftRenderer& r) {
         {"hote, journal", [] { return hostWindow(true, false); }},
         {"hote, 11 equipiers", [] { return hostWindow(false, false, 8); }},
         {"equipier", [] { return guestWindow(); }},
+        // 1.50.0 : une reponse en cours (<< En reponse a ... >> au-dessus du champ).
+        {"hote, une reponse en cours", [] {
+             auto w = hostWindow(false, false);
+             app::sessionui::Row target{"14:36", kLea, kReport, 0x2E86DE, false, false, false, 1};
+             target.id = "m4";
+             w.body->replyBar()->set(target);
+             return w;
+         }},
         {"on entre", [] { return joiningWindow(); }},
     };
     int bad = 0, sizes = 0;
