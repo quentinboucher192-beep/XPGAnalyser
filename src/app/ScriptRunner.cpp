@@ -1097,7 +1097,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   dupliquer-regle GROUPE fixe|varie|FORMULE 1.50.0 : la regle d'une profondeur ("Departs", "Adresses", "Textes"...)
     //   dupliquer-apart REPERE FORMULE [PROF]    1.50.0 : un repere a part ; FORMULE "-" : comme sa profondeur
     //   dupliquer-exemple                        1.50.0 : (dans une vue ouverte) un depart fictif a reperes, tout choisi
-    if (cmd.rfind("dupliquer-", 0) == 0) {
+    // dupliquer-exemple vit plus loin (il lui faut la vue ouverte, pas la fenetre)
+    if (cmd.rfind("dupliquer-", 0) == 0 && cmd != "dupliquer-exemple") {
         auto* d = dynamic_cast<HmiDuplicateDialog*>(app_.menus().top());
         if (!d) { fail(cmd + " : la fen\xC3\xAAtre \xC2\xAB Dupliquer\xE2\x80\xA6 \xC2\xBB n'est pas ouverte (touche ctrl+maj+d)"); return Step::Yield; }
         const auto yes = [](const std::string& word) { const auto l = lower(word); return l.empty() || l == "oui" || l == "1" || l == "vrai"; };
