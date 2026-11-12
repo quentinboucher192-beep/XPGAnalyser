@@ -219,14 +219,30 @@ void leSelecteur() {
         auto sp = spec;
         sp.use = g.use;
         sp.constant = g.constant;
+        sp.current = "INT";
         auto* p = open(sp);
         if (!p) continue;
         const std::string why = p->accessProblem("POINTER TO");
-        check(!p->setAccess("POINTER TO") && why.find(g.why) != std::string::npos && p->result() == "Object",
+        check(!p->setAccess("POINTER TO") && why.find(g.why) != std::string::npos && p->result() == "INT",
               "POINTER TO grise (" + std::string(g.why) + ") : " + why + " ; resultat " + p->result());
         check(p->accessProblem("Direct").empty(), "Direct, toujours permis");
         p->setSearch("pointer to obj");
         check(!p->resultProblem().empty(), "... et ecrit dans la recherche : refuse (" + p->resultProblem() + ")");
+    }
+    // 1.50.0 (les tableaux) : le texte d'un type ecrit dans la recherche - un tableau de tableaux et deux dimensions, pour une
+    // variable IHM comme pour une declaration
+    for (const unsigned use : {static_cast<unsigned>(tr::UseVariable), static_cast<unsigned>(tr::UseDeclaration)}) {
+        auto sp = spec;
+        sp.use = use;
+        sp.current = "INT";
+        auto* p = open(sp);
+        if (!p) continue;
+        p->setSearch("array[0..3] of array[0..15] of bool");
+        check(p->result() == "ARRAY[0..3] OF ARRAY[0..15] OF BOOL" && p->resultProblem().empty(),
+              "le selecteur : un tableau de tableaux ecrit (usage " + std::to_string(use) + ") : " + p->result() + " " + p->resultProblem());
+        p->setSearch("array[0..3, 0..15] of bool");
+        check(p->result() == "ARRAY[0..3, 0..15] OF BOOL" && p->resultProblem().empty(),
+              "le selecteur : deux dimensions ecrites (usage " + std::to_string(use) + ") : " + p->result() + " " + p->resultProblem());
     }
     // un retour de fonction : permis
     auto sp = spec;

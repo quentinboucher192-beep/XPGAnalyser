@@ -28,9 +28,10 @@
 //      strlen, printf (au journal)... et leurs std:: en C++ ;
 //    - #include est ignore (l'en-tete du projet est deja connu) ; #define N 10
 //      (une constante) est pris.
-//  Ce qui n'est pas pris (dit a sa ligne) : les pointeurs locaux et leur
-//  arithmetique, malloc, les structures, classes, templates, lambdas,
-//  exceptions, std::vector / std::cout, goto, sizeof.
+//    - un pointeur local T* p = &x : un POINTER TO T du ST (ADR(x), p^, NULL).
+//  Ce qui n'est pas pris (dit a sa ligne) : l'arithmetique des pointeurs,
+//  malloc, les structures, classes, templates, lambdas, exceptions,
+//  std::vector / std::cout, goto, sizeof.
 //
 //  LE POINT D'ENTREE : les instructions au niveau du script s'executent dans
 //  l'ordre ; s'il n'y en a pas, la fonction main() (ou celle qui porte le nom

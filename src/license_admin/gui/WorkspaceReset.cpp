@@ -26,6 +26,7 @@
 #include "../../licensing/SignedFile.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <filesystem>
 #include <system_error>
 
@@ -158,7 +159,11 @@ std::string Workspace::whyNotStartOver() const {
 
 bool Workspace::startOverOfferDue() const {
     if (license_admin::classique() || role_ != Role::Plus) return false;
-    if (std::string(kAppVersion).rfind("1.49.", 0) != 0) return false;   // le premier lancement de l'Admin+ 1.49 seulement
+    // le premier lancement d'un Admin+ 1.49 ou plus recent (1.50.0 : on peut sauter la 1.49) ; une seule fois (la note)
+    {
+        int ma = 0, mi = 0;
+        if (std::sscanf(kAppVersion, "%d.%d", &ma, &mi) != 2 || ma < 1 || (ma == 1 && mi < 49)) return false;
+    }
     if (readOffer(folder_).has("propose")) return false;                 // deja propose (ou deja fait)
     return !licences_.empty() || !records_.empty() || (adminList_ && !adminList_->admins.empty());
 }

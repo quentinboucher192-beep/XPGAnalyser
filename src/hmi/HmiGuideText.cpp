@@ -19261,7 +19261,8 @@ const std::vector<Topic>& topics() {
                          "while, do, for (et for (T x : t) en C++) ; les fonctions du script (par valeur, "
                          "pointeur T* p, r\xC3\xA9" "f\xC3\xA9rence T& r) ; sqrt, pow, min, max, printf (au "
                          "journal). Sans les instructions au niveau du script, main() (ou la fonction du nom de "
-                         "l'\xC3\xA9v\xC3\xA9nement, OnCycle()) est appel\xC3\xA9" "e. Pas de pointeur local, ni malloc, "
+                         "l'\xC3\xA9v\xC3\xA9nement, OnCycle()) est appel\xC3\xA9" "e. Un pointeur T* p = &x est un POINTER "
+                         "TO du ST (*p, p->m, NULL). Pas d'arithm\xC3\xA9tique des pointeurs, ni malloc, "
                          "classes, templates, lambdas, exceptions, std::vector : la faute le dit.", {}},
              {K::Heading, "C et C++ : la v\xC3\xA9rification et l'en-t\xC3\xAAte du projet", {}, "1.12.20"},
              {K::Bullet, "**La v\xC3\xA9rification** lit aussi les chevrons d'un template "

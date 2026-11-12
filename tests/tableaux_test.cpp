@@ -165,6 +165,15 @@ void lesTypes() {
         check(fl.ok() && fl.leaves.size() == 65, "T_Four : son membre Grille (un tableau de tableaux) deplie : 1 + 64 cases ("
                                                     + std::to_string(fl.leaves.size()) + " " + fl.error + ")");
     }
+    // la valeur d'une constante (un litteral) : une liste par ligne, verifiee par le moteur
+    {
+        std::string why;
+        check(typeform::valueFits(p, "ARRAY[0..1] OF ARRAY[0..2] OF INT", "[[1, 2, 3], [4, 5, 6]]", &why),
+              "un litteral [[1, 2, 3], [4, 5, 6]] va dans ARRAY[0..1] OF ARRAY[0..2] OF INT (" + why + ")");
+        why.clear();
+        check(!typeform::valueFits(p, "ARRAY[0..1] OF ARRAY[0..2] OF INT", "[[1, 2, 3, 4], [4, 5, 6]]", &why) && !why.empty(),
+              "... une ligne de trop de valeurs : refusee (" + why + ")");
+    }
     // les fautes : dites a leur niveau
     {
         struct Bad {

@@ -315,15 +315,15 @@ Model modelOf(const Scan& s, std::string_view originalName, const BoundsFn& boun
         }
         if (auto a = addressOf(mk.name)) {
             mm.kind = GroupKind::Address;
-            mm.group = groupFor("A", GroupKind::Address);
+            mm.group = groupFor("#ADR", GroupKind::Address);
             if (std::find(areas.begin(), areas.end(), a->area) == areas.end()) areas.push_back(a->area);
             mm.address = std::move(a);
         } else if (!mk.variable) {
             mm.kind = GroupKind::Text;
-            mm.group = groupFor("T", GroupKind::Text);
+            mm.group = groupFor("#TXT", GroupKind::Text);
         } else {
             mm.kind = GroupKind::Variable;
-            mm.group = groupFor("V", GroupKind::Variable);
+            mm.group = groupFor("#VAR", GroupKind::Variable);
         }
         Group& g = made[mm.group];
         if (g.original.empty()) g.original = mk.name;
@@ -342,7 +342,7 @@ Model modelOf(const Scan& s, std::string_view originalName, const BoundsFn& boun
         m.indexGroup[ii] = gi;
     }
     if (!originalName.empty()) {
-        Group& g = made[groupFor("N", GroupKind::Name)];
+        Group& g = made[groupFor("#NOM", GroupKind::Name)];
         g.original = std::string(originalName);
     }
     // Les libelles des groupes qui ne sont pas des profondeurs.
@@ -587,7 +587,7 @@ void computeRows(const Scan& s, const Model& m, const Rules& r, const std::vecto
     plan.rows.resize(P);
     Evaluator ev(s, m, r);
     // Les noms.
-    if (const Group* ng = m.group("N"); ng && !r.namesByHand) {
+    if (const Group* ng = m.group("#NOM"); ng && !r.namesByHand) {
         const Rule& nr = r.rule(*ng);
         for (std::size_t p = 0; p < P; ++p) {
             auto& name = plan.rows[p].name;

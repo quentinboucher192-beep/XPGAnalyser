@@ -278,6 +278,7 @@ void etirer1500Moteur() {
 void etirer1500Editeur() {
     std::printf("== 1.50.0 : \xC3\x89tirer - l'editeur (menu, barre, apercu, Ctrl+Z, fenetre) ==\n");
     namespace st = hmi::stretch;
+    using etirer1500ns::boxIs;
     using app::HmiEditor;
     Bench b;
     b.v().grid.snapGrid = false;

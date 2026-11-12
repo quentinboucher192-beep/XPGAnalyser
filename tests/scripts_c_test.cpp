@@ -237,6 +237,11 @@ void sousEnsemble() {
         {C, "DINT", "void ajoute(int *p, int n) {\n  *p = *p + n;\n}\nint x = 1;\najoute(&x, 4);\nR = x;", "5", "un parametre pointeur (&x, *p)"},
         {Cpp, "DINT", "void ajoute(int& r, int n) { r += n; }\nint x = 1;\najoute(x, 6);\nR = x;", "7", "C++ : une reference"},
         {C, "DINT", "int carre(int v) { return v * v; }\nR = carre(4) + carre(2);", "20", "une fonction du script"},
+        {C, "DINT", "int a = 3, b = 4;\nint *p = &a;\n*p = *p + 10;\np = &b;\n*p += 1;\nR = a * 100 + b;", "1305",
+         "un pointeur local (POINTER TO) : *p lit et ecrit, p = &b"},
+        {C, "DINT", "int *p = NULL;\nif (p == NULL) R = 1;\nint x = 7;\np = &x;\nif (p != NULL) R = R + *p;", "8", "NULL, == et != sur un pointeur"},
+        {C, "DINT", "void plus(int *q) { *q += 5; }\nint x = 1;\nint *p = &x;\nplus(p);\nplus(&x);\nR = x;", "11",
+         "un pointeur local passe a un parametre pointeur"},
         {C, "DINT", "R = (5 > 3 ? 1 : 2) + (7 & 3) + (1 << 4) + (~0 & 1) + 17 % 5;", "23", "?: & << ~ %"},
         {C, "DINT", "int a = 3, b = 0;\nif (a && !b) R = 1; else R = 2;", "1", "&& ! sur des entiers"},
         {C, "DINT", "R = (int)2.7 + (int)(-2.7);", "0", "(int) tronque vers zero"},
@@ -265,6 +270,13 @@ void sousEnsemble() {
         const int times = std::string(c.what).find("3 appels") != std::string::npos ? 3 : 1;
         const Run r = run(p, c.lang, c.body, "R", times);
         check(r.value == c.want && r.error.empty(), std::string(c.lang == C ? "C" : "C++") + " : " + c.what + " -> " + c.want + " : " + obs(r));
+    }
+    // un pointeur NULL dereference : l'erreur du moteur, a sa ligne C
+    {
+        Project p;
+        addVar(p, "R", "DINT", "0");
+        const Run r = run(p, ScriptLang::C, "int *p;\nR = 1;\nR = *p;\n", "R");
+        check(r.error.find("ligne 3") != std::string::npos && r.error.find("nul") != std::string::npos, "C : *p sur un pointeur NULL, dit ligne 3 : " + obs(r));
     }
     // printf : au journal
     {
@@ -310,10 +322,11 @@ void refus() {
         const char* word;
     };
     const Case cases[] = {
-        {ScriptLang::C, "int a = 0;\nint *p = &a;\n", 2, "pointeur local"},
+        {ScriptLang::C, "int a = 0;\nint *p = &a;\np++;\n", 3, "arithm\xC3\xA9tique des pointeurs"},
+        {ScriptLang::C, "int t[3];\nint *p = &t[0];\nt[1] = p[1];\n", 3, "arithm\xC3\xA9tique des pointeurs"},
         {ScriptLang::Cpp, "int a = 0;\nclass Pompe { };\n", 2, "classe"},
         {ScriptLang::Cpp, "int a = 0;\nauto f = [](int x) { return x; };\n", 2, "lambda"},
-        {ScriptLang::C, "int a = 0;\na = 1;\nint *t = malloc(10);\n", 3, "pointeur local"},
+        {ScriptLang::C, "int a = 0;\na = 1;\nint *t = malloc(10);\n", 3, "malloc"},
         {ScriptLang::C, "int a = 0;\na = b++ + 1;\n", 2, "propre ligne"},
         {ScriptLang::C, "int a = 0;\nif (a = 1) a = 2;\n", 2, "affectation"},
         {ScriptLang::Cpp, "#include <vector>\nstd::vector<int> v;\n", 2, "std::vector"},
@@ -329,8 +342,8 @@ void refus() {
               std::string("refus ligne ") + std::to_string(c.line) + " (" + c.word + ") : " + what);
     }
     // les textes a l'ecran disent ce qui est pris
-    check(cscript::supportedSubset(ScriptLang::Cpp).find("pas de pointeur local") == std::string::npos
-              && cscript::supportedSubset(ScriptLang::Cpp).find("Pas de pointeur local") != std::string::npos
+    check(cscript::supportedSubset(ScriptLang::Cpp).find("POINTER TO") != std::string::npos
+              && cscript::supportedSubset(ScriptLang::Cpp).find("Pas d'arithm\xC3\xA9tique des pointeurs") != std::string::npos
               && cscript::supportedSubset(ScriptLang::Cpp).find("std::vector") != std::string::npos,
           "le sous-ensemble dit (C++) : " + cscript::supportedSubset(ScriptLang::Cpp));
     Project p;

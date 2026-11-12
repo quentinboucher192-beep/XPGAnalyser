@@ -3,7 +3,6 @@
 // =============================================================================
 #include "SessionText.hpp"
 
-#include "../../session/SessionProtocol.hpp"   // 1.50.0 : l'extrait cite (chatExcerpt)
 #include "../../ui/Icons.hpp"
 #include "../../ui/Theme.hpp"
 
@@ -222,6 +221,33 @@ float lineStep() { return std::ceil(ui::lineHeight(kText)) + 3.f; }
 std::string textOf(const Row& r) { return r.count > 1 ? r.text + "  (\xC3\x97" + std::to_string(r.count) + ")" : r.text; }
 
 const std::string kSeeAll = "\xE2\x80\xA6 voir tout";
+
+// 1.50.0 : le debut d'un message (sa premiere ligne qui a du texte, 80 caracteres au plus, << ... >> s'il y a la suite) -
+// comme session::chatExcerpt (l'extrait qui voyage avec la reponse) ; ici sans la bibliotheque des sessions (l'editeur
+// de vues et ses essais compilent ce fichier sans elle).
+std::string excerptOf(std::string_view text) {
+    constexpr std::size_t kMax = 80;
+    const auto blank = [](char ch) { return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t'; };
+    std::size_t start = 0;
+    while (start < text.size() && blank(text[start])) ++start;
+    std::size_t end = text.find('\n', start);
+    if (end == std::string_view::npos) end = text.size();
+    std::string out;
+    std::size_t chars = 0, i = start;
+    while (i < end && chars < kMax) {
+        const std::size_t n = std::min(charLen(text, i), end - i);
+        const auto u = static_cast<unsigned char>(text[i]);
+        if (u < 0x20 || u == 0x7F) out.push_back(' ');
+        else out.append(text.substr(i, n));
+        i += n;
+        ++chars;
+    }
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+    bool more = i < end;
+    for (std::size_t j = end; !more && j < text.size(); ++j) more = !blank(text[j]);
+    if (more && !out.empty()) out += kEllipsis;
+    return out;
+}
 const std::string kReduce = "R\xC3\xA9" "duire";
 } // namespace
 
@@ -730,7 +756,7 @@ ReplyBar::ReplyBar(std::string id) : ui::Widget(std::move(id)) {
 
 void ReplyBar::set(const Row& row) {
     replyId_ = row.id;
-    label_ = replyLabel(row.who, session::chatExcerpt(row.text));
+    label_ = replyLabel(row.who, excerptOf(row.text));
     invalidateLayout();
     invalidate();
 }

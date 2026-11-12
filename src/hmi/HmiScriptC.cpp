@@ -436,6 +436,8 @@ struct X {                       // une expression traduite
     bool        lvalue{false};
     bool        call{false};     // un appel f(...) au sommet : une instruction a lui seul
     std::int64_t intValue{0};    // Lit::Int
+    bool        pointee{false};  // une variable POINTER TO du script (T* p local) : *p -> p^
+    std::string address;         // &x : x (passe tel quel a un parametre pointeur) ; st vaut ADR(x)
 };
 
 std::string wrap(const X& x) { return x.compound ? "(" + x.st + ")" : x.st; }
@@ -573,6 +575,7 @@ private:
         std::string st;
         std::string type;
         bool        pointer{false};          // un parametre T* p : *p, p->m designent la variable passee
+        bool        target{false};           // 1.50.0 : un pointeur local T* p (POINTER TO T) : *p -> p^, p->m -> p^.m
     };
     struct Hoisted {
         std::string st, type, init;
@@ -899,14 +902,15 @@ private:
     }
 
     void variable(const CType& base, const Declarator& d, bool topLevel) {
-        if (d.pointer) fail("un pointeur local (" + d.name + ") n'est pas pris en charge ; un param\xC3\xA8tre T* p appel\xC3\xA9 avec &x l'est", d.line);
+        // un pointeur local : POINTER TO T du ST (un vrai pointeur : ADR(x), p^, NULL) ; pas de tableau de pointeurs
+        if (d.pointer && !d.dims.empty()) fail("un tableau de pointeurs (" + d.name + ") n'est pas pris en charge", d.line);
         if (d.reference) fail("une r\xC3\xA9" "f\xC3\xA9rence locale (" + d.name + ") n'est pas prise en charge ; un param\xC3\xA8tre T& r l'est", d.line);
         const bool keep = base.isStatic;
         if (keep && cur_->function)
             fail("static dans une fonction n'est pas pris en charge (une fonction n'a pas de m\xC3\xA9moire) : d\xC3\xA9" "clare " + d.name
                      + " static au niveau du script",
                  d.line);
-        std::string type = d.st;
+        std::string type = d.pointer ? "POINTER TO " + d.st : d.st;
         // L'initialisation : lue avant de declarer (int x = x; lit l'autre x, comme en C apres sa declaration... ici la valeur d'avant).
         std::vector<std::pair<std::string, X>> cells;   // (le chemin relatif "[0][1]", la valeur)
         X init;
@@ -935,6 +939,7 @@ private:
             fail("auto " + d.name + " : une valeur initiale est attendue", d.line);
         }
         const std::string st = declare(d.name, type, d.line);
+        if (d.pointer) cur_->scopes.back()[d.name].target = true;
         if (base.isConst && hasInit && !braces && init.lit == X::Lit::Int) constInts_[d.name] = init.intValue;
         Hoisted h{st, type, {}, keep, d.line};
         // la valeur initiale ecrite en constante (une variable gardee la prend une fois) ; vide : pas une constante
@@ -1354,6 +1359,7 @@ private:
         allowPost_ = true;
         X lhs = ternary();
         allowPost_ = false;
+        if (post_ != 0 && lhs.pointee) fail("l'arithm\xC3\xA9tique des pointeurs (" + lhs.st + "++) n'est pas prise en charge", line);
         if (post_ != 0) {
             const int p = post_;
             post_ = 0;
@@ -1384,6 +1390,7 @@ private:
         } else if (peek().k == Tok::K::Punct && compound.count(peek().text)) {
             const std::string op = next().text;
             if (!lhs.lvalue) fail(op + " vise une variable", line);
+            if (lhs.pointee) fail("l'arithm\xC3\xA9tique des pointeurs (" + lhs.st + " " + op + " ...) n'est pas prise en charge", line);
             const X r = ternary();
             const std::string& stOp = compound.at(op);
             if (op == "+=" || op == "-=" || op == "*=" || op == "/=") emit(line, lhs.st + " " + op + " " + r.st + ";");
@@ -1508,7 +1515,14 @@ private:
         if (punct("*")) {                                // *p : la variable passee par pointeur
             next();
             X v = unary();
-            if (!pointerName_) fail("*" + v.st + " : seul un param\xC3\xA8tre pointeur (T* p) se d\xC3\xA9r\xC3\xA9" "f\xC3\xA9rence", line);
+            if (v.pointee) {                             // un pointeur local : p^
+                X out;
+                out.st = v.st + "^";
+                out.lvalue = true;
+                pointerName_ = false;
+                return out;
+            }
+            if (!pointerName_) fail("*" + v.st + " : seul un pointeur (T* p) se d\xC3\xA9r\xC3\xA9" "f\xC3\xA9rence", line);
             pointerName_ = false;
             return v;
         }
@@ -1516,7 +1530,10 @@ private:
             next();
             X v = unary();
             if (!v.lvalue) fail("&" + v.st + " : une variable est attendue", line);
-            return v;
+            X out;                                       // ADR(x) ; un argument d'appel : x (un parametre pointeur)
+            out.st = "ADR(" + v.st + ")";
+            out.address = v.st;
+            return out;
         }
         if (punct("++") || punct("--")) fail(peek().text + " dans une expression n'est pas pris en charge : \xC3\xA9" "cris-le sur sa propre ligne", line);
         if (word("sizeof")) fail(refusedWord("sizeof"), line);
@@ -1566,6 +1583,7 @@ private:
         X e = primary();
         while (true) {
             const int line = peek().line;
+            if (e.pointee && punct("[")) fail(e.st + "[...] : l'arithm\xC3\xA9tique des pointeurs n'est pas prise en charge (un tableau T t[N] l'est)", line);
             if (accept("[")) {
                 const X i = expression();
                 expect("]", "apr\xC3\xA8s l'indice");
@@ -1581,9 +1599,10 @@ private:
                 const bool arrow = next().text == "->";
                 if (peek().k != Tok::K::Name) fail("un membre est attendu apr\xC3\xA8s " + std::string(arrow ? "->" : "."), line);
                 const std::string m = next().text;
-                if (arrow && !pointerName_) fail(e.st + "->" + m + " : seul un param\xC3\xA8tre pointeur (T* p) s'emploie avec ->", line);
+                if (arrow && !pointerName_ && !e.pointee) fail(e.st + "->" + m + " : seul un pointeur (T* p) s'emploie avec ->", line);
                 pointerName_ = false;
-                e.st = wrap(e) + "." + m;
+                e.st = wrap(e) + (arrow && e.pointee ? "^." : ".") + m;
+                e.pointee = false;
                 e.compound = false;
                 e.lvalue = true;
                 e.boolish = false;
@@ -1616,9 +1635,16 @@ private:
         expect(")", "apr\xC3\xA8s les arguments" );
         (void)method;
         (void)line;
+        // &x passe a un parametre pointeur : x (la variable elle-meme, VAR_IN_OUT) ; un pointeur local passe a une
+        // fonction du script : ce qu'il vise (p^).
+        bool userFunction = false;
+        for (const auto& [cname, info] : functions_) userFunction = userFunction || info.st == st;
         X out;
         out.st = st + "(";
-        for (std::size_t k = 0; k < args.size(); ++k) out.st += (k ? ", " : "") + args[k].st;
+        for (std::size_t k = 0; k < args.size(); ++k) {
+            const std::string a = !args[k].address.empty() ? args[k].address : args[k].pointee && userFunction ? args[k].st + "^" : args[k].st;
+            out.st += (k ? ", " : "") + a;
+        }
         out.st += ")";
         out.call = true;
         return out;
@@ -1773,6 +1799,7 @@ private:
             out.st = v->st;
             out.lvalue = true;
             out.boolish = v->type == "BOOL";
+            out.pointee = v->target;
             pointerName_ = v->pointer;
             return out;
         }
@@ -1876,7 +1903,8 @@ std::string supportedSubset(ScriptLang lang) {
          + std::string(cpp ? " (et for (T x : tableau))" : "") + ", break, continue, return ; "
            "les fonctions du script (par valeur, pointeur T* p"
          + std::string(cpp ? ", r\xC3\xA9" "f\xC3\xA9rence T& r" : "") + ") ; les op\xC3\xA9rateurs du C ; sqrt, pow, sin, min, max, printf (au journal) ; "
-           "les variables et les fonctions IHM par leur nom. Pas de pointeur local, ni malloc, structures, "
+           "les pointeurs (T* p = &x ; *p ; p->m ; NULL : un POINTER TO du ST) ; "
+           "les variables et les fonctions IHM par leur nom. Pas d'arithm\xC3\xA9tique des pointeurs, ni malloc, structures, "
          + std::string(cpp ? "classes, templates, lambdas, exceptions, std::vector, std::cout" : "goto, sizeof") + ".";
 }
 

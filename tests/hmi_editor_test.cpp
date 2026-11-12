@@ -19484,10 +19484,12 @@ void centreAide111() {
     // Ctrl+; / Ctrl+Alt+; et Alt+survol (l'editeur de vues : les regles, les guides, les cotes).
     // 1.14.0 (lot M5) : + Ctrl+Maj+P (Chercher des fichiers sur ce PC, General).
     // 1.14.2 : + Ctrl+Maj+I (l'Assistant IA, General).
-    check(hk::all().size() == 110 && hk::ofContext(hk::Context::Scripts).size() == 37,
+    // 1.50.0 : + Ctrl+Alt+Maj+Fleches (Etirer, l'editeur de vues).
+    check(hk::all().size() == 111 && hk::ofContext(hk::Context::Scripts).size() == 37,
           "raccourcis : les 60 lignes de la maquette validee, plus Ctrl+Maj+O (1.11), Ctrl+J (1.11.14), F7 hors d'un \xC3\xA9" "diteur (1.11.17), "
           "les 31 des \xC3\xA9" "diteurs de code (1.12.2), Ctrl+Maj+K (1.12.3), Ctrl+I (1.12.16), les 5 du clic droit et Ctrl+Maj+T (1.12.18), "
-          "Ctrl+Maj+N (1.12.27), les 2 du zoom et les 3 des r\xC3\xA8gles (1.12.30), Ctrl+Maj+P (1.14.0), Ctrl+Maj+I (1.14.2)");
+          "Ctrl+Maj+N (1.12.27), les 2 du zoom et les 3 des r\xC3\xA8gles (1.12.30), Ctrl+Maj+P (1.14.0), Ctrl+Maj+I (1.14.2), "
+          "Ctrl+Alt+Maj+Fl\xC3\xA8" "ches (1.50.0, \xC3\x89tirer)");
     check(hk::ofContext(hk::Context::General).size() == 34 && hk::ofContext(hk::Context::Help).size() == 7,
           "raccourcis : General 34 (1.11.14 : Ctrl+J ; 1.11.17 : F7 ; 1.12.3 : Ctrl+Maj+K ; 1.12.18 : Maj+F10, les lettres d'un menu, Ctrl+Maj+T ; "
           "1.12.27 : Ctrl+Maj+N ; 1.12.30 : le zoom ; 1.14.0 : Ctrl+Maj+P ; 1.14.2 : Ctrl+Maj+I), Aide 7");
@@ -23677,10 +23679,12 @@ void icones111() {
     check(!cache.section(dfbLd) && cache.dfbSection(dfbLd) && cache.dfbSection(dfbLd)->compile == bs::Compile::NotCompilable,
           "le cache : un corps de DFB est range a part, avec le message d'un DFB");
     check(cache.dfb(0) && cache.dfb(0)->compile == bs::Compile::NotCompilable && cache.dfb(1)->compile == bs::Compile::Ok, "le cache : les types DFB");
-    check(cache.script(103) && cache.script(103)->generate == bs::Generate::No, "le cache : le script C++");
-    // Les filtres : ne compile pas = 1 ST en erreur + 4 sections non ST + 1 corps LD + 1 script ST en erreur + 2 scripts C/C++.
-    check(cache.notCompiling() == 9, "le filtre Ce qui ne compile pas (" + std::to_string(cache.notCompiling()) + ")");
-    check(cache.notGenerated() == 3, "le filtre Ce qui n'est pas genere (" + std::to_string(cache.notGenerated()) + ")");
+    // 1.50.0 : le C++ juste compile et part avec Generer (HmiScriptC.hpp).
+    check(cache.script(103) && cache.script(103)->generate == bs::Generate::Yes, "le cache : le script C++ (juste : genere, 1.50.0)");
+    // Les filtres : ne compile pas = 1 ST en erreur + 4 sections non ST + 1 corps LD + 1 script ST en erreur + le script C en
+    // faute (1.50.0 : le C++ juste compile).
+    check(cache.notCompiling() == 8, "le filtre Ce qui ne compile pas (" + std::to_string(cache.notCompiling()) + ")");
+    check(cache.notGenerated() == 2, "le filtre Ce qui n'est pas genere (" + std::to_string(cache.notGenerated()) + ")");
     check(bs::Cache::folderSummary(2, 2) == "2 \xE2\x9C\x95/\xE2\x8A\x98 \xC2\xB7 2 non g\xC3\xA9n\xC3\xA9r\xC3\xA9s"
               && bs::Cache::folderSummary(0, 0).empty() && bs::Cache::folderSummary(0, 1) == "1 non g\xC3\xA9n\xC3\xA9r\xC3\xA9",
           "le titre d'un dossier : " + bs::Cache::folderSummary(2, 2));
@@ -23697,7 +23701,7 @@ void icones111() {
     check(cache.computations() == n0 + 1 && cache.generation() > g0, "le script corrige : recalcule seul");
     check(cache.script(102)->compile == bs::Compile::Ok && cache.script(102)->generate == bs::Generate::Yes,
           "le script corrige : compile et part avec Generer");
-    check(cache.notCompiling() == 8 && cache.notGenerated() == 2, "les filtres suivent (8 et 2)");
+    check(cache.notCompiling() == 7 && cache.notGenerated() == 1, "les filtres suivent (7 et 1)");
     s3.lang = hmi::ScriptLang::ST; s3.body = "x := 2;\n";
     cache.updateScript(s3);
     check(cache.script(103)->generate == bs::Generate::Yes && cache.computations() == n0 + 2, "un script passe en ST : recalcule, genere");
@@ -24051,8 +24055,8 @@ void icones111_arbre() {
     check(t.size() == 2 && t[0].glyph == "\xE2\x9C\x93" && t[1].glyph == "\xE2\x87\xA9" && !t[1].struck && t[1].tone == ui::Tone::Info,
           "un script ST juste : coche, puis la fleche de Generer");
     t = trail(NK::HmiGeneralScript, 203);
-    check(t.size() == 2 && t[0].glyph == "\xE2\x9C\x95" && t[1].struck && t[1].tone == ui::Tone::Warning,
-          "un script C++ en faute : la croix, la fleche barree (non genere)");
+    check(t.size() == 2 && t[0].glyph.rfind("\xE2\x9C\x95", 0) == 0 && t[0].tone == ui::Tone::Error && t[1].struck && t[1].tone == ui::Tone::Warning,
+          "un script C++ en faute : la croix (et le nombre de fautes), la fleche barree (non genere)");
     using PTM = app::ProjectTreeModel;
     check(tree.buildFlags(PTM::pack(NK::Section, stErr)) == PTM::BuildNotCompiling && tree.buildFlags(PTM::pack(NK::Section, stOk)) == 0
               && tree.buildFlags(PTM::pack(NK::HmiGeneralScript, 201)) == 0
@@ -42047,9 +42051,10 @@ void objets113() {
     methods->selectMethod(dem);
     {
         auto& grid = methods->parametersGrid();
-        check(grid.add() && grid.count() == 1, "Param\xC3\xA8tres : + Ajouter");
+        check(grid.add() && grid.count() == 1 && grid.table().cellEditing(), "Param\xC3\xA8tres : + Ajouter (son nom \xC3\xA0 \xC3\xA9" "crire)");
         namespace de = hmi::decledit;
-        check(grid.setCell(0, de::Column::Name, "Consigne") && grid.setCell(0, de::Column::Type, "REAL"), "Consigne : REAL, dans la grille");
+        grid.table().finishCellEdit(true, "Consigne");                 // le nom tape dans sa case, Entree
+        check(grid.rowName(0) == "Consigne" && grid.setCell(0, de::Column::Type, "REAL"), "Consigne : REAL, dans la grille");
         check(hmi::methodParamsText(p.hmiType(pompeId)->methods[0]) == "Consigne : REAL", "Demarrer(Consigne : REAL)");
     }
     // ---- 2. Le corps : la saisie, une faute a sa ligne, Ctrl+Z ----
@@ -43540,7 +43545,7 @@ void methodes150() {
             const auto* ok = dynamic_cast<const ui::Button*>(ft->widgetRoot()->findById("dialog.hmiNewFunction.ok"));
             check(ok && ok->text() == "Cr\xC3\xA9" "er", "le bouton reste \xC2\xAB Cr\xC3\xA9" "er \xC2\xBB (plus \xC2\xAB Cr\xC3\xA9" "er la m\xC3\xA9thode \xC2\xBB)");
             const auto* virt = dynamic_cast<const ui::Checkbox*>(ft->widgetRoot()->findById("dialog.hmiNewFunction.virtual"));
-            check(virt && virt->text() == "Virtuelle : un sous-type peut la red\xC3\xA9" "finir", "Virtuelle (plus \xC2\xAB Red\xC3\xA9" "finissable \xC2\xBB)");
+            check(virt && virt->label() == "Virtuelle : un sous-type peut la red\xC3\xA9" "finir", "Virtuelle (plus \xC2\xAB Red\xC3\xA9" "finissable \xC2\xBB)");
             check(ft->answer().name == "Methode", "un nom libre propos\xC3\xA9 : Methode");
             ft->setName("Demarrer");
             ft->setReturnType("BOOL");
@@ -43624,8 +43629,14 @@ void methodes150() {
     // ---- 4. Parametres : SELF en tete, grise et verrouille ; un parametre, une locale, une constante ----
     {
         auto& grid = methods->parametersGrid();
-        check(grid.add() && grid.setCell(0, de::Column::Name, "Consigne") && grid.setCell(0, de::Column::Type, "REAL"), "Consigne : REAL");
-        check(grid.add() && grid.setCell(1, de::Column::Name, "Rampe") && grid.setCell(1, de::Column::Type, "TIME"), "Rampe : TIME");
+        // + Ajouter ouvre la case du nom (sous SELF : la 2e ligne de la table) ; le nom s'y tape, Entree.
+        const auto named = [](app::HmiDeclGrid& g, const char* name) {
+            const bool ok = g.add() && g.table().cellEditing();
+            g.table().finishCellEdit(true, name);
+            return ok;
+        };
+        check(named(grid, "Consigne") && grid.rowName(0) == "Consigne" && grid.setCell(0, de::Column::Type, "REAL"), "Consigne : REAL (tap\xC3\xA9 dans sa case)");
+        check(named(grid, "Rampe") && grid.rowName(1) == "Rampe" && grid.setCell(1, de::Column::Type, "TIME"), "Rampe : TIME");
         const auto model = grid.table().model();
         const int name = grid.tableColumnOf(de::Column::Name), type = grid.tableColumnOf(de::Column::Type), mode = grid.tableColumnOf(de::Column::Mode);
         check(model && name >= 0 && type >= 0 && mode >= 0 && model->rowCount() == 3 && grid.count() == 2
@@ -43645,19 +43656,23 @@ void methodes150() {
         check(grid.table().selectedModelRows().size() == 1 && grid.table().selectedModelRows().front() == 1 && grid.rowName(0) == "Consigne",
               "la ligne 0 de la grille est Consigne (la 2e de la table, sous SELF)");
         auto& locals = methods->localsGrid();
-        check(locals.add() && locals.setCell(0, de::Column::Name, "Ecart") && locals.setCell(0, de::Column::Type, "REAL"), "Locales : Ecart : REAL");
+        check(named(locals, "Ecart") && locals.setCell(0, de::Column::Type, "REAL"), "Locales : Ecart : REAL");
         auto& consts = methods->constantsGrid();
-        check(consts.add() && consts.setCell(0, de::Column::Name, "PRESSION_MAX") && consts.setCell(0, de::Column::Type, "REAL")
-                  && consts.setCell(0, de::Column::Value, "12.0"),
+        check(named(consts, "PRESSION_MAX") && consts.setCell(0, de::Column::Type, "REAL") && consts.setCell(0, de::Column::Value, "12.0"),
               "Constantes : PRESSION_MAX : REAL := 12.0");
         check(!grid.setCell(0, de::Column::Name, "SELF"), "un param\xC3\xA8tre ne s'appelle pas SELF : " + grid.lastMessage());
         const auto* m = hmi::methodById(p, dem);
-        check(m && hmi::methodParamsText(*m) == "Consigne : REAL; Rampe : TIME", "la signature : Demarrer(Consigne : REAL; Rampe : TIME)");
+        check(m && hmi::methodParamsText(*m) == "Consigne : REAL; Rampe : TIME",
+              "la signature : Demarrer(Consigne : REAL; Rampe : TIME) [" + (m ? hmi::methodParamsText(*m) : std::string("?")) + "] " + grid.lastMessage());
         check(methods->setBody(dem, "IF EnDefaut THEN\n    Demarrer := FALSE;\nELSE\n    Ecart := Consigne - Pression;\n"
                                     "    EnMarche := Consigne <= PRESSION_MAX;\n    Debit := Ecart;\n    Demarrer := EnMarche;\nEND_IF;\n")
                   && methods->compileCurrent() == 0,
-              "le corps lit SELF, ses param\xC3\xA8tres, sa locale et sa constante : rien \xC3\xA0 redire");
+              "le corps lit SELF, ses param\xC3\xA8tres, sa locale et sa constante : rien \xC3\xA0 redire"
+                  + (methods->diagnostics().empty() ? std::string{}
+                                                     : " [ligne " + std::to_string(methods->diagnostics().front().line) + " : "
+                                                           + methods->diagnostics().front().message + "]"));
         check(locals.add() && hmi::methodById(p, dem)->decls.size() == 5, "une locale de plus");
+        locals.table().finishCellEdit(false, {});                      // Echap : la case du nom se ferme
         (void)stack.undo();
         check(hmi::methodById(p, dem)->decls.size() == 4, "Ctrl+Z : la locale ajout\xC3\xA9" "e s'en va");
     }
@@ -43689,10 +43704,13 @@ void methodes150() {
         const Id t3 = page.addCase(c3, &why);
         check(t3 != kNoId, "consigne trop haute : attendu TRUE (il rend FALSE)");
         check(t1 != kNoId && !page.addGiven(t1, "SELF.Inconnu", "1", &why), "SELF.Inconnu : refus\xC3\xA9 (" + why + ")");
-        check(page.runCase(t1), "le cas 1 r\xC3\xA9ussit : " + page.lastMessage());
-        check(page.runCase(t2), "le cas 2 r\xC3\xA9ussit (EnDefaut pos\xC3\xA9) : " + page.lastMessage());
-        check(!page.runCase(t3) && page.lastResult(t3) && page.lastResult(t3)->verdict == hmi::Verdict::Failed,
-              "le cas 3 \xC3\xA9" "choue : " + page.lastMessage());
+        const bool ran1 = page.runCase(t1);
+        check(ran1, "le cas 1 r\xC3\xA9ussit : " + page.lastMessage());
+        const bool ran2 = page.runCase(t2);
+        check(ran2, "le cas 2 r\xC3\xA9ussit (EnDefaut pos\xC3\xA9) : " + page.lastMessage());
+        const bool ran3 = page.runCase(t3);
+        check(!ran3 && page.lastResult(t3) && page.lastResult(t3)->verdict == hmi::Verdict::Failed,
+              "le cas 3 \xC3\xA9" "choue (attendu TRUE, obtenu FALSE) : " + page.lastMessage());
         const auto* r1 = page.lastResult(t1);
         check(r1 && r1->call == "Demarrer(6.0, T#2s)", "l'appel se dit dans les mots de la m\xC3\xA9thode : " + (r1 ? r1->call : std::string("?")));
         check(p.variable("Essai_SELF") == nullptr && !p.programs.variables.empty() && p.programs.functions.empty(),
@@ -43713,8 +43731,9 @@ void methodes150() {
         {
             // une methode PRIVEE se teste aussi (le banc seulement la rend appelable)
             const auto* m = hmi::methodById(p, dem);
-            check(m && methods->setVirtual(dem, false) && methods->setPrivate(dem, true) && page.runCase(t1),
-                  "Demarrer priv\xC3\xA9" "e : son cas r\xC3\xA9ussit encore : " + page.lastMessage());
+            const bool made = m && methods->setVirtual(dem, false) && methods->setPrivate(dem, true);
+            const bool ran = made && page.runCase(t1);
+            check(ran, "Demarrer priv\xC3\xA9" "e : son cas r\xC3\xA9ussit encore : " + page.lastMessage());
             (void)stack.undo();
             (void)stack.undo();
         }

@@ -529,7 +529,8 @@ void cScript() {
     const Id c = script(b.p, "En_C", "x = 1;\n", false, ScriptLang::C);
     b.go();
     b.rt.setBreakpoints({at(1, c, kNoId, 1)});
-    check(b.rt.breakpoints()[0].note.find("non ex\xC3\xA9" "cut\xC3\xA9 en simulation (C/C++)") != std::string::npos,
+    // 1.50.0 : le C et le C++ s'executent (traduits pour le moteur), sans le debogueur.
+    check(b.rt.breakpoints()[0].note.find("sans le d\xC3\xA9" "bogueur (C/C++)") != std::string::npos,
           "la note : " + b.rt.breakpoints()[0].note);
     check(Runtime::breakableLines(b.p, c, kNoId).empty(), "aucune ligne a poser");
 }

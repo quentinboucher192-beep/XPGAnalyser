@@ -219,6 +219,29 @@ std::string bare(const std::string& tail) {
     return b == std::string::npos ? tail : tail.substr(0, b);
 }
 
+// Les colonnes d'un tableau a la largeur du tableau (les largeurs voulues, a l'echelle) : aucune ne depasse a droite,
+// chaque case raccourcit son texte (« ... ») au lieu d'etre coupee par le bord.
+void fitTable(ui::TableView* t, const std::vector<float>& natural) {
+    if (!t || natural.empty()) return;
+    auto cols = t->columns();
+    if (cols.size() != natural.size()) return;
+    const float avail = std::max(40.f, t->bounds().w - ui::kScrollBarThickness - 6.f);
+    float sum = 0.f;
+    for (const float n : natural) sum += n;
+    std::vector<float> w(natural.size());
+    float used = 0.f;
+    for (std::size_t i = 0; i < w.size(); ++i) {
+        w[i] = std::max(24.f, std::floor(natural[i] * avail / sum));
+        used += w[i];
+    }
+    w.back() = std::max(24.f, w.back() + avail - used);
+    bool same = true;
+    for (std::size_t i = 0; i < w.size(); ++i) same = same && std::fabs(cols[i].width - w[i]) < 0.5f;
+    if (same) return;
+    for (std::size_t i = 0; i < w.size(); ++i) cols[i].width = w[i];
+    t->setColumns(std::move(cols));
+}
+
 // Les indices d'une valeur, en court : "API.Armoires[3].Departs[7].Voies[5].Etat" -> "[3] . [7] . [5]".
 std::string indicesShort(const std::string& value) {
     std::string out;
@@ -731,7 +754,10 @@ protected:
         ly += 22.f;
         const float avail = std::max(120.f, bottom - ly);
         const float depthH = std::min(static_cast<float>(d_.model_.groups.size()) * rowH + 34.f, std::max(84.f, avail * 0.36f));
-        if (d_.depthTable_) d_.depthTable_->setBounds({lx, ly, leftW, depthH});
+        if (d_.depthTable_) {
+            d_.depthTable_->setBounds({lx, ly, leftW, depthH});
+            fitTable(d_.depthTable_, {44.f, 200.f, 70.f, 76.f, 190.f, 140.f, 100.f, 64.f});
+        }
         ly += depthH + 4.f;
         texts_.push_back({{lx, ly, leftW, 18.f},
                           "Les formules, comme les adresses : i, j, k les compteurs, n le rang, o l'original ; + - * / MOD ( ) ; "
@@ -771,7 +797,10 @@ protected:
         const float noteH = 18.f;
         const float editH = d_.editMode_ ? kRow + 6.f : 0.f;
         const float listH = std::max(60.f, bottom - ly - noteH - editH - 6.f);
-        if (d_.listTable_) d_.listTable_->setBounds({lx, ly, leftW, listH});
+        if (d_.listTable_) {
+            d_.listTable_->setBounds({lx, ly, leftW, listH});
+            fitTable(d_.listTable_, {300.f, 200.f, 170.f, 260.f});
+        }
         ly += listH + 4.f;
         // La regle a part en cours d'ecriture (Formule..., Serie...).
         {
@@ -830,7 +859,14 @@ protected:
         }
         const float rest = std::max(80.f, bottom - ry);
         const float prevH = std::min(static_cast<float>(d_.previewIndex_.size()) * rowH + 34.f, std::max(80.f, rest * 0.42f));
-        if (d_.previewTable_) d_.previewTable_->setBounds({rx, ry, rw, prevH});
+        if (d_.previewTable_) {
+            d_.previewTable_->setBounds({rx, ry, rw, prevH});
+            const std::size_t counters = d_.rules_.counters.mode == dup::CountMode::Series ? 1 : std::min<std::size_t>(3, d_.rules_.counters.grid.size());
+            std::vector<float> natural;
+            for (std::size_t c = 0; c < d_.previewTable_->columns().size(); ++c)
+                natural.push_back(c == 0 ? 64.f : c <= counters ? 30.f : c == counters + 1 ? 120.f : 140.f);
+            fitTable(d_.previewTable_, natural);
+        }
         ry += prevH + 6.f;
         // L'avant / apres de la ligne choisie.
         {
@@ -860,7 +896,10 @@ protected:
             for (const auto& k : d_.conflicts_) faults += k.blocks ? 1 : 0;
             head(rx, ry, rw, "CONFLITS  " + std::to_string(d_.conflicts_.size()), "les fautes d'abord ; un clic m\xC3\xA8ne \xC3\xA0 la ligne");
             ry += 22.f;
-            if (d_.conflictTable_) d_.conflictTable_->setBounds({rx, ry, rw, std::max(40.f, bottom - ry)});
+            if (d_.conflictTable_) {
+                d_.conflictTable_->setBounds({rx, ry, rw, std::max(40.f, bottom - ry)});
+                fitTable(d_.conflictTable_, {420.f, 80.f});
+            }
         }
     }
     void onPaint(const ui::PaintContext& ctx) override {
@@ -953,9 +992,11 @@ protected:
         // La tete : #, Nom (figes), puis les reperes.
         ctx.r.fillRect({b.x, b.y, area.w, kHeadH}, c.headerBg);
         const float frozenRight = area.x + kNumW + width(0);
-        const auto cellText = [&](float x, float y, float w, const std::string& t, gfx::FontId f, gfx::Color k) {
-            const std::string s = fitText(t, f, w - 12.f);
-            if (!s.empty()) ctx.r.drawText({x + 6.f, y + (kRowH - ctx.r.lineHeight(f)) * 0.5f}, s, f, k);
+        const auto cellText = [&](float x, float y, float w, const std::string& t, gfx::FontId f, gfx::Color k, float clipLeft = 0.f) {
+            // La partie visible de la case seulement (une colonne a moitie sous les figees, ou au bord droit).
+            const float left = std::max(x, clipLeft), right = std::min(x + w, area.right());
+            const std::string s = fitText(t, f, right - left - 12.f);
+            if (!s.empty()) ctx.r.drawText({left + 6.f, y + (kRowH - ctx.r.lineHeight(f)) * 0.5f}, s, f, k);
         };
         // Les colonnes visibles (apres les figees).
         std::size_t first = 1;
@@ -968,7 +1009,7 @@ protected:
         {
             float x = x0;
             for (std::size_t col = first; col < cols.size() && x < area.right(); ++col) {
-                cellText(x, b.y, width(col), d_.gridHeader(col, width(col) - 12.f), ctx.theme.font.uiBold, c.text);
+                cellText(x, b.y, width(col), cols[col], ctx.theme.font.uiBold, c.text, frozenRight);
                 ctx.r.fillRect({x + width(col) - 1.f, b.y + 4.f, 1.f, kHeadH - 8.f}, c.border);
                 x += width(col);
             }
@@ -991,14 +1032,14 @@ protected:
             ctx.r.pushClip({frozenRight, y, std::max(0.f, area.right() - frozenRight), kRowH});
             float x = x0;
             for (std::size_t col = first; col < cols.size() && x < area.right(); ++col) {
-                paintCell(ctx, static_cast<int>(r), col, {x, y, width(col), kRowH}, cols, originalName);
+                paintCell(ctx, static_cast<int>(r), col, {x, y, width(col), kRowH}, cols, originalName, frozenRight, area.right());
                 x += width(col);
             }
             ctx.r.popClip();
             // # et le nom (figes).
             ctx.r.fillRect({area.x, y, kNumW + width(0), kRowH}, static_cast<int>(r) == d_.chosen_ ? gfx::Color{60, 130, 220, 40} : c.panelBg);
             cellText(area.x, y, kNumW, r == 0 ? std::string("1 orig.") : std::to_string(r + 1), kSmall, r == 0 ? c.textMuted : c.text);
-            paintCell(ctx, static_cast<int>(r), 0, {area.x + kNumW, y, width(0), kRowH}, cols, originalName);
+            paintCell(ctx, static_cast<int>(r), 0, {area.x + kNumW, y, width(0), kRowH}, cols, originalName, area.x, area.right());
             ctx.r.fillRect({frozenRight - 1.f, y, 1.f, kRowH}, c.borderStrong);
         }
         ctx.r.popClip();
@@ -1174,7 +1215,8 @@ private:
         editor->setVisibility(shown ? ui::Visibility::Visible : ui::Visibility::Hidden);
         editor->setBounds({left + 2.f, r.y + 1.f, std::max(0.f, right - left - 4.f), kRowH - 2.f});
     }
-    void paintCell(const ui::PaintContext& ctx, int r, std::size_t col, gfx::Rect cell, const std::vector<std::string>& cols, const std::string& originalName) {
+    void paintCell(const ui::PaintContext& ctx, int r, std::size_t col, gfx::Rect cell, const std::vector<std::string>& cols, const std::string& originalName,
+                   float clipLeft, float clipRight) {
         ++drawn_;
         const auto& c = ctx.theme.color;
         std::string t = d_.cell(r, cols[col]);
@@ -1191,8 +1233,10 @@ private:
         } else
             ctx.r.strokeRect({cell.x + 2.f, cell.y + 2.f, cell.w - 4.f, cell.h - 4.f}, c.border, 1.f);
         if (editRow_ == r && editCol_ == static_cast<int>(col)) return;
-        const std::string s = fitText(t, ctx.theme.font.ui, cell.w - 16.f);
-        if (!s.empty()) ctx.r.drawText({cell.x + 8.f, cell.y + (cell.h - ctx.r.lineHeight(ctx.theme.font.ui)) * 0.5f}, s, ctx.theme.font.ui, muted ? c.textMuted : c.text);
+        // Le texte dans la partie visible de la case (jamais coupe par le bord : raccourci).
+        const float left = std::max(cell.x, clipLeft), right = std::min(cell.right(), clipRight);
+        const std::string s = fitText(t, ctx.theme.font.ui, right - left - 16.f);
+        if (!s.empty()) ctx.r.drawText({left + 8.f, cell.y + (cell.h - ctx.r.lineHeight(ctx.theme.font.ui)) * 0.5f}, s, ctx.theme.font.ui, muted ? c.textMuted : c.text);
     }
     HmiDuplicateDialog& d_;
     ui::EdgeScrollBar   vbar_, hbar_;
@@ -1419,7 +1463,7 @@ void HmiDuplicateDialog::recompute(bool countersChanged) {
     if (!v) return;
     const long long places = std::clamp<long long>(rules_.counters.places(), 1, dup::kMaxCopies + 1);
     std::vector<std::string> names;
-    if (const auto* ng = model_.group("N"); ng && (rules_.rule(*ng).kind == dup::RuleKind::Auto || rules_.namesByHand))
+    if (const auto* ng = model_.group("#NOM"); ng && (rules_.rule(*ng).kind == dup::RuleKind::Auto || rules_.namesByHand))
         names = dup::seriesNames(*v, scan_, static_cast<int>(places - 1));
     ruleKeep_.clear();
     ruleErrors_.clear();
@@ -1640,6 +1684,7 @@ void HmiDuplicateDialog::validate() {
     warnings_ = dup::addressWarnings(scan_, model_, plan_, addressOwners_);
     // Les cases a signaler : (ligne, repere) -> 1 avertit, 2 bloque (le tableau, l'apercu, la liste).
     flags_.clear();
+    markerLevel_.clear();
     const auto flag = [&](const dup::CellCheck& c) {
         if (c.state == dup::CellState::Empty && !c.blocks) return;   // une case vide gardee : rien a dire
         std::string key;
@@ -1648,6 +1693,8 @@ void HmiDuplicateDialog::validate() {
         else key = "IDX:" + c.column;
         int& level = flags_[{c.row, key}];
         level = std::max(level, c.blocks ? 2 : 1);
+        int& worst = markerLevel_[key];
+        worst = std::max(worst, level);
     };
     for (const auto& c : check_.cells) flag(c);
     for (const auto& c : warnings_) flag(c);
@@ -1762,12 +1809,7 @@ std::size_t HmiDuplicateDialog::listCount(ListFilter f) const {
         case ListFilter::Addresses: n += mm.kind == dup::GroupKind::Address ? 1 : 0; break;
         case ListFilter::Texts: n += mm.kind == dup::GroupKind::Text || mm.kind == dup::GroupKind::Variable ? 1 : 0; break;
         case ListFilter::Own: n += rules_.ownOf(key).kind != dup::OwnKind::Group ? 1 : 0; break;
-        case ListFilter::Conflicts: {
-            bool any = false;
-            for (std::size_t r = 0; r < plan_.rows.size() && !any; ++r) any = conflictOf(static_cast<int>(r), key) > 0;
-            n += any ? 1 : 0;
-            break;
-        }
+        case ListFilter::Conflicts: n += markerLevel_.count(key) ? 1 : 0; break;
         }
     }
     return n;
@@ -1785,14 +1827,13 @@ void HmiDuplicateDialog::buildList() {
         return out;
     };
     const std::size_t lastRow = plan_.rows.empty() ? 0 : plan_.rows.size() - 1;
-    std::map<hmi::Id, Labels> labels;
     const hmi::View* v = view();
     const hmi::Project* project = spec_.doc ? &spec_.doc->project : nullptr;
     const auto whereOf = [&](const dup::MarkerInfo& m) {
         if (m.spots.empty()) return std::string{};
         const auto& s = m.spots.front();
-        auto it = labels.find(s.object);
-        if (it == labels.end()) it = labels.emplace(s.object, v ? inspectorLabels(*v, s.object, project) : Labels{}).first;
+        auto it = labels_.find(s.object);   // 1.50.0 : une fois par objet, pour toute la vie de la fenetre
+        if (it == labels_.end()) it = labels_.emplace(s.object, v ? inspectorLabels(*v, s.object, project) : Labels{}).first;
         std::string w = s.objectName + " \xC2\xB7 " + spotLabel(it->second, s.where);
         if (m.spots.size() > 1) w += " (+" + std::to_string(m.spots.size() - 1) + ")";
         return w;
@@ -1805,12 +1846,7 @@ void HmiDuplicateDialog::buildList() {
         case ListFilter::Addresses: if (mm.kind != dup::GroupKind::Address) return false; break;
         case ListFilter::Texts: if (mm.kind != dup::GroupKind::Text && mm.kind != dup::GroupKind::Variable) return false; break;
         case ListFilter::Own: if (rules_.ownOf(key).kind == dup::OwnKind::Group) return false; break;
-        case ListFilter::Conflicts: {
-            bool any = false;
-            for (std::size_t r = 0; r < plan_.rows.size() && !any; ++r) any = conflictOf(static_cast<int>(r), key) > 0;
-            if (!any) return false;
-            break;
-        }
+        case ListFilter::Conflicts: if (!markerLevel_.count(key)) return false; break;
         default: break;
         }
         if (needle.empty()) return true;
@@ -1838,7 +1874,7 @@ void HmiDuplicateDialog::buildList() {
                          ? (std::find(ruleKeep_.begin(), ruleKeep_.end(), r.key) != ruleKeep_.end() ? std::string("(garde le rep\xC3\xA8re)") : std::string("(\xC3\xA0 remplir)"))
                          : it->second;
         }
-        for (std::size_t q = 0; q < plan_.rows.size(); ++q) r.conflict = std::max(r.conflict, conflictOf(static_cast<int>(q), r.key));
+        if (const auto it = markerLevel_.find(r.key); it != markerLevel_.end()) r.conflict = it->second;
         if (r.conflict && lastRow > 0)
             if (const auto it = lastFault.find(r.key); it != lastFault.end()) r.last += "  \xE2\x80\x94 " + it->second;
         return r;
@@ -1903,8 +1939,7 @@ void HmiDuplicateDialog::buildList() {
             if (it != plan_.rows[lastRow].markers.end()) head.last = it->second;
         }
         for (const std::size_t mi : b.markers)
-            for (std::size_t q = 0; q < plan_.rows.size(); ++q)
-                head.conflict = std::max(head.conflict, conflictOf(static_cast<int>(q), dup::markerKey(scan_.markers[mi].name)));
+            if (const auto it = markerLevel_.find(dup::markerKey(scan_.markers[mi].name)); it != markerLevel_.end()) head.conflict = std::max(head.conflict, it->second);
         listRows_.push_back(std::move(head));
         if (collapsed_.count(b.key)) continue;
         for (const std::size_t mi : b.markers) listRows_.push_back(markerRow(mi));
@@ -2898,11 +2933,11 @@ std::vector<std::string> HmiDuplicateDialog::beforeAfter(int row) const {
     if (row < 0 || static_cast<std::size_t>(row) >= plan_.rows.size()) return out;
     const auto& r = plan_.rows[static_cast<std::size_t>(row)];
     std::set<std::pair<hmi::Id, std::string>> seen;
-    std::map<hmi::Id, Labels> labels;     // 1.11 (T2-22) : les libelles de l'inspecteur, une fois par objet
+    auto& labels = labels_;               // 1.11 (T2-22) : les libelles de l'inspecteur, une fois par objet (1.50.0 : gardes)
     const hmi::View* v = view();
     const hmi::Project* project = spec_.doc ? &spec_.doc->project : nullptr;
     const auto add = [&](const dup::Spot& s) {
-        if (!seen.insert({s.object, s.where}).second || out.size() >= 7) return;
+        if (out.size() >= 7 || !seen.insert({s.object, s.where}).second) return;
         std::string after = s.text;
         if (row > 0 || plan_.replaceOriginal)
             after = dup::replaceMarkers(dup::followIndices(s.text, r.indices), r.markers, nullptr, nullptr, s.expression);

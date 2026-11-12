@@ -242,6 +242,8 @@ private:
     std::vector<hmi::dup::CellCheck>     warnings_;      // les adresses deja prises
     std::vector<Conflict>                conflicts_;
     std::map<std::pair<int, std::string>, int> flags_;   // (ligne, markerKey ou "NOM") -> 1 avertit, 2 bloque
+    std::map<std::string, int>           markerLevel_;   // markerKey -> le pire de ses cases (1 avertit, 2 bloque)
+    mutable std::map<hmi::Id, std::map<std::string, std::string>> labels_;   // les libelles de l'inspecteur, par objet (une fois)
     std::string                          search_;
     ListFilter                           filter_{ListFilter::All};
     Grouping                             grouping_{Grouping::Depth};

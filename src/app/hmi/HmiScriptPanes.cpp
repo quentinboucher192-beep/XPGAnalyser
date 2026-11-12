@@ -374,8 +374,9 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
     if (general()) {
         tools->add(TAddSt, HmiGlyph::Plus, "Nouveau script ST (ex\xC3\xA9" "cut\xC3\xA9 en simulation)", "ST");
-        tools->add(TAddC, HmiGlyph::Plus, "Nouveau script C (\xC3\xA9" "dit\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9)", "C");
-        tools->add(TAddCpp, HmiGlyph::Plus, "Nouveau script C++ (\xC3\xA9" "dit\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9)", "C++");
+        // 1.50.0 : le C et le C++ se compilent et s'executent (un sous-ensemble, HmiScriptC.hpp).
+        tools->add(TAddC, HmiGlyph::Plus, "Nouveau script C (compil\xC3\xA9 et ex\xC3\xA9" "cut\xC3\xA9 en simulation : un sous-ensemble du C)", "C");
+        tools->add(TAddCpp, HmiGlyph::Plus, "Nouveau script C++ (compil\xC3\xA9 et ex\xC3\xA9" "cut\xC3\xA9 en simulation : un sous-ensemble du C++)", "C++");
         tools->add(TRename, HmiGlyph::Text, "Renommer le script (les actions qui l'appellent suivent)", "Renommer");
         tools->add(TDelete, HmiGlyph::Delete, "Supprimer le script, ou le dossier choisi (ses scripts remontent d'un cran) - Ctrl+Z le rend",
                    "Supprimer");

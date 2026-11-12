@@ -412,7 +412,9 @@ void nonRegression() {
     d->setFollow(0, false);
     check(!d->following(0) && d->plan().rows[2].indices.empty(), "decoche : V[0] reste V[0] (sa profondeur : fixe)");
     d->setFollow(0, true);
-    check(d->rules().rule(*d->findGroup("V")).formula == "o + n", "recoche : la regle de V[.] redevient o + n");
+    const auto* gv = d->findGroup("V");
+    check(gv && d->rules().rule(*gv).formula == "o + n" && d->following(0),
+          "recoche : la regle de V[.] redevient o + n (" + (gv ? gv->label + " : " + d->rules().rule(*gv).formula : std::string("introuvable")) + ")");
 }
 
 // --------------------------------------------------------- 500 reperes ----
@@ -582,7 +584,8 @@ void cinqCents() {
     const double tApply = msSince(t0);
     std::printf("   mesure (Debug) : Dupliquer %.0f ms\n", tApply);
     const auto& after = *big.b.doc->project.view(big.b.view);
-    check(after.objects.size() == before + 31 * 16 && res.created.size() == 31, "Dupliquer : 31 x 16 objets, 31 copies de la selection");
+    check(after.objects.size() == before + 31 * 16 && res.created.size() == 31 * 16,
+          "Dupliquer : 31 x 16 objets (" + std::to_string(after.objects.size() - before) + "), les 16 racines de chaque copie (" + std::to_string(res.created.size()) + ")");
     const hmi::Object* last = nullptr;
     for (const auto& o : after.objects)
         if (o.name == "Depart_3_7") last = &o;
@@ -638,16 +641,17 @@ void ecran(TextRecorder& r) {
                       "Tableau (Excel) : 32 x 513, " + std::to_string(ss.drawnCells) + " cases dessinees (les visibles), 2 colonnes figees");
                 bool firstHeader = false;
                 for (const auto& t : r.texts) firstHeader = firstHeader || t.text.find("S0$") != std::string::npos;
-                d->scrollSheet(20000.f, 400.f);
+                d->scrollSheet(1.0e7f, 400.f);   // tout au bout (512 colonnes : des dizaines de milliers de pixels)
                 paintInto(r, *root, size);
                 const auto s2 = d->sheetStats();
                 bool name = false, oldHeader = false, lastHeader = false;
                 for (const auto& t : r.texts) {
                     name = name || t.text.rfind("Depart_", 0) == 0;
                     oldHeader = oldHeader || t.text.find(".S0$") != std::string::npos;
-                    lastHeader = lastHeader || t.text.find("Titre27") != std::string::npos;
+                    lastHeader = lastHeader || t.text == d->columns().back();
                 }
                 check(firstHeader && s2.scrollX > 0.f && s2.scrollY > 0.f && name && !oldHeader && lastHeader,
+                      std::string(firstHeader ? "" : "[pas de S0 avant] ") + (name ? "" : "[pas de nom] ") + (oldHeader ? "[S0 reste] " : "") + (lastHeader ? "" : "[pas de " + d->columns().back() + "] ") +
                       "le tableau defile (" + num(s2.scrollX) + ", " + num(s2.scrollY) + ") : la colonne Nom reste (figee), la premiere colonne de reperes part, la derniere vient");
                 const int out2 = textsOutside(r, d->panelRect(), where + " (defile)");
                 check(out2 == 0, where + " (defile) : aucun texte hors de son cadre");
@@ -682,6 +686,10 @@ int main(int argc, char** argv) {
     gfx::setInterfaceFontFolder(root + "/resources/fonts");
     TextRecorder r;
     installMetrics(r);
+    if (argc > 2 && std::string(argv[2]) == "--mesure") {   // la mesure seule (un profileur)
+        cinqCents();
+        return g_failures == 0 ? 0 : 1;
+    }
     formules();
     nonRegression();
     cinqCents();

@@ -85,7 +85,7 @@ struct AddressText {
 enum class GroupKind : std::uint8_t { Index, Address, Text, Variable, Name };
 struct Group {
     GroupKind                kind{GroupKind::Index};
-    std::string              key;         // la cle de sa regle : "I:API.ARMOIRES[*].DEPARTS" (dim), "A", "T", "V", "N"
+    std::string              key;         // la cle de sa regle : "I:API.ARMOIRES[*].DEPARTS" (dim), "#ADR", "#TXT", "#VAR", "#NOM"
     std::string              label;       // "API.Armoires[\xC2\xB7].Departs[\xC2\xB7]" ; "Adresses %MW, %M"...
     std::string              tail;        // le dernier morceau : "Departs[\xC2\xB7]" (la colonne, en court)
     int                      depth{0};    // Index : 1, 2, 3... (M[i, j] : 1 et 2)

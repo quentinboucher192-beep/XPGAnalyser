@@ -1153,6 +1153,18 @@ struct Space {
     hmi::MethodBench    bench;
     [[nodiscard]] const hmi::Project& project() const { return method ? bench.project : *p; }
     [[nodiscard]] std::string read(const std::string& target) const { return method ? hmi::benchText(bench, target) : target; }
+    // Une methode : la cible, puis ses membres (SELF.Inconnu est refuse ici, pas seulement en jouant le cas).
+    [[nodiscard]] std::string problem(const std::string& target, bool journal) const {
+        const std::string read = this->read(target);
+        std::string bad = targetProblem(project(), read, journal);
+        if (bad.empty() && method && !(journal && sameText(target, "JOURNAL")))
+            for (const auto& pp : hmi::types::pathProblems(project(), read))
+                if (!pp.message.empty()) {
+                    bad = pp.message;
+                    break;
+                }
+        return said(bad);
+    }
     [[nodiscard]] std::string said(std::string text) const {
         if (!method) return text;
         for (std::size_t at = text.find(bench.self); at != std::string::npos; at = text.find(bench.self, at + 4))
@@ -1173,8 +1185,8 @@ bool HmiFunctionTestsPage::addGiven(Id tid, const std::string& rawTarget, const 
     const auto sp = spaceOf(doc_->project, fn());           // 1.50.0 : une methode - SELF.Debit sur son banc
     const hmi::Project& q = sp->project();
     const std::string read = sp->read(target);
-    if (const std::string bad = targetProblem(q, read, false); !bad.empty()) {
-        if (why) *why = sp->said(bad);
+    if (const std::string bad = sp->problem(target, false); !bad.empty()) {
+        if (why) *why = bad;
         return false;
     }
     std::string value = typedValue;
@@ -1205,8 +1217,8 @@ bool HmiFunctionTestsPage::setGiven(Id tid, std::size_t index, const std::string
     const auto sp = spaceOf(doc_->project, fn());           // 1.50.0 : une methode - SELF.Debit sur son banc
     const hmi::Project& q = sp->project();
     const std::string read = sp->read(target);
-    if (const std::string bad = targetProblem(q, read, false); !bad.empty()) {
-        if (why) *why = sp->said(bad);
+    if (const std::string bad = sp->problem(target, false); !bad.empty()) {
+        if (why) *why = bad;
         return false;
     }
     if (const auto* v = q.variable(read)) {
@@ -1260,8 +1272,8 @@ bool HmiFunctionTestsPage::addCheck(Id tid, const std::string& rawTarget, const 
     std::string expected = trim(rawExpected);
     const auto sp = spaceOf(doc_->project, fn());           // 1.50.0 : une methode - SELF.EnMarche sur son banc
     const std::string read = sp->read(target);
-    if (const std::string bad = targetProblem(sp->project(), read, true); !bad.empty()) {
-        if (why) *why = sp->said(bad);
+    if (const std::string bad = sp->problem(target, true); !bad.empty()) {
+        if (why) *why = bad;
         return false;
     }
     if (!keptCheckExpected(sp->project(), read, expected, why)) return false;
@@ -1292,8 +1304,8 @@ bool HmiFunctionTestsPage::setCheck(Id tid, std::size_t index, const std::string
     if (cur.target == target && cur.expected == expected && cur.tolerance == tol) return true;
     const auto sp = spaceOf(doc_->project, fn());           // 1.50.0 : une methode - SELF.EnMarche sur son banc
     const std::string read = sp->read(target);
-    if (const std::string bad = targetProblem(sp->project(), read, true); !bad.empty()) {
-        if (why) *why = sp->said(bad);
+    if (const std::string bad = sp->problem(target, true); !bad.empty()) {
+        if (why) *why = bad;
         return false;
     }
     if (!keptCheckExpected(sp->project(), read, expected, why)) return false;
