@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.49.0", "11/11/2026", "\xC3\xA0 venir"},
+    {"1.50.0", "12/11/2026", "\xC3\xA0 venir"},
+    {"1.49.0", "12/11/2026", "livr\xC3\xA9" "e le 12/11 \xC3\xA0 15 h 00"},
     {"1.48.1", "11/11/2026", "livr\xC3\xA9" "e le 11/11 \xC3\xA0 14 h 40"},
     {"1.48.0", "11/11/2026", "livr\xC3\xA9" "e le 11/11 \xC3\xA0 0 h 40"},
     {"1.47.0", "10/11/2026", "livr\xC3\xA9" "e le 10/11 \xC3\xA0 17 h 20"},
@@ -194,6 +195,51 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.50.0 : les methodes des types IHM, Etirer, Dupliquer, le chat, POINTER TO, les tableaux, les scripts C/C++
+        note("1.50.0", "Types IHM", Kind::Changed,
+         "Les m\xC3\xA9thodes des types IHM s'\xC3\xA9" "crivent comme les fonctions des symboles : \xC2\xAB Ajouter une m\xC3\xA9thode\xE2\x80\xA6 \xC2\xBB ouvre la m\xC3\xAAme "
+         "fen\xC3\xAAtre (Nom, G\xC3\xA9n\xC3\xA9riques, Retour, Port\xC3\xA9" "e, Virtuelle, Description, \xC2\xAB Elle s'\xC3\xA9" "crira FUNCTION \xE2\x80\xA6 \xC2\xBB) et l'\xC3\xA9" "diteur d'une "
+         "m\xC3\xA9thode a les m\xC3\xAAmes onglets : Code, Param\xC3\xA8tres (SELF en premi\xC3\xA8re ligne), Locales, Constantes, Tests. Tes projets se "
+         "convertissent seuls \xC3\xA0 l'ouverture : les blocs VAR \xC3\xA9" "crits dans le corps d'une m\xC3\xA9thode passent dans Locales et "
+         "Constantes.",
+         "fonctions", ""),
+        note("1.50.0", "Vues", Kind::New,
+         "\xC3\x89tirer : clic droit d'un objet de la vue \xE2\x80\xBA \xC3\x89tirer (aussi dans la barre d'outils de la vue) : jusqu'au bord gauche, "
+         "droit, haut ou bas de la vue, toute la largeur, toute la hauteur, jusqu'\xC3\xA0 l'objet voisin, au bord de la s\xC3\xA9lection, \xC3\xA0 "
+         "un rep\xC3\xA8re ou \xC3\xA0 une colonne de la grille. L'aper\xC3\xA7u au survol montre le r\xC3\xA9sultat avant le clic ; un seul Ctrl+Z annule. "
+         "Ctrl+Alt+Maj+fl\xC3\xA8" "che \xC3\xA9tire jusqu'au bord.",
+         "objets", ""),
+        note("1.50.0", "Objets", Kind::Changed,
+         "Dupliquer tient des centaines de rep\xC3\xA8res : les copies se rangent en suite (n) ou en grille (i, j, k) ; les rep\xC3\xA8res se "
+         "groupent par profondeur, adresses, textes, noms ; chaque groupe a une r\xC3\xA8gle, fixe ou une formule comme pour les "
+         "adresses (%MW(1000 + 10 * i), {j:02} dans un texte) ; seules les profondeurs choisies varient. La liste d\xC3\xA9" "file sans "
+         "rien couper, l'aper\xC3\xA7u montre les premi\xC3\xA8res copies, l'onglet Tableau se remplit comme un tableur. Un nom d\xC3\xA9j\xC3\xA0 pris "
+         "avertit (Nom_2) ; un indice hors des bornes bloque.",
+         "objets", ""),
+        note("1.50.0", "Projet", Kind::New,
+         "Le chat de la session : R\xC3\xA9pondre \xC3\xA0 un message pr\xC3\xA9" "cis (au survol ou au clic droit ; ta r\xC3\xA9ponse cite l'extrait, un clic "
+         "dessus ram\xC3\xA8ne au message d'origine), R\xC3\xA9" "duire ou d\xC3\xA9" "baller les longs messages (\xC2\xAB \xE2\x80\xA6 voir tout \xC2\xBB, \xC2\xAB Tout r\xC3\xA9" "duire \xC2\xBB), "
+         "Copier (Ctrl+C, ou avec l'auteur et l'heure).",
+         "editeur", ""),
+        note("1.50.0", "Types", Kind::New,
+         "\xC2\xAB Choisir un type \xC2\xBB a une ligne Acc\xC3\xA8s : Direct, REF_TO ou POINTER TO, un vrai pointeur (p := ADR(x) ; p^ lit et \xC3\xA9" "crit "
+         "la chose vis\xC3\xA9" "e ; NULL tant qu'il ne vise rien), pour tout type, Object compris. \xC2\xAB Le pointeur vise : chaque \xC3\xA9l\xC3\xA9ment / "
+         "le tout \xC2\xBB distingue LIST OF POINTER TO et POINTER TO LIST. Gris\xC3\xA9 avec la raison l\xC3\xA0 o\xC3\xB9 un pointeur n'a pas de sens (une "
+         "constante, une variable IHM, un param\xC3\xA8tre de popup ou de symbole). POINTER OF est lu comme POINTER TO, avec un "
+         "avertissement.",
+         "reference", ""),
+        note("1.50.0", "Variables", Kind::Fixed,
+         "Les tableaux de tableaux et les tableaux \xC3\xA0 deux dimensions sont accept\xC3\xA9s partout de la m\xC3\xAAme fa\xC3\xA7on : ARRAY[0..3] OF "
+         "ARRAY[0..15] OF BOOL comme ARRAY[0..3, 0..15] OF BOOL, dans les variables, les param\xC3\xA8tres, les locales, les "
+         "constantes, les types IHM, les champs et les expressions ; M[i][j] et M[i, j] d\xC3\xA9signent la m\xC3\xAAme case. Une borne fausse "
+         "est expliqu\xC3\xA9" "e en clair.",
+         "reference", ""),
+        note("1.50.0", "Scripts", Kind::Fixed,
+         "Les scripts C et C++ se compilent (F7) et s'ex\xC3\xA9" "cutent : la partie du C/C++ utile aux automatismes (types de base, "
+         "tableaux t[N][M], if, switch, while, do, for, fonctions, pointeurs, printf vers la Console, variables IHM par leur "
+         "nom). Ce qui n'en fait pas partie (class, template, new, malloc, goto\xE2\x80\xA6) est refus\xC3\xA9, avec la faute \xC3\xA0 la bonne ligne. Le "
+         "pas \xC3\xA0 pas ne suit pas encore les scripts C/C++.",
+         "scripts", ""),
         // 1.49.0 : le code d invitation dans le message pour devenir admin
         note("1.49.0", "Projet", Kind::Changed,
          "Devenir admin : le message de l'\xC3\xA9" "diteur qui t'envoie l'Admin (dans tes notifications, ou par un lien) porte maintenant "
