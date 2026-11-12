@@ -294,13 +294,35 @@ ChatReply readReply(const core::json::Value& message) {
     return r;
 }
 
-void writeChat(core::json::Value& out, const ChatMessage& m) {
+void writeChat(core::json::Value& out, const ChatMessage& m, bool replies) {
     out.set("de", m.from);
     out.set("couleur", static_cast<std::int64_t>(m.color));
-    out.set("texte", m.text);
+    out.set("texte", replies ? m.text : quotedText(m));
     out.set("heure", m.time);
     if (!m.id.empty()) out.set("id", m.id);
-    writeReply(out, m.reply);
+    if (replies) writeReply(out, m.reply);
+}
+
+core::json::Value chatFrame(const ChatMessage& m, std::string_view version) {
+    core::json::Value v = core::json::Value::object();
+    v.set("op", "MESSAGE");
+    writeChat(v, m, knowsReplies(version));
+    return v;
+}
+
+core::json::Value sayFrame(const std::string& text, const ChatReply& reply, std::string_view hostVersion) {
+    core::json::Value v = core::json::Value::object();
+    v.set("op", "MESSAGE");
+    if (!reply.empty() && !knowsReplies(hostVersion)) {
+        ChatMessage m;
+        m.text = text;
+        m.reply = reply;
+        v.set("texte", quotedText(m));
+    } else {
+        v.set("texte", text);
+        writeReply(v, reply);
+    }
+    return v;
 }
 
 ChatMessage readChat(const core::json::Value& v) {

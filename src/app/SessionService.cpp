@@ -521,16 +521,9 @@ struct SessionServiceAccess {
     // L'hote : le message part a chacun - avec `id` et `reponse` ; a un Studio d'avant la 1.50, la reponse part avec
     // la citation en premiere ligne du texte (il ignore `reponse`).
     static void broadcastChat(SessionService& s, const session::ChatMessage& m) {
-        core::json::Value now = op("MESSAGE");
-        session::writeChat(now, m);
-        core::json::Value old = now;
-        if (!m.reply.empty()) {
-            old.erase("reponse");
-            old.set("texte", session::quotedText(m));
-        }
         for (const auto& [conn, n] : s.d_->memberOfConn) {
             const auto* mem = s.member(n);
-            s.d_->host.send(conn, m.reply.empty() || (mem && session::knowsReplies(mem->version)) ? now : old, {});
+            s.d_->host.send(conn, session::chatFrame(m, mem ? std::string_view(mem->version) : std::string_view{}), {});
         }
     }
     // L'hote : le message d'un membre (le sien ou celui d'un equipier) - son identifiant, la reponse d'apres sa copie.
@@ -803,12 +796,7 @@ struct SessionServiceAccess {
             if (s.chat_[i].system) continue;
             core::json::Value c = core::json::Value::object();
             const auto& l = s.chat_[i];
-            session::ChatMessage cm{l.id, l.from, l.text, l.time, l.color, l.reply};
-            if (!replies) {
-                cm.text = session::quotedText(cm);
-                cm.reply = {};
-            }
-            session::writeChat(c, cm);
+            session::writeChat(c, session::ChatMessage{l.id, l.from, l.text, l.time, l.color, l.reply}, replies);
             chat.push(std::move(c));
         }
         e.set("messages", std::move(chat));
@@ -1896,19 +1884,9 @@ void SessionService::say(const std::string& text, const std::string& replyTo) {
         SessionServiceAccess::broadcastChat(*this, msg);
         SessionServiceAccess::keep(*this, msg);
     } else {
-        core::json::Value out = op("MESSAGE");
+        // Un hote d'avant la 1.50 ne garderait pas `reponse` : la citation part alors dans le texte, pour tous.
         const auto* host = member(0);
-        if (!reply.empty() && host && !session::knowsReplies(host->version)) {
-            // Un hote d'avant la 1.50 ne garderait pas `reponse` : la citation part dans le texte, pour tous.
-            session::ChatMessage m;
-            m.text = text;
-            m.reply = reply;
-            out.set("texte", session::quotedText(m));
-        } else {
-            out.set("texte", text);
-            session::writeReply(out, reply);
-        }
-        d_->guest.send(out);   // il revient par l'hote, pour tous
+        d_->guest.send(session::sayFrame(text, reply, host ? std::string_view(host->version) : std::string_view{}));   // il revient par l'hote
     }
     ++revision_;
 }

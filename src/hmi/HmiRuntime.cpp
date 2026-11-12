@@ -293,6 +293,51 @@ std::string trimmedView(std::string_view s) {
     while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) --b;
     return std::string(s.substr(a, b - a));
 }
+// 1.50.0 : UNE CASE ECRITE DE L'AUTRE FACON - M[1][2] sur un tableau a deux dimensions (sa case : M[1,2]), T[1,2] sur un
+// tableau de tableaux (sa case : T[1][2]) : les indices regroupes niveau par niveau d'apres les tableaux deplies de
+// l'IHM (leurs dimensions). Les indices sont deja des nombres (un chemin en clair) ; vide : rien a regrouper (pas un
+// tableau IHM, des indices qui ne tombent pas juste, deja la bonne ecriture).
+std::string regroupedCell(const std::map<std::string, types::Aggregate, std::less<>>& aggregates, std::string_view path) {
+    if (aggregates.empty() || path.find('[') == std::string_view::npos) return {};
+    std::string out, key;                         // le chemin refait, et sa cle (majuscules)
+    std::vector<std::string> pending;             // les indices pas encore pris
+    std::size_t i = 0;
+    while (i < path.size()) {
+        const char c = path[i];
+        if (c != '[') {
+            if (!pending.empty()) return {};      // une case pas complete
+            out += c;
+            key += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            ++i;
+            continue;
+        }
+        const auto close = path.find(']', i);
+        if (close == std::string_view::npos) return {};
+        std::size_t from = i + 1;
+        for (;;) {
+            const auto comma = path.find(',', from);
+            const bool last = comma == std::string_view::npos || comma > close;
+            pending.push_back(trimmedView(path.substr(from, (last ? close : comma) - from)));
+            if (last) break;
+            from = comma + 1;
+        }
+        i = close + 1;
+        while (!pending.empty()) {
+            const auto it = aggregates.find(key);
+            if (it == aggregates.end() || !it->second.array) return {};
+            const auto need = static_cast<std::size_t>(it->second.spec.dims);
+            if (pending.size() < need) break;     // le groupe suivant complete la case
+            std::string cell = "[";
+            for (std::size_t d = 0; d < need; ++d) cell += (d ? "," : "") + pending[d];
+            cell += "]";
+            pending.erase(pending.begin(), pending.begin() + static_cast<std::ptrdiff_t>(need));
+            out += cell;
+            key += cell;
+        }
+    }
+    if (!pending.empty() || out == path) return {};
+    return out;
+}
 } // namespace
 
 // Les variables IHM d'abord (sans casse, comme le ST), puis l'automate ; les
@@ -489,6 +534,8 @@ public:
             out = it->second;
             return true;
         }
+        // 1.50.0 : M[1][2] sur deux dimensions, T[1,2] sur un tableau de tableaux - la case ecrite de l'autre facon.
+        if (const std::string cell = regroupedCell(rt_.aggregates_, r); !cell.empty()) return read(cell, out);
         // Lot 16 : Consignes.Length, Four1.Words ; un indice hors des bornes d'un
         // tableau IHM rend la valeur par defaut (et le journal le dit).
         if (!rt_.aggregates_.empty() && rt_.aggregateRead(r, out)) return true;
@@ -599,6 +646,8 @@ public:
             it->second.assignFrom(v);
             return true;
         }
+        // 1.50.0 : la case ecrite de l'autre facon (M[1][2] sur deux dimensions, T[1,2] sur un tableau de tableaux).
+        if (const std::string cell = regroupedCell(rt_.aggregates_, r); !cell.empty()) return write(cell, v);
         // Lot 16 : une case hors des bornes d'un tableau IHM, une propriete de
         // tableau (Length...) : refusees, et dites.
         if (!rt_.aggregates_.empty()) {
@@ -668,6 +717,7 @@ public:
             return rt_.copyRead(r, probe) || rt_.copyObject(r) != nullptr;      // 1.12.4 : ou son objet
         }
         if (vars.count(upper(r)) != 0) return true;
+        if (const std::string cell = regroupedCell(rt_.aggregates_, r); !cell.empty() && vars.count(upper(cell)) != 0) return true;   // 1.50.0
         if (rt_.rich_.count(upper(r)) != 0) return true;           // 1.12.2 : une variable objet
         if (!rt_.qualified_.empty() && r.find('.') != std::string::npos) {   // 1.12.7 : une constante qualifiee
             sim::Value probe;

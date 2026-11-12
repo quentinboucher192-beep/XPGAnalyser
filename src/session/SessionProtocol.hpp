@@ -131,8 +131,9 @@ struct ChatMessage {
 [[nodiscard]] std::string chatExcerpt(std::string_view text, std::size_t maxChars = kExcerptChars);
 // L'identifiant d'un message qui n'en porte pas (un hote d'avant la 1.50) : "h" + 16 hexadecimaux.
 [[nodiscard]] std::string chatIdOf(std::string_view from, std::string_view time, std::string_view text);
-// Les champs de MESSAGE (de, couleur, texte, heure ; id et reponse s'ils sont la) ; et dans l'autre sens.
-void writeChat(core::json::Value& out, const ChatMessage&);
+// Les champs de MESSAGE (de, couleur, texte, heure ; id et reponse s'ils sont la) ; `replies` faux (un Studio d'avant
+// la 1.50) : la citation dans le texte, sans `reponse`. Et dans l'autre sens.
+void writeChat(core::json::Value& out, const ChatMessage&, bool replies = true);
 [[nodiscard]] ChatMessage readChat(const core::json::Value& message);
 void writeReply(core::json::Value& out, const ChatReply&);
 [[nodiscard]] ChatReply readReply(const core::json::Value& message);   // vide : pas une reponse
@@ -140,6 +141,11 @@ void writeReply(core::json::Value& out, const ChatReply&);
 [[nodiscard]] std::string quotedText(const ChatMessage&);
 // Ce Studio (sa version, "1.50.0") connait-il les reponses ? Vide ou illisible : non.
 [[nodiscard]] bool knowsReplies(std::string_view version);
+// La trame MESSAGE que l'hote envoie a un membre de cette version (writeChat, `replies` selon la version).
+[[nodiscard]] core::json::Value chatFrame(const ChatMessage&, std::string_view version);
+// La trame MESSAGE qu'un equipier envoie a l'hote : le texte et la reponse ; un hote d'avant la 1.50 (il ne garderait
+// pas `reponse`) : la citation dans le texte, pour tous.
+[[nodiscard]] core::json::Value sayFrame(const std::string& text, const ChatReply& reply, std::string_view hostVersion);
 
 // ---- les identifiants : chaque membre cree dans son bloc ----
 //  Le membre n cree a partir de n x 2^28 ; une session d'avant a pu y laisser des objets : le
