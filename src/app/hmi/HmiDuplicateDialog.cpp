@@ -1819,6 +1819,11 @@ void HmiDuplicateDialog::buildList() {
             if (lowerOf(s.objectName).find(needle) != std::string::npos || lowerOf(s.where).find(needle) != std::string::npos) return true;
         return false;
     };
+    // La faute de la derniere copie, par repere (relevee une fois : 500 reperes, des milliers de cases).
+    std::map<std::string, std::string> lastFault;
+    for (const auto& c : check_.cells)
+        if (c.blocks && c.row == static_cast<int>(lastRow) && c.column.size() > 2 && c.column.front() == '$')
+            lastFault.emplace(dup::markerKey(c.column.substr(1, c.column.size() - 2)), c.message);
     const auto markerRow = [&](std::size_t mi) {
         ListRow r;
         r.key = dup::markerKey(scan_.markers[mi].name);
@@ -1834,13 +1839,8 @@ void HmiDuplicateDialog::buildList() {
                          : it->second;
         }
         for (std::size_t q = 0; q < plan_.rows.size(); ++q) r.conflict = std::max(r.conflict, conflictOf(static_cast<int>(q), r.key));
-        if (r.conflict && lastRow > 0) {
-            for (const auto& c : check_.cells)
-                if (c.blocks && c.row == static_cast<int>(lastRow) && dup::markerKey(c.column) == dup::markerKey("$" + scan_.markers[mi].name + "$")) {
-                    r.last += "  \xE2\x80\x94 " + c.message;
-                    break;
-                }
-        }
+        if (r.conflict && lastRow > 0)
+            if (const auto it = lastFault.find(r.key); it != lastFault.end()) r.last += "  \xE2\x80\x94 " + it->second;
         return r;
     };
     // Les groupes : une cle, un titre, ses reperes.
