@@ -423,7 +423,7 @@ protected:
         switch (w.role()) {
             case Role::Plus: name = w.key().name.empty() ? std::string("Toi") : w.key().name, role = " \xC2\xB7 admin+"; break;
             case Role::Admin: name = w.me() ? w.me()->name : w.adminKey().name, role = " \xC2\xB7 admin"; break;
-            case Role::Pending: name = w.adminKey().name.empty() ? std::string("Toi") : w.adminKey().name, role = " \xC2\xB7 ajout en cours"; break;   // 1.51.0
+            case Role::Pending: name = w.adminKey().name.empty() ? std::string("Toi") : w.adminKey().name, role = w.joined() ? " \xC2\xB7 ajout en cours" : " \xC2\xB7 code \xC3\xA0 taper"; break;   // 1.51.0
             case Role::Retired: name = w.me() ? w.me()->name : w.adminKey().name, role = " \xC2\xB7 admin retir\xC3\xA9"; break;
             // 1.49.0 : sans cle, XPG Admin (l'Admin classique) dit qu'il attend une invitation
             case Role::None: name = license_admin::classique() ? std::string("Admin \xC2\xB7 sur invitation") : std::string("Admin \xC2\xB7 \xC3\x89" "diteur seulement"); break;
@@ -1271,7 +1271,8 @@ std::string Shell::keyStatusText() const {
     // 1.44.0 : un admin a SA cle (pas celle de l'editeur) ; en attente, retire : dit tel quel.
     switch (ws_->role()) {
         case Role::Admin: return "Admin : " + (ws_->me() ? ws_->me()->name : ws_->adminKey().id);
-        case Role::Pending: return "Admin : ajout en cours";   // 1.51.0 : inscrit par son code, l'Admin+ le signe d'office
+        case Role::Pending:   // 1.51.0 : inscrit par son code, l'Admin+ le signe d'office ; sans code accepte : a taper
+            return ws_->joined() ? "Admin : ajout en cours" : "Admin : code d'invitation \xC3\xA0 taper";
         case Role::Retired: return "Admin retir\xC3\xA9";
         case Role::Plus:
         case Role::None: break;

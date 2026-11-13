@@ -871,6 +871,7 @@ void Workspace::loadAdmins() {
         const adm::Admin* m = me();
         role_ = !m ? Role::Pending : m->active() ? Role::Admin : Role::Retired;
     } else role_ = Role::None;
+    joined_ = adminSigning_ && (isFile(at(folder_, kJoinFile)) || isFile(at(folder_, kAdminRequestFile)));   // 1.51.0
     if (!alertsPrimed_) {   // le premier chargement : les lignes deja relevees ne sont pas de nouvelles alertes
         alertedUpTo_ = readJournalState(folder_).last;
         alertsPrimed_ = true;

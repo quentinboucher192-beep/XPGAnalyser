@@ -660,6 +660,9 @@ public:
     // ======================================================== 1.44.0 : plusieurs admins (WorkspaceAdmins.cpp) ==
     // ---- le role, la cle qui signe, les droits ----
     [[nodiscard]] Role role() const noexcept { return role_; }
+    // 1.51.0 : une cle d'admin INSCRITE par son code d'invitation (inscription-admin.json, ou une demande d'avant la
+    // 1.51) ; faux : une cle sans code accepte (un code refuse) - Pending ne dit alors pas << ajout en cours >>.
+    [[nodiscard]] bool joined() const noexcept { return joined_; }
     [[nodiscard]] const AdminKeyStatus& adminKey() const noexcept { return adminKey_; }
     // La cle qui signe tout (licences, registre, revocations, etats des postes, journal, appels au service) : celle de
     // l'editeur pour l'admin+, celle de l'admin pour un admin de la liste ; nul sinon.
@@ -1031,6 +1034,7 @@ private:
     std::unique_ptr<licensing::SigningKey>      adminSigning_;
     AdminKeyStatus                              adminKey_;
     Role                                        role_{Role::None};
+    bool                                        joined_{false};   // 1.51.0 : joined()
     std::optional<licensing::admins::AdminList> adminList_;
     std::vector<licensing::crypto::PublicKey>   editorKeys_;
     std::uint64_t                               alertedUpTo_{0};   // newAlerts : la derniere ligne deja dite

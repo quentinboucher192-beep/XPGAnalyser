@@ -243,7 +243,7 @@ int main(int argc, char** argv) {
         std::string why;
         auto nina = la::createAdminKey(U(pf.admin), "Nina", &why);
         pf.ws->reload();
-        check(nina && pf.ws->role() == gui::Role::Pending, "une cle d'admin pas dans la liste : ajout en cours (" + why + ")");
+        check(nina && pf.ws->role() == gui::Role::Pending && !pf.ws->joined(), "une cle d'admin pas dans la liste, sans inscription (" + why + ")");
         HostRig rig(pf);
         auto page = gui::makeAdminsPage(rig.host());
         const std::string t = draw(*page);
@@ -257,8 +257,15 @@ int main(int argc, char** argv) {
         check(has(d, "O\xC3\xB9 en est mon ajout") && !has(d, "Voir mon empreinte") && !has(d, "lis-lui ton empreinte"), "le tableau de bord : Ou en est mon ajout");
         ShellRig shell(pf.admin);
         const std::string s = shell.paint();
-        check(has(s, "Nina \xC2\xB7 ajout en cours") && has(s, "Admin : ajout en cours") && !has(s, "En attente d'acceptation"),
-              "la coquille : << Nina - ajout en cours >> (plus d'attente d'acceptation)");
+        // 1.51.0 : sans code accepte, pas << ajout en cours >> (un code refuse) : le code a taper
+        check(has(s, "Nina \xC2\xB7 code \xC3\xA0 taper") && has(s, "Admin : code d'invitation \xC3\xA0 taper") && !has(s, "ajout en cours") &&
+                  !has(s, "En attente d'acceptation"),
+              "la coquille : << Nina - code a taper >> (ni ajout en cours, ni attente d'acceptation)");
+        writeFile(pf.admin / "inscription-admin.json", "{\"format\":\"xpg-inscription-admin/1\",\"nom\":\"Nina\",\"inscrit\":" + std::to_string(g_now - 60) + "}\n");
+        pf.ws->reload();
+        ShellRig shell2(pf.admin);
+        const std::string s2 = shell2.paint();
+        check(pf.ws->joined() && has(s2, "Nina \xC2\xB7 ajout en cours") && has(s2, "Admin : ajout en cours"), "inscrite (son code accepte) : << ajout en cours >>");
     }
 
     // ------------------------------------------------------------------------------------------------

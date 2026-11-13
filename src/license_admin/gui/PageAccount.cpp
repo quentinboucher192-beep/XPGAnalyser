@@ -343,7 +343,7 @@ private:
             const auto o = a.name.rfind('('), e = a.name.rfind(')');
             if (o != std::string::npos && e != std::string::npos && e > o + 1) info_.name = a.name.substr(o + 1, e - o - 1);
         }
-        roleText_ = roleLabel(a.role);
+        roleText_ = a.role == Role::Pending && a.joinedAt == 0 && !w.joined() ? std::string("Pas encore admin") : roleLabel(a.role);   // 1.51.0
         switch (a.role) {
             case Role::Plus: roleTone_ = ui::Tone::Info; break;
             case Role::Admin: roleTone_ = ui::Tone::Ok; break;
@@ -375,6 +375,10 @@ private:
                                                           (listN.empty() ? std::string() : " (liste " + listN + ")"), ui::Tone::Error});
                 break;
             case Role::Pending:   // 1.51.0 : inscrit par son code d'invitation, l'Admin+ le signe d'office
+                if (!w.joined() && a.joinedAt == 0) {   // une cle sans code accepte (refuse) : le code a taper
+                    state_.push_back({"\xC3\x89tat", "une cl\xC3\xA9 d'admin, pas encore inscrite : tape ton code d'invitation (Administrateurs)", ui::Tone::Warning});
+                    break;
+                }
                 state_.push_back({"\xC3\x89tat", "admin, ajout en cours : l'Admin+ signe ta cl\xC3\xA9 d'office", ui::Tone::Warning});
                 if (a.joinedAt)
                     state_.push_back({"Code d'invitation accept\xC3\xA9 le", dateTimeFr(a.joinedAt) + " (" + kit::agoFr(now, a.joinedAt) + ")" +
