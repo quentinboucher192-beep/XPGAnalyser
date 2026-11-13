@@ -691,8 +691,28 @@ std::string projectHeader(const Project& p, ScriptLang lang, const View* view) {
         line("#include <stdbool.h>\n#include <stdint.h>");
     }
     // Les types IHM : enumerations, structures, rappels.
+    // 1.51.0 : un type d'un symbole (S_Pompe.T_Etat) s'ecrit S_Pompe_T_Etat (deux symboles peuvent avoir chacun leur
+    // T_Etat) ; dans un texte de type, S_Pompe.T_Etat devient S_Pompe_T_Etat ; le code du symbole a aussi T_Etat (un alias).
+    const auto cNameOf = [](const HmiType& t) { return t.symbol != kNoId ? t.ns + "_" + t.name : t.name; };
+    const auto cTypeText = [&](std::string text) {
+        for (const auto& o : p.programs.types) {
+            if (o.symbol == kNoId) continue;
+            const std::string full = o.ns + "." + o.name;
+            for (std::size_t at = text.find(full); at != std::string::npos; at = text.find(full, at + 1)) {
+                const bool start = at == 0 || !(std::isalnum(static_cast<unsigned char>(text[at - 1])) || text[at - 1] == '_' || text[at - 1] == '.');
+                const std::size_t e = at + full.size();
+                const bool end = e >= text.size() || !(std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_');
+                if (start && end) text.replace(at, full.size(), cNameOf(o));
+            }
+        }
+        return text;
+    };
     bool first = true;
-    for (const auto& ty : p.programs.types) {
+    for (const auto& ty0 : p.programs.types) {
+        HmiType ty = ty0;
+        ty.name = cNameOf(ty0);
+        for (auto& m : ty.members) m.type = cTypeText(m.type);
+        ty.signature = cTypeText(ty.signature);
         if (first) {
             line("");
             comment("Les types IHM");
@@ -736,6 +756,12 @@ std::string projectHeader(const Project& p, ScriptLang lang, const View* view) {
         }
         line(cpp ? std::string("};") : macro ? "}" + (constraints.empty() ? std::string{} : "   /* " + constraints + " */") : "} " + ty.name + ";");
     }
+    // 1.51.0 : dans le code du symbole, ses types se nomment aussi par leur nom court.
+    if (view)
+        for (const auto& ty : p.programs.types)
+            if (ty.symbol == view->id && ty.generics.empty())
+                line(cpp ? "using " + ty.name + " = " + cNameOf(ty) + ";   // type du symbole " + view->name
+                         : "typedef " + cNameOf(ty) + " " + ty.name + ";   /* type du symbole " + view->name + " */");
     // Les fonctions IHM (et celles de la vue du script) : leurs prototypes.
     std::vector<const HmiFunction*> fns;
     for (const auto& f : p.programs.functions) fns.push_back(&f);

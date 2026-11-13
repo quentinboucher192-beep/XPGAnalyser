@@ -478,13 +478,16 @@ bool Runtime::runSfc(Runnable& runnable) {
         if (a.slFF) { if (a.slSince < 0) a.slSince = now; } else a.slSince = -1;
         const bool slOn = a.slFF && now - a.slSince < tSL;
         a.qPrev = a.q;
-        a.q = (N || lOn || dOn || P || a.sFF || sdOn || a.dsFF || slOn) && !R;
+        a.levelPrev = a.level;
+        a.level = (N || lOn || dOn || a.sFF || sdOn || a.dsFF || slOn) && !R;
+        a.q = (a.level || P) && !R;
 
         if (!a.isSection) {
             (void)write(a.name, Value::boolean(a.q));
             continue;
         }
-        if (!(a.q || a.qPrev)) continue;        // active, ou sa derniere execution
+        // active, ou sa derniere execution (pas apres une simple impulsion P, P1, P0)
+        if (!a.q && !a.levelPrev) continue;
         if (a.program) {
             const auto r = execute(*a.program, *this, scanLimits_);
             scanTopStatements_ += r.statements;
@@ -521,7 +524,7 @@ void Runtime::resetSfc() {
             if (t.ladderState) t.ladderState->reset();
         }
         for (auto& a : run.actions) {
-            a.q = a.qPrev = a.sFF = a.sdFF = a.dsFF = a.slFF = false;
+            a.q = a.qPrev = a.level = a.levelPrev = a.sFF = a.sdFF = a.dsFF = a.slFF = false;
             a.lSince = a.dSince = a.sdSince = a.dsSince = a.slSince = -1;
             if (a.ladderState) a.ladderState->reset();
         }

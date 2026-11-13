@@ -92,6 +92,7 @@ struct SfcChartRun {
         std::shared_ptr<project::ladder::State>         ladderState;
         std::string        why;               // pourquoi elle ne s'execute pas
         bool               q{ false }, qPrev{ false };
+        bool               level{ false }, levelPrev{ false };   // sans les impulsions (P, P1, P0)
         bool               sFF{ false }, sdFF{ false }, dsFF{ false }, slFF{ false };
         std::int64_t       lSince{ -1 }, dSince{ -1 }, sdSince{ -1 }, dsSince{ -1 }, slSince{ -1 };
     };

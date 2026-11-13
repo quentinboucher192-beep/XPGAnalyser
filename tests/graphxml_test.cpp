@@ -217,6 +217,8 @@ bool parse(const std::string& text, domain::Project& p) {
 
 } // namespace
 
+#include "sfc_test.inl"   // 1.51.0 (S) : le GRAFCET natif (modele, modifications, simulation)
+
 int main() {
     std::printf("1.12.24 : un ladder et un GRAFCET gardes tels quels.\n");
     const auto text = document();
@@ -367,6 +369,8 @@ int main() {
         const auto c = project::crossReference(p, "CMD_MARCHE");
         check(c.reads.size() == 1, "references : CMD_MARCHE lu par la transition");
     }
+
+    sfctest::run();   // 1.51.0 (S)
 
     std::printf(failures ? "\n%d echec(s)\n" : "\ntout est bon\n", failures);
     return failures ? 1 : 0;

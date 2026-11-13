@@ -2304,12 +2304,15 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                 const int r = matchRank(t.name, needle);
                 if (r < 0) continue;
                 Item it;
-                it.text = t.name;
+                // 1.51.0 : un type d'un symbole, par son nom complet (S_Pompe.T_Etat : il se lit partout, dans son symbole aussi).
+                const bool own = t.symbol != hmi::kNoId;
+                it.text = own ? hmi::fullName(t) : t.name;
                 it.detail = hmi::isEnumeration(t) ? "\xC3\xA9num\xC3\xA9ration IHM" + kDot + valuesSummary(t)
                                                   : "structure IHM" + kDot + std::to_string(t.members.size()) + (t.members.size() == 1 ? " membre" : " membres");   // 1.11 (R111, T3-11)
+                if (own) it.detail += kDot + "type du symbole " + t.ns;
                 it.kind = Kind::DerivedType;
                 it.rank = r + 1;
-                it.insert = t.name + ";";
+                it.insert = it.text + ";";
                 push(std::move(it));
             }
             break;
