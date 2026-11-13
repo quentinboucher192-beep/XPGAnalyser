@@ -537,12 +537,20 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     // programme : << non activees >>, tout est ouvert.
     // 1.35.0 : une licence flottante prend son poste avant la premiere evaluation ; 1.35.1 : le poste d'exploitation
     // aussi (sans licence, il ne tourne pas : il lui faut son poste flottant et son bail).
+#if XPG_HAVE_SDL3
     licence::start(/*takeFloatingSeat=*/true);
     // 1.34.0 : les avis de la licence (la Decouverte, a chaque lancement : la cloche, l'accueil) et, 1.35.0, le
     // service des licences (un fil de travail : l'heure, le bail, la Decouverte, le code de l'installateur, le jeton
     // flottant, les reponses de l'editeur). Pas sur le poste d'exploitation (--ihm) : personne devant l'ecran.
     if (a->options_.station.empty()) licence::startNotices(true);
     else licence::startService();   // 1.35.1 : le bail, l'heure, le jeton flottant - sans avis (personne devant l'ecran)
+#else
+    // 1.50.1 : UNE CONSTRUCTION SANS SDL n'a pas de fenetre : elle ne tourne que SANS ECRAN (initPlatform : XPG_SANS_ECRAN=1
+    // et une session rejouee) - les essais de bout en bout (sessione2e : deux Studio sur ce PC). Jamais livree (les paquets
+    // sont construits avec SDL, et ce code n'y est pas) : les licences n'y sont pas armees (comme << non activees >> : tout
+    // est ouvert, rien n'est ecrit dans le dossier des licences, le service n'est pas appele). Les licences s'essaient
+    // ailleurs (licence_*_test, licensing_*_test).
+#endif
     // La periode de la sauvegarde de reprise (2 min ; un reglage pour les essais).
     if (const int period = a->settings_.getInt("recovery.autosaveSeconds", 120); period >= 5)
         a->recovery_.setAutosavePeriod(period);

@@ -1436,6 +1436,14 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME deployui     COMMAND deploy_ui_test)                   # 1.28.0 : le volet Deploiement reseau, de bout en bout
     xpg_add_test(NAME session      COMMAND session_test)                     # 1.43.0 : les sessions (vraies sockets sur la boucle locale)
     xpg_add_test(NAME sessionui    COMMAND session_ui_test ${CMAKE_CURRENT_SOURCE_DIR})   # 1.47.0 : le texte dans son cadre (session, accueil)
+    # 1.50.1 : DE BOUT EN BOUT, deux vrais IHM-Studio sur ce PC (tests/session_e2e.py), sans ecran (XPG_SANS_ECRAN=1 : la
+    # construction Linux n'a pas SDL) : l'hote demarre la session, l'equipier entre par la boucle locale et ecrit un long
+    # message, l'hote y repond ; l'equipier voit la citation, le message reduit, le deballe, le copie. SAUTE sans l'executable.
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME sessione2e COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/session_e2e.py ${CMAKE_BINARY_DIR}/IHM-Studio ${CMAKE_CURRENT_SOURCE_DIR})
+        set_tests_properties(sessione2e PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 600)
+    endif()
     xpg_add_test(NAME hmidupliquer COMMAND hmi_dupliquer_test ${CMAKE_CURRENT_SOURCE_DIR})   # 1.50.0 : Dupliquer pour 500 reperes
     xpg_add_test(NAME sessionrelais COMMAND session_relay_test ${CMAKE_CURRENT_SOURCE_DIR})   # 1.44.0 : les sessions par Internet (le relais)
     if(TEST sessionrelais)

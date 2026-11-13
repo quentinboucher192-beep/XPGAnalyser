@@ -23,6 +23,8 @@
 #  SANS ECRAN : la construction Linux des essais n'a pas SDL ; le Studio tourne
 #  entier avec XPG_SANS_ECRAN=1 (app/HeadlessRenderer.hpp : la vraie police
 #  mesure, rien ne se dessine, le presse-papiers en memoire). Aucun serveur X.
+#  Une construction sans SDL n'est jamais livree : ses licences ne sont pas armees
+#  (App.cpp ; une session demande << Travail a plusieurs >>, l'offre ENTERPRISE).
 #  Le service des licences : http://127.0.0.1:9 (rien n'y repond ; jamais le vrai).
 #
 #  SAUTE (<< SAUTE : >>, ctest le compte comme saute) : pas d'executable IHM-Studio
@@ -63,8 +65,7 @@ LONG = ("Début du long message : la mise en service de la station de pompage\\n
         "ligne 8 : prévenir l'exploitant\\n"
         "ligne 9 : fin de la liste")
 
-HOST = FIRST_RUN + """licence-etat
-action project.new
+HOST = FIRST_RUN + """action project.new
 attendre 15
 champ 1 "Essai_Session_E2E"
 champ 2 "${XPG_E2E_PROJET}"
@@ -179,11 +180,6 @@ def environment(root, name, extra):
 
 def launch(exe, src, root, name, script, extra):
     env, home = environment(root, name, extra)
-    # Le registre des editions signe par l'editeur (celui que l'installateur pose a cote du programme) : sans lui, ce PC
-    # n'a aucune edition (<< Absente >>). Avec lui : la Decouverte (30 jours), comme un PC neuf.
-    licences = os.path.join(home, ".local", "share", "xpg", "licences")
-    os.makedirs(licences)
-    shutil.copyfile(os.path.join(src, "ressources-licences", "registre.xpgreg"), os.path.join(licences, "registre.xpgreg"))
     # Les ressources du logiciel (la police Inter, les bibliotheques) : celles des sources, par un lien (en lecture).
     try:
         os.symlink(os.path.join(src, "resources"), os.path.join(home, "resources"))
@@ -231,7 +227,10 @@ def shown(text):
 
 
 def tail(text, n=60):
-    lines = [l for l in shown(text).splitlines() if l.startswith("[script]") or "ECHEC" in l or "chou" in l]
+    lines = []
+    for l in shown(text).splitlines():
+        if (l.startswith("[script]") or "ECHEC" in l or "chou" in l) and (not lines or lines[-1] != l):
+            lines.append(l)   # une attente repete sa ligne a chaque image : une fois
     return "\n".join(lines[-n:])
 
 
@@ -244,9 +243,6 @@ def main():
         exe += ".exe"
     if not os.path.isfile(exe):
         print("SAUTE : pas d'exécutable %s (construire la cible IHM-Studio)" % exe)
-        return 0
-    if not os.path.isfile(os.path.join(src, "ressources-licences", "registre.xpgreg")):
-        print("SAUTE : pas de registre des \u00e9ditions (ressources-licences/registre.xpgreg)")
         return 0
     keep = os.environ.get("XPG_E2E_GARDER") == "1"
     root = tempfile.mkdtemp(prefix="xpg_sessione2e_")
