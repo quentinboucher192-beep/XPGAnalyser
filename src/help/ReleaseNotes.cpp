@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.50.0", "12/11/2026", "\xC3\xA0 venir"},
+    {"1.50.1", "13/11/2026", "\xC3\xA0 venir"},
+    {"1.50.0", "12/11/2026", "livr\xC3\xA9" "e le 12/11 \xC3\xA0 19 h 15"},
     {"1.49.0", "12/11/2026", "livr\xC3\xA9" "e le 12/11 \xC3\xA0 15 h 00"},
     {"1.48.1", "11/11/2026", "livr\xC3\xA9" "e le 11/11 \xC3\xA0 14 h 40"},
     {"1.48.0", "11/11/2026", "livr\xC3\xA9" "e le 11/11 \xC3\xA0 0 h 40"},
@@ -195,6 +196,58 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.50.1 : les methodes (Essayer, surcharges), Etirer (marges de la vue), Dupliquer, le chat de l Assistant IA, les tableaux a N dimensions, les scripts C/C++ au debogueur, l installateur a 125/150 %
+        note("1.50.1", "Types IHM", Kind::New,
+         "Les m\xC3\xA9thodes : \xC2\xAB Essayer \xC2\xBB (barre des m\xC3\xA9thodes) demande les arguments et les valeurs de SELF avant l'appel, lance la "
+         "m\xC3\xA9thode sur une instance d'essai et montre le r\xC3\xA9sultat, SELF apr\xC3\xA8s l'appel et ce qui a chang\xC3\xA9 (SELF.Debit : 0.0 \xE2\x86\x92 4.0) "
+         "; le projet n'est pas touch\xC3\xA9. Une m\xC3\xA9thode se SURCHARGE comme une fonction (\xC2\xAB Nouvelle surcharge \xC2\xBB, ou un nom d\xC3\xA9j\xC3\xA0 "
+         "pris) : chaque appel prend la sienne par ses arguments, Compiler dit un appel ambigu ou qu'aucune ne prend. Changer la "
+         "signature d'une m\xC3\xA9thode virtuelle (renommer, ajouter, retirer ou retyper un param\xC3\xA8tre, le retour) la change dans "
+         "toutes ses red\xC3\xA9" "finitions, \xC3\xA0 tous les niveaux, apr\xC3\xA8s une seule question et en un seul Ctrl+Z. Une m\xC3\xA9thode priv\xC3\xA9" "e est "
+         "gris\xC3\xA9" "e dans l'aide \xC3\xA0 la saisie apr\xC3\xA8s tout chemin vers une instance (variable, locale, param\xC3\xA8tre, case, pointeur, "
+         "retour d'appel), pas dans les m\xC3\xA9thodes du type ni de ses sous-types.",
+         "fonctions", ""),
+        note("1.50.1", "Vues", Kind::Changed,
+         "\xC3\x89tirer : le badge violet \xC2\xAB NOUVEAU \xC2\xBB dans le menu et \xC2\xAB NV \xC2\xBB sur le bouton \xC3\x89tirer de la barre. Chaque vue a ses marges "
+         "(propri\xC3\xA9t\xC3\xA9s de la vue \xE2\x80\xBA Marges de la vue : en haut, en bas, \xC3\xA0 gauche, \xC3\xA0 droite ; 16 px pour une nouvelle vue, aucune "
+         "pour une vue existante, qui s'\xC3\xA9tire comme avant) : \xC2\xAB Garder les marges \xC2\xBB s'arr\xC3\xAAte \xC3\xA0 elles, et le menu dit la valeur "
+         "prise. \xC2\xAB Garder les marges \xC2\xBB est retenu par projet, pour tous ses \xC3\xA9" "diteurs de vues.",
+         "objets", ""),
+        note("1.50.1", "Objets", Kind::Changed,
+         "Dupliquer : \xC2\xAB Grouper par \xC2\xBB range les rep\xC3\xA8res en arbre \xC3\xA0 plusieurs niveaux (Armoires \xE2\x80\xBA Departs \xE2\x80\xBA Voies), avec leur "
+         "nombre \xC3\xA0 chaque niveau ; \xC2\xAB Tout d\xC3\xA9plier \xC2\xBB et \xC2\xAB Tout replier \xC2\xBB vont \xC3\xA0 tous les niveaux. Un rep\xC3\xA8re peut avoir sa propre "
+         "r\xC3\xA8gle dans son groupe (double-clic ou F2 sur sa r\xC3\xA8gle) : trois textes d'un m\xC3\xAAme groupe, trois r\xC3\xA8gles. Dans l'onglet \xC2\xAB "
+         "Tableau (Excel) \xC2\xBB, \xC3\x89" "chap annule la case en cours (l'ancienne valeur revient), un second \xC3\x89" "chap ferme la fen\xC3\xAAtre ; "
+         "Entr\xC3\xA9" "e enregistre et passe \xC3\xA0 la case du dessous. Les tableaux d'un type IHM ont leurs bornes : un indice hors bornes y "
+         "est dit, comme ailleurs.",
+         "objets", ""),
+        note("1.50.1", "Projet", Kind::New,
+         "L'Assistant IA a les gestes du chat de la session : R\xC3\xA9pondre \xC3\xA0 un message (au survol ou au clic droit ; la citation "
+         "part avec ta demande, un clic dessus remonte au message), les longs messages r\xC3\xA9" "duits \xC3\xA0 4 lignes (\xC2\xAB \xE2\x80\xA6 voir tout \xC2\xBB, un "
+         "bloc de code n'est jamais coup\xC3\xA9, \xC2\xAB Tout r\xC3\xA9" "duire \xC2\xBB), Copier, Copier avec l'auteur et l'heure, Copier le code, et Ctrl+C "
+         "sur un message choisi.",
+         "editeur", ""),
+        note("1.50.1", "Variables", Kind::New,
+         "Les tableaux ont autant de dimensions que tu veux (ARRAY[0..3, 0..7, 0..15] OF BOOL ; \xC2\xAB + Dimension \xC2\xBB dans le choix du "
+         "type), partout : variables IHM, types IHM, scripts, en-t\xC3\xAAte C. Moins d'indices que de dimensions donne une partie "
+         "(Matrice[1] : une ligne). Plus de limite d'un million de cases : un grand tableau est rang\xC3\xA9 en bloc compact (un BOOL : "
+         "1 bit ; 10 millions de cases tiennent en 1,2 Mo), seule la m\xC3\xA9moire compte (1 Go au plus par variable, refus avec "
+         "l'estimation). Au-del\xC3\xA0 de 100 000 cases, un tableau vit dans la m\xC3\xA9moire de l'IHM et ne se lie pas \xC3\xA0 un \xC3\xA9quipement.",
+         "reference", ""),
+        note("1.50.1", "Scripts", Kind::New,
+         "Les scripts C et C++ au d\xC3\xA9" "bogueur : points d'arr\xC3\xAAt dans la marge, F10, F11, Maj+F11, la ligne en cours dans le code C, "
+         "la pile et les variables sous leurs noms et types C (structures, cases, *p, this), conditions et espions \xC3\xA9" "crits en C. "
+         "Le C/C++ accept\xC3\xA9 s'\xC3\xA9largit : struct, enum, typedef, sizeof, initialiseurs d\xC3\xA9sign\xC3\xA9s, macros \xC3\xA0 param\xC3\xA8tres et #if, switch "
+         "sans break, ++ dans une expression, pointeurs dans un tableau (p + i, p - q ; une case hors du tableau est une faute \xC3\xA0 "
+         "sa ligne), classes (constructeurs, private, h\xC3\xA9ritage simple et virtuelles), new/delete et malloc/free surveill\xC3\xA9s, "
+         "lambdas, std::array, std::vector, std::string. \xC3\x87" "a reste un traducteur, pas un vrai compilateur : goto, templates, "
+         "exceptions, h\xC3\xA9ritage multiple, surcharge d'op\xC3\xA9rateurs et union sont refus\xC3\xA9s avec la faute \xC3\xA0 la bonne ligne.",
+         "scripts", ""),
+        note("1.50.1", "Projet", Kind::Fixed,
+         "L'installateur des Studios \xC3\xA0 125 % et 150 % : une description sur deux lignes ne touche plus le trait de l'en-t\xC3\xAAte, "
+         "les choix de \xC2\xAB Que veux-tu installer ? \xC2\xBB ne se chevauchent plus, le r\xC3\xA9" "capitulatif revient \xC3\xA0 la ligne au lieu de "
+         "d\xC3\xA9" "border \xC3\xA0 droite. L'installateur de XPG Admin a \xC3\xA9t\xC3\xA9 revu aux m\xC3\xAAmes tailles.",
+         "editeur", ""),
         // 1.50.0 : les methodes des types IHM, Etirer, Dupliquer, le chat, POINTER TO, les tableaux, les scripts C/C++
         note("1.50.0", "Types IHM", Kind::Changed,
          "Les m\xC3\xA9thodes des types IHM s'\xC3\xA9" "crivent comme les fonctions des symboles : \xC2\xAB Ajouter une m\xC3\xA9thode\xE2\x80\xA6 \xC2\xBB ouvre la m\xC3\xAAme "
