@@ -20008,7 +20008,7 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 256, "centre : L'IHM a les 256 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume ; 1.14.1 lot N4 : objet-calculatrice ; 1.14.1 lot N5 : objet-convertisseur-unites, objet-explorateur-fichiers ; 1.15.0 : assistant-ia-registre ; 1.16.0 : assistant-ia-integree ; 1.19.0 : assistant-ia-plan ; 1.20.0 : incidents ; 1.22.0 : assistant-ia-missions ; 1.23.1 : couleurs-semantiques ; 1.24.0 : bibliotheque-sons ; 1.25.0 : mise-en-page-rapports ; 1.26.0 : bibliotheque-images, bibliotheque-polices, editeur-polices, corbeille ; 1.27.0 : cycle-vue, objets-scripts ; 1.28.0 : deploiement-reseau ; 1.30.0 : licence)");
+    check(ix.count(hc::Chapter::Hmi) == 257, "centre : L'IHM a les 257 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume ; 1.14.1 lot N4 : objet-calculatrice ; 1.14.1 lot N5 : objet-convertisseur-unites, objet-explorateur-fichiers ; 1.15.0 : assistant-ia-registre ; 1.16.0 : assistant-ia-integree ; 1.19.0 : assistant-ia-plan ; 1.20.0 : incidents ; 1.22.0 : assistant-ia-missions ; 1.23.1 : couleurs-semantiques ; 1.24.0 : bibliotheque-sons ; 1.25.0 : mise-en-page-rapports ; 1.26.0 : bibliotheque-images, bibliotheque-polices, editeur-polices, corbeille ; 1.27.0 : cycle-vue, objets-scripts ; 1.28.0 : deploiement-reseau ; 1.30.0 : licence ; 1.51.0 : types-symbole)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 125, "centre : 11 expressions, 125 notes (1.50.1)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -32257,7 +32257,8 @@ void fonctionsSymboleEditeur11110() {
         const auto fns = n >= 7 ? tree.childAt(symNode, 5) : ui::kInvalidNode;
         const auto pops = n >= 7 ? tree.childAt(symNode, 6) : ui::kInvalidNode;
         // Le compteur part en pastille (counterOf) : le libelle seul.
-        check(n == 7 && tree.text(fns) == "Fonctions" && tree.counterOf(fns) == "3" && tree.style(fns).iconTone == ui::Tone::InOut
+        // 1.51.0 : + Types IHM (la huitieme partie d'un symbole, apres Popups).
+        check(n == 8 && tree.text(fns) == "Fonctions" && tree.counterOf(fns) == "3" && tree.style(fns).iconTone == ui::Tone::InOut
                   && tree.text(pops) == "Popups" && tree.counterOf(pops) == "1",
               "le symbole d\xC3\xA9" "ball\xC3\xA9 : Fonctions [3] (violet), Popups [1] (" + std::to_string(n) + ", " + tree.text(fns) + ", "
                   + tree.text(pops) + ", ton " + std::to_string(static_cast<int>(tree.style(fns).iconTone)) + ")");
@@ -36933,7 +36934,8 @@ void vueOnglets11216() {
     sym.role = "symbole";
     p.views.push_back(sym);
     app::HmiEditor eds("eds11216", doc, p.views.back().id, apply);
-    check(eds.symbolTabs() && !eds.viewTabs() && eds.symbolTabs()->order().size() == 6, "un symbole : ses six sous-onglets, pas Constantes");
+    check(eds.symbolTabs() && !eds.viewTabs() && eds.symbolTabs()->order().size() == 7,
+          "un symbole : ses sept sous-onglets (1.51.0 : Types IHM), pas Constantes");
 }
 
 // 1.12.17 : LA SIMULATION DEPLIEE - Vue d'ensemble, IHM, Equipements, Journal : leurs lignes, les
