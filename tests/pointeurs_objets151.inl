@@ -26,6 +26,7 @@
 #include "../src/hmi/HmiNatives.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 
 namespace {
@@ -255,6 +256,17 @@ void objetsGetAdr151() {
         check(err.find("Get()") != std::string::npos, "le moteur : Get(3) refuse - il ne prend pas d'argument (" + err + ")");
     }
     refused("ObjPtr := Vue_Accueil.Carte_1.Get(1);\n", ptr, "ne prend pas d'argument", "Get(1)");
+    // une valeur initiale : un nombre ne va pas dans un pointeur, un objet, une reference (la case Initiale le dit)
+    {
+        Project p;
+        check(!hmi::decledit::valueMisfit(p, "POINTER TO Object", "0").empty() && !hmi::decledit::valueMisfit(p, "Object", "1").empty()
+                  && !hmi::decledit::valueMisfit(p, "REF_TO Object", "TRUE").empty(),
+              "une valeur initiale 0, 1, TRUE ne va pas dans POINTER TO Object, Object, REF_TO Object");
+        check(hmi::decledit::valueMisfit(p, "POINTER TO Object", "NULL").empty() && hmi::decledit::valueMisfit(p, "Object", "'Carte_1'").empty()
+                  && hmi::decledit::valueMisfit(p, "POINTER TO Object", "Vue_Accueil.Carte_1.Get()").empty()
+                  && hmi::decledit::valueMisfit(p, "INT", "0").empty(),
+              "... NULL, 'Carte_1', Vue_Accueil.Carte_1.Get() : oui ; INT := 0 comme avant");
+    }
     // une fonction Get du projet ne gene pas : Vue.Objet.Get() reste la methode de l'objet
     {
         Case c("ObjPtr := Vue_Accueil.Carte_1.Get();\n", ptr);
@@ -342,6 +354,22 @@ void objetsOngletVariables151() {
         check(barAfter.find("n'existe pas") == std::string::npos && barAfter.rfind("Erreur", 0) != 0,
               std::string("[") + t.type + "] la barre sous l'editeur suit (" + barAfter + ")");
         check(pane.statusText().find("aucune erreur") != std::string::npos, std::string("[") + t.type + "] la barre du volet : " + pane.statusText());
+        // la variable neuve valait 0 (INT) : un type qui ne prend pas un nombre perd ce 0 (sinon, en marche : << un DINT ne va pas
+        // dans un Object >> a la ligne 1) ; le cycle tourne sans erreur
+        std::string tu = t.type;
+        for (auto& ch : tu) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+        if (tu.find("OBJECT") != std::string::npos && tu.find("LIST") == std::string::npos) {
+            check(c.sc().decls.front().value.empty(), std::string("[") + t.type + "] le 0 de la variable neuve est retire (" + c.sc().decls.front().value + ")");
+            Runtime rt;
+            rt.bind(&c.doc->project, nullptr);
+            rt.start(0.0);
+            rt.tick(0.1);
+            rt.tick(0.2);
+            std::string errors;
+            for (const auto& j : rt.journal())
+                if (j.level == LogLevel::Error || j.kind == "Erreur") errors += " | " + j.message;
+            check(errors.empty(), std::string("[") + t.type + "] en marche : le script de cycle tourne sans erreur" + errors);
+        }
     }
     app::assist::installProgram({}, {});
 }

@@ -207,9 +207,9 @@ int main(int argc, char** argv) {
         check(fx.licence("XPG-2026-RZ102", "Atelier Exemple", "PROFESSIONAL", {fx.request("pc2", "PC-ATELIER-2")}).ok, "une licence et sa demande (activations.jsonl)");
         gui::Workspace lea(U(fx.root / "lea"));
         check(lea.serviceConfigure(svc.url()).ok, "le poste de Lea : l'adresse");
-        std::string code;   // 1.51.0 : l'invitation, le code, la signature d'office (plus de demande d'admin)
-        check(plus.inviteAdmin("L\xC3\xA9" "a Essai", "lea@exemple.invalid", "Tous les droits", code).ok, "Lea invitee");
-        r = lea.joinWithInvitation(code);
+        std::string invitation;   // 1.51.0 : l'invitation, le code, la signature d'office (plus de demande d'admin)
+        check(plus.inviteAdmin("L\xC3\xA9" "a Essai", "lea@exemple.invalid", "Tous les droits", invitation).ok, "Lea invitee");
+        r = lea.joinWithInvitation(invitation);
         check(r.ok, "Lea tape son code : inscrite (" + r.text() + ")");
         lea.reload();
         r = plus.admitInvitedAdmins();

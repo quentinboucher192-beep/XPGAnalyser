@@ -1140,10 +1140,20 @@ std::string valueMisfit(const Project& p, std::string_view type, std::string_vie
                 return "un " + lit + " (" + value + ") ne va pas dans un " + target;
             return {};
         }
-        case typereg::Category::Collection:
         case typereg::Category::Reference:
         case typereg::Category::Callback:          // 1.12.19
-        case typereg::Category::Ihm:               // 1.27.0
+        case typereg::Category::Ihm: {             // 1.27.0
+            // 1.51.0 : un pointeur, une reference, un rappel, un objet ne prennent pas un nombre (le 0 d'une variable neuve
+            // dont le type devient POINTER TO Object : << un DINT ne va pas dans un Object >> a la ligne 1, en marche).
+            // NULL, ADR(x), Vue.Objet, un nom entre apostrophes ('Pompe_1', 'Carlito') : oui.
+            bool integer = false;
+            long long n = 0;
+            const std::string lit = literalTypeOf(value, integer, n);
+            if (!lit.empty() && upperOf(lit).rfind("STRING", 0) != 0)
+                return "un " + r.text + " prend NULL, ADR(variable) ou un objet (Vue.Objet), pas " + value;
+            break;
+        }
+        case typereg::Category::Collection:
         case typereg::Category::Generic:
         case typereg::Category::Void:
             break;

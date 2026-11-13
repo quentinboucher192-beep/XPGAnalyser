@@ -155,9 +155,16 @@ namespace app {
             if (!run || step < 0 || static_cast<std::size_t>(step) >= chart_.items.size()) return std::nullopt;
             const auto& acts = chart_.items[static_cast<std::size_t>(step)].actions;
             if (rank < 0 || static_cast<std::size_t>(rank) >= acts.size()) return std::nullopt;
-            const auto* a = run->action(acts[static_cast<std::size_t>(rank)].name);
+            const auto& act = acts[static_cast<std::size_t>(rank)];
+            const auto* a = run->action(act.name);
             if (!a) return std::nullopt;
-            return a->q;
+            // la case d'une association : R n'est jamais "en cours" ; une action memorisee
+            // (S, SD, DS, SL) l'est tant qu'elle tient ; les autres, avec leur etape
+            const auto q = sfc::normalQualifier(act.qualifier);
+            if (q == "R") return false;
+            if (q == "S" || q == "SD" || q == "DS" || q == "SL") return a->q;
+            const auto* s = run->stepNamed(chart_.items[static_cast<std::size_t>(step)].name);
+            return a->q && s && s->active;
         };
         ext.stepName = [this](int id) {
             return id >= 0 && static_cast<std::size_t>(id) < chart_.items.size() ? chart_.items[static_cast<std::size_t>(id)].name
@@ -721,7 +728,7 @@ namespace app {
     }
 
     // ------------------------------------------------------------------ les Proprietes
-    void SfcPane::showSelection() {
+    void SfcPane::showSelection(bool withCode) {
         std::vector<std::vector<std::string>> rows;
         auto add = [&](std::string field, std::string value) { rows.push_back({ std::move(field), std::move(value) }); };
         const auto part = view_->selectedPart();
@@ -764,9 +771,9 @@ namespace app {
                 const auto& a = s.actions[k];
                 if (!a.isSection) continue;
                 if (const auto* src = chart_.source("actionSource", a.name); src && src->language == domain::PouLanguage::ST) {
-                    code_->show(GrafcetCodePanel::Target::Action, sfc::actionId(id, static_cast<int>(k)),
+                    if (withCode) code_->show(GrafcetCodePanel::Target::Action, sfc::actionId(id, static_cast<int>(k)),
                                 "Section d'action " + a.name + " (ST)", src->body, "Appliquer l'\xC3\xA9" "crit dans le GRAFCET");
-                    code_->editor().setReadOnly(false);
+                    if (withCode) code_->editor().setReadOnly(false);
                     codeShown = true;
                 }
             }
@@ -787,9 +794,9 @@ namespace app {
                                                  + (tr.value ? (*tr.value ? "  \xC2\xB7  vraie" : "  \xC2\xB7  fausse") : "")
                                                  + (tr.why.empty() ? "" : "  \xC2\xB7  " + tr.why));
             if (src && src->language == domain::PouLanguage::ST) {
-                code_->show(GrafcetCodePanel::Target::Transition, id, "Section de transition " + src->name + " (ST)", src->body,
+                if (withCode) code_->show(GrafcetCodePanel::Target::Transition, id, "Section de transition " + src->name + " (ST)", src->body,
                             "une expression BOOL ; Appliquer l'\xC3\xA9" "crit dans le GRAFCET");
-                code_->editor().setReadOnly(false);
+                if (withCode) code_->editor().setReadOnly(false);
             }
             else if (src) {
                 domain::Section fake;
@@ -797,16 +804,16 @@ namespace app {
                 fake.body = src->body;
                 std::string listing;
                 for (const auto& line : project::graphListing(fake)) listing += line.text + "\n";
-                code_->show(GrafcetCodePanel::Target::None, id, "Section de transition " + src->name + " ("
+                if (withCode) code_->show(GrafcetCodePanel::Target::None, id, "Section de transition " + src->name + " ("
                                 + std::string(domain::toString(src->language)) + ", lecture)", listing,
                             "un sch\xC3\xA9ma : la bobine " + src->name + " est la r\xC3\xA9" "ceptivit\xC3\xA9");
-                code_->editor().setReadOnly(true);
+                if (withCode) code_->editor().setReadOnly(true);
             }
             else {
-                code_->show(GrafcetCodePanel::Target::Transition, id, "R\xC3\xA9" "ceptivit\xC3\xA9",
+                if (withCode) code_->show(GrafcetCodePanel::Target::Transition, id, "R\xC3\xA9" "ceptivit\xC3\xA9",
                             (t.invert ? "NOT " : "") + t.condText,
                             "une variable (NOT X), ou une expression (elle part dans une section de transition ST)");
-                code_->editor().setReadOnly(false);
+                if (withCode) code_->editor().setReadOnly(false);
             }
             codeShown = true;
         }
@@ -825,9 +832,9 @@ namespace app {
                         if (const auto* ac = run->action(a.name)) add("En simulation", ac->q ? "en cours" : "arr\xC3\xAAt\xC3\xA9" "e");
                     if (a.isSection)
                         if (const auto* src = chart_.source("actionSource", a.name); src && src->language == domain::PouLanguage::ST) {
-                            code_->show(GrafcetCodePanel::Target::Action, id, "Section d'action " + a.name + " (ST)", src->body,
+                            if (withCode) code_->show(GrafcetCodePanel::Target::Action, id, "Section d'action " + a.name + " (ST)", src->body,
                                         "Appliquer l'\xC3\xA9" "crit dans le GRAFCET");
-                            code_->editor().setReadOnly(false);
+                            if (withCode) code_->editor().setReadOnly(false);
                             codeShown = true;
                         }
                 }
@@ -856,7 +863,7 @@ namespace app {
         }
         for (const auto& [i, m] : topo_.problems)
             if (i == id || (i < 0 && part == GrafcetPart::None)) add("\xE2\x9A\xA0", m);
-        if (!codeShown && part != GrafcetPart::Transition)
+        if (withCode && !codeShown && part != GrafcetPart::Transition)
             code_->showNothing("Choisis une transition (sa r\xC3\xA9" "ceptivit\xC3\xA9) ou une \xC3\xA9tape (sa section d'action).");
         propsModel_->setRows(std::move(rows));
         props_->invalidate();
@@ -987,6 +994,8 @@ namespace app {
             line += "  \xC2\xB7  en simulation : " + (act.empty() ? std::string("aucune \xC3\xA9tape active") : "actives " + act);
         }
         if (!chart_.editable) line += "  \xC2\xB7  lecture seule : " + (chart_.error.empty() ? std::string("pas de r\xC3\xA9seau") : chart_.error);
+        // en simulation, les Proprietes suivent (deux fois par seconde environ ; le volet Code ne bouge pas)
+        if (liveChart() && ++liveFrames_ % 30 == 0) showSelection(false);
         if (line != statusLine_) {
             statusLine_ = line;
             status_->setMessage(line, topo_.problems.empty() ? gfx::Color{} : gfx::Color::rgb(0xE8C46F));

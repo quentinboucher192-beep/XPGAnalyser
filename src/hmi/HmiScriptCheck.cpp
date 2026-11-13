@@ -1406,6 +1406,11 @@ private:
                 return {};
             }
         }
+        // 1.51.0 : S_Pompe.T_Mode#Marche - le litteral d'une enumeration d'un symbole (son espace ; le symbole est aussi une
+        // vue) : pas Vue.Objet.Propriete (ses valeurs se controlent avec les enumerations).
+        if (p && i + 2 < toks_.size() && toks_[i + 1].text == "." && toks_[i + 2].text.find('#') != std::string::npos
+            && p->isNamespace(root.text) && findEnumeration(*p, root.text + "." + toks_[i + 2].text.substr(0, toks_[i + 2].text.find('#'))))
+            return {};
         // SYS.X, Vue.Objet.Propriete : le chemin public (l'index le coupe).
         if (p && (pub::isSysRoot(root.text) || pub::viewNamed(*p, root.text))) {
             std::string dotted = root.text;

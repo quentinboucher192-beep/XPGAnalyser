@@ -13,6 +13,7 @@
 #include "../src/hmi/HmiSymbolTypes.hpp"
 #include "../src/hmi/HmiTrash.hpp"
 #include "../src/hmi/HmiDesign.hpp"
+#include "../src/hmi/HmiScript.hpp"   // projectHeader
 
 namespace symt151 {
 
@@ -232,6 +233,14 @@ void symtypes151() {
         bool said = false;
         for (const auto& i : more) said = said || (i.property == "Court" && i.message.find("S_Pompe.T_Libre") != std::string::npos);
         check(said, "hors du symbole, T_Libre (nom court) : Compiler dit d'\xC3\xA9" "crire S_Pompe.T_Libre (" + issueWith(more, "T_Libre") + ")");
+    }
+
+    {
+        // L'en-tete C du projet (un script C du symbole) : S_Pompe_T_Etat, et T_Etat dans le symbole.
+        const std::string h = hmi::projectHeader(p, hmi::ScriptLang::C, p.view(symId));
+        check(h.find("} S_Pompe_T_Etat;") != std::string::npos && h.find("typedef S_Pompe_T_Etat T_Etat;") != std::string::npos
+                  && h.find("} T_Etat;") != std::string::npos,
+              "l'en-t\xC3\xAAte C : S_Pompe_T_Etat (et T_Etat du projet) ; dans le symbole, T_Etat est le sien");
     }
 
     // ---- 3. RENOMMER, SUPPRIMER ----

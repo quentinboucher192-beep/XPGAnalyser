@@ -237,19 +237,27 @@ int main() {
     }
 
     // --- 7. what is not supported says so -------------------------------------
+    //  1.51.0 : une section LD tourne (project/LadderSim) ; le FBD, lui, reste dit.
     {
         Fixture f;
         f.global("x", "DINT");
+        assert(f.stack.push(std::make_unique<AddSectionCommand>(
+                   f.project, "Bloc", "MAST", PouLanguage::FBD)).has_value());
         assert(f.stack.push(std::make_unique<AddSectionCommand>(
                    f.project, "Ladder", "MAST", PouLanguage::LD)).has_value());
         f.section("Cycle", "x := 1;\n");
 
         Runtime rt(f.project);
         assert(rt.prepare().has_value());
-        bool warned = false;
+        bool warned = false, ladderWarned = false;
         for (const auto& d : rt.preparationDiagnostics())
-            if (d.message.find("Structured Text only") != std::string::npos) warned = true;
-        assert(warned && "an LD section must be declared unrunnable, not silently skipped");
+            if (d.message.find("Structured Text only") != std::string::npos) {
+                if (d.section == "Ladder") ladderWarned = true;
+                else warned = true;
+            }
+        assert(warned && "an FBD section must be declared unrunnable, not silently skipped");
+        assert(!ladderWarned && "an LD section runs (1.51.0)");
+        assert(rt.ladderSections().size() == 1);
         (void)rt.step();
         assert(intOf(rt, "x") == 1 && "the ST section still runs");
     }

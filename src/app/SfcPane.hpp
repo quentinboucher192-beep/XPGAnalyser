@@ -79,7 +79,7 @@ namespace app {
     private:
         bool apply(const sfc::EditResult& r, const std::string& label);
         void rebuild();
-        void showSelection();
+        void showSelection(bool withCode = true);
         void editCondition(int item);
         void editStep(int item);
         void editAction(int step, int rank);
@@ -106,6 +106,7 @@ namespace app {
         std::string           statusLine_;
         std::size_t           caretLine_{ 0 };   // le curseur du volet Texte (Aller a)
         bool                  caretSeen_{ false };
+        unsigned              liveFrames_{ 0 };
 
         ui::ToolBar*          bar_{ nullptr };
         GrafcetView*          view_{ nullptr };
