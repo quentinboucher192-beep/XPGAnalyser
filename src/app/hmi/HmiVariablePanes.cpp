@@ -4067,7 +4067,7 @@ void HmiTypesPane::refresh() {
         const auto* sym = p.view(scope_);
         const std::string sn = sym ? sym->name : std::string("le symbole");
         status_->setMessage(std::to_string(typeOrder_.size()) + " type(s) IHM du symbole " + sn + " : dans le symbole, par leur nom (T_Etat) ; "
-                            "ailleurs, " + sn + ".T_Etat Â· les mÃªmes onglets que Types IHM Â· Ctrl+Z");
+                            "ailleurs, " + sn + ".T_Etat \xC2\xB7 les m\xC3\xAAmes onglets que Types IHM \xC2\xB7 Ctrl+Z");
         return;
     }
     status_->setMessage(message_.empty() ? std::to_string(p.programs.types.size())
@@ -4511,8 +4511,8 @@ Id HmiTypesPane::addScopedType(const std::string& raw, hmi::HmiTypeKind kind, st
     member_ = -1;
     refresh();
     const auto* now = doc_->project.view(scope_);
-    say("Type IHM du symbole crÃ©Ã© : " + name + " (ailleurs : " + (now ? now->name : std::string("Symbole")) + "." + name
-        + ") Â· Ctrl+Z annule");
+    say("Type IHM du symbole cr\xC3\xA9\xC3\xA9 : " + name + " (ailleurs : " + (now ? now->name : std::string("Symbole")) + "." + name
+        + ") \xC2\xB7 Ctrl+Z annule");
     if (hosts_.typeCreated) hosts_.typeCreated(made);
     return made;
 }
