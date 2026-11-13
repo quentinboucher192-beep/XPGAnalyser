@@ -441,8 +441,9 @@ void leScriptDeLaCapture() {
     std::string said;
     for (const auto& e : s.rt.journal())
         if (e.message.find("Grand :") != std::string::npos) said = e.message;
-    check(s.error.empty() && said.find("Cube[1, 2, 3] = TRUE") != std::string::npos && said.find("une ligne : 16 cases") != std::string::npos
-              && said.find("une couche : 128") != std::string::npos && said.find("Grand : 10000000 cases, Grand[999, 9999] = TRUE") != std::string::npos,
+    // (un BOOL dans un texte a trous se dit Vrai / Faux)
+    check(s.error.empty() && said.find("Cube[1, 2, 3] = Vrai") != std::string::npos && said.find("une ligne : 16 cases") != std::string::npos
+              && said.find("une couche : 128") != std::string::npos && said.find("Grand : 10000000 cases, Grand[999, 9999] = Vrai") != std::string::npos,
           "la Console : " + said + " " + s.error);
 }
 

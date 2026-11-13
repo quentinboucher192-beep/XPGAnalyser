@@ -478,6 +478,45 @@ void programmes() {
     check(r.journal && r.error.empty(), "std::cout << ... << std::endl : au journal (total 115) : " + obs(r));
 }
 
+// ---- le script de la capture (fonctions-D2) : une struct, un tableau parcouru par un pointeur, un point conditionnel en C ----
+void debogueurCapture() {
+    std::printf("-- le debogueur : le script de la capture (struct Mesure, p++ dans le tableau, condition p - mesures == 2)\n");
+    const char* code =
+        "// Mesures_C\n"                                                                  // 1
+        "struct Mesure { int numero; float valeur; };\n"                                  // 2
+        "struct Mesure mesures[4] = { {1, 2.5f}, {2, 3.0f}, {3, 4.5f}, {4, 1.0f} };\n"     // 3
+        "float total = 0.0f;\n"                                                           // 4
+        "struct Mesure *p = mesures;\n"                                                   // 5
+        "struct Mesure *fin = mesures + 4;\n"                                             // 6
+        "while (p != fin) {\n"                                                            // 7
+        "    total += p->valeur;\n"                                                       // 8
+        "    p++;\n"                                                                      // 9
+        "}\n"                                                                             // 10
+        "printf(\"total = %f (%d mesures)\\n\", total, (int)(fin - mesures));\n";       // 11
+    DebugBench b(C, code);
+    b.rt.setBreakpoints({point(1, b.sc, 8, "p - mesures == 2")});
+    check(b.rt.breakpoints()[0].note.empty(), "la condition C p - mesures == 2 se lit : " + b.rt.breakpoints()[0].note);
+    (void)b.rt.callScript("Essai", 0.2);
+    check(b.rt.paused() && b.rt.debugHit() && b.rt.debugHit()->line == 8, "en pause ligne 8 (la troisieme mesure)");
+    if (!b.rt.debugHit()) return;
+    const auto& top = b.rt.debugHit()->stack.back().locals;
+    const auto* m = local(top, "mesures");
+    const auto* p = local(top, "p");
+    const auto* target = p && !p->children.empty() ? &p->children.front() : nullptr;
+    check(m && m->type == "struct Mesure[4]" && m->children.size() == 4 && m->children[2].type == "struct Mesure", "mesures : struct Mesure[4] : " + localsText(top));
+    check(p && p->type == "struct Mesure*" && target && local(target->children, "numero") && local(target->children, "numero")->value == "3",
+          "p : struct Mesure*, *p : la mesure numero 3 : " + localsText(top));
+    std::string v, why;
+    check(b.rt.debugEvaluate("p->valeur * 2", v, &why) && v == "9", "un espion en C : p->valeur * 2 = 9 : " + v + why);
+    check(b.rt.debugEvaluate("fin - p", v, &why) && v == "2", "un espion en C : fin - p = 2 : " + v + why);
+    bool sawTotal = false;
+    for (const auto& [n, val] : b.rt.debugHit()->values) sawTotal = sawTotal || n == "total";
+    check(sawTotal, "les valeurs de la ligne : total (sans temporaire)");
+    check(b.rt.debugStep(DebugStep::Over) && b.rt.paused() && b.rt.debugHit()->line == 9, "Suivant : ligne 9 (p++)");
+    (void)b.rt.debugContinue();
+    check(!b.rt.paused(), "Continuer : le script va au bout");
+}
+
 void all() {
     structures();
     controle();
@@ -488,6 +527,7 @@ void all() {
     compiler();
     debogueur();
     debogueurVirtuel();
+    debogueurCapture();
 }
 
 } // namespace c1501

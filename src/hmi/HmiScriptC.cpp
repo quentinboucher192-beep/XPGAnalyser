@@ -4703,20 +4703,20 @@ private:
         if (punct("(")) return namedCall(name, line);
         // Point{1, 2} : un objet temporaire (C++), ses membres ou son constructeur
         if (punct("{") && isCpp() && records_.count(name) && !findVar(name)) {
-            const CTP t = recordType(name);
-            const std::string tmp = temp(t->st, line, "o");
+            const CTP rt = recordType(name);
+            const std::string tmp = temp(rt->st, line, "o");
             if (hasConstructors(name)) {
-                addPre(construct(t, tmp, constructorArgs(), line), line);
+                addPre(construct(rt, tmp, constructorArgs(), line), line);
             } else {
                 std::vector<Cell> cells;
                 bool constant = true;
-                (void)initBraces(t, tmp, cells, constant, line);
-                std::string text = construct(t, tmp, {}, line);
+                (void)initBraces(rt, tmp, cells, constant, line);
+                std::string text = construct(rt, tmp, {}, line);
                 for (const auto& c : cells) text += (text.empty() ? "" : " ") + c.path + " := " + c.st + ";";
                 if (!text.empty()) addPre(text, line);
             }
             out.st = tmp;
-            out.ty = t;
+            out.ty = rt;
             out.lvalue = true;
             return out;
         }
