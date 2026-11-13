@@ -1,8 +1,8 @@
 // =============================================================================
 //  hmi/HmiSymbolTypes.hpp - 1.51.0 : les types IHM d'un symbole
 // -----------------------------------------------------------------------------
-//  UN SYMBOLE PORTE SES PROPRES TYPES IHM (« faire en sorte que les symboles
-//  puissent porter des types IHM ») : des structures, des enumerations, des
+//  UN SYMBOLE PORTE SES PROPRES TYPES IHM (<< faire en sorte que les symboles
+//  puissent porter des types IHM >>) : des structures, des enumerations, des
 //  interfaces, des rappels - les memes que ceux du projet (membres, methodes,
 //  visibilite, heritage, interfaces, generiques), avec le meme editeur.
 //

@@ -1,8 +1,8 @@
 // =============================================================================
 //  tests/hmi_editor_symtypes151.inl - 1.51.0 : LES TYPES IHM D'UN SYMBOLE
 // -----------------------------------------------------------------------------
-//  Inclus par hmi_editor_test.cpp (HMI_TEST_SYMT=1 : seul). « Faire en sorte que les symboles puissent porter des
-//  types IHM » (hmi/HmiSymbolTypes.hpp) :
+//  Inclus par hmi_editor_test.cpp (HMI_TEST_SYMT=1 : seul). << Faire en sorte que les symboles puissent porter des
+//  types IHM >> (hmi/HmiSymbolTypes.hpp) :
 //    1. la creation dans le sous-onglet Types IHM du symbole (le volet des types, sur le symbole), un homonyme du
 //       projet permis ; la liste du projet ne les montre pas ; l'arbre (Types IHM sous le symbole) ; Ctrl+Z ;
 //    2. leur emploi dans le symbole par leur nom court (un parametre, une fonction, un script), la portee la plus
