@@ -5367,6 +5367,25 @@ private:
         return std::optional<core::Result<RV>>(callDeclared(*f, call2, true));
     }
 
+    // 1.51.0 : objet.Get() - un POINTER TO Object vers l'objet que designe `objet` (Vue.Objet, un nom court de la vue, une
+    // poignee Object, la cible d'un pointeur p^). Rien : `objet` n'est pas un objet (l'appel suit son chemin ordinaire).
+    std::optional<core::Result<RV>> objectGet(const Expr& e) {
+        auto ov = [&] {
+            const QuietSide quiet(*this);
+            return rich(*e.lhs->lhs);
+        }();
+        if (!ov || !ov->o || !isHandleObj(ov->o) || ov->o->type->name != "Object") return std::nullopt;
+        if (!e.arguments.empty() || !e.outputs.empty())
+            return std::optional<core::Result<RV>>(dialectError("Get() ne prend pas d'argument : il rend un POINTER TO Object vers l'objet"));
+        auto pt = std::make_shared<TypeDesc>();
+        pt->kind = TypeDesc::Kind::Pointer;
+        pt->element = ov->o->type;
+        auto ptr = makeObj(pt);
+        ptr->bound = ov->o->bound && !ov->o->targetName.empty();
+        ptr->targetName = ptr->bound ? ov->o->targetName : std::string{};
+        return std::optional<core::Result<RV>>(RV{{}, ptr});
+    }
+
     // 1.12.1 : low <= x <= high (ENTRE ... ET, une plage de IN).
     core::Result<RV> between(const Expr& e, const RV& x) {
         auto low = rich(*e.rhs);
@@ -6085,6 +6104,10 @@ private:
         // de l'objet (le sous-type, a travers une REF_TO). Apres les fonctions de symbole (ci-dessus).
         if (callee.empty() && e.lhs && e.lhs->kind == Expr::Kind::Member && e.lhs->lhs)
             if (auto r = callMethod(e)) return std::move(*r);
+        // 1.51.0 : Vue_Accueil.Carte_1.Get() (o.Get(), p^.Get(), Carte_1.Get() dans sa vue) - un POINTER TO Object vers
+        // l'objet, comme ADR(Vue_Accueil.Carte_1). Une fonction Get d'un symbole, une methode Get d'un type passent avant.
+        if (callee.empty() && dialect_ && e.lhs && e.lhs->kind == Expr::Kind::Member && e.lhs->lhs && upperOf(e.lhs->name) == "GET")
+            if (auto r = objectGet(e)) return std::move(*r);
         if (!callee.empty()) {
             // 1.11.20 : des fonctions internes du meme nom (des surcharges) : la sienne.
             const auto inner = findFunctions(callee);
@@ -7123,10 +7146,19 @@ private:
                     t->element = scalarType(probe.type());
                 } else {
                     const std::string text = env_.declaredType(where->name);
-                    auto dt = text.empty() ? core::Result<TypeRef>(dialectError("'" + where->name + "' is not declared"))
-                                           : typeFromText(text);
-                    if (!dt) return core::Result<RV>(core::Err<core::Error>(dt.error()));
-                    t->element = *dt;
+                    std::string ht, hp;
+                    if (text.empty() && dialect_ && env_.handleOf(where->name, ht, hp)) {
+                        // 1.51.0 : ADR(Vue_Accueil.Carte_1), ADR(Carte_1) - un objet d'une vue : un POINTER TO Object vers lui
+                        // (le meme que Vue_Accueil.Carte_1.Get(), ou qu'une poignee rangee dans un pointeur). Une variable du
+                        // meme nom passe avant.
+                        t->element = handleType(ht);
+                        o->targetName = hp;
+                    } else {
+                        auto dt = text.empty() ? core::Result<TypeRef>(dialectError("'" + where->name + "' is not declared"))
+                                               : typeFromText(text);
+                        if (!dt) return core::Result<RV>(core::Err<core::Error>(dt.error()));
+                        t->element = *dt;
+                    }
                 }
             }
             o->type = t;

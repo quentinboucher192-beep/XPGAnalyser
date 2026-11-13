@@ -3,6 +3,7 @@
 // =============================================================================
 #include "HmiTrash.hpp"
 
+#include "HmiSymbolTypes.hpp" // 1.51.0 : les types d'un symbole partent et reviennent avec lui
 #include "HmiStore.hpp"       // la taille d'un contenu : ce que l'enregistrement en ecrirait
 #include "HmiTemplates.hpp"   // le dossier d'une vue (Vues, Popups, Symboles, Modeles)
 
@@ -11,6 +12,7 @@
 #include <chrono>
 #include <iterator>
 #include <map>
+#include <tuple>
 #include <unordered_set>
 #include <utility>
 
@@ -143,12 +145,16 @@ std::size_t capture(const Project& before, Project& after, std::int64_t at) {
     const auto views = goneFrom(before.views, after.views);
     std::unordered_set<Id> goneViews;
     for (const auto* v : views) goneViews.insert(v->id);
+    // 1.51.0 : et les types IHM du symbole (HmiType::symbol), qui partent avec lui.
+    const auto goneTypes = goneFrom(before.programs.types, after.programs.types);
     for (const auto* v : views) {
         if (v->ownerSymbol != kNoId && v->ownerSymbol != v->id && goneViews.count(v->ownerSymbol)) continue;   // avec son symbole
         Project c;
         c.views.push_back(*v);
         for (const auto* w : views)
             if (w != v && w->ownerSymbol == v->id) c.views.push_back(*w);
+        for (const auto* t : goneTypes)
+            if (t->symbol != kNoId && t->symbol == v->id) c.programs.types.push_back(*t);
         add(Kind::View, v->name, originOf(viewList(*v), v->folder), std::move(c));
     }
     for (const auto* r : goneFrom(before.assets.resources, after.assets.resources)) {
@@ -176,7 +182,8 @@ std::size_t capture(const Project& before, Project& after, std::int64_t at) {
         c.programs.variables.push_back(*v);
         add(Kind::Variable, v->name, originOf("Variables IHM", v->folder), std::move(c));
     }
-    for (const auto* t : goneFrom(before.programs.types, after.programs.types)) {
+    for (const auto* t : goneTypes) {
+        if (t->symbol != kNoId && goneViews.count(t->symbol)) continue;   // 1.51.0 : avec son symbole
         Project c;
         c.programs.types.push_back(*t);
         add(Kind::Type, fullName(*t), originOf("Types IHM", t->folder), std::move(c));
@@ -227,11 +234,14 @@ bool restore(Project& p, Id item, std::string* shown, std::string* why) {
     };
     // Les vues (un symbole et ses popups) : un identifiant pris (un projet edite a la main) en recoit un neuf.
     std::map<Id, Id> viewIds;
+    std::vector<std::tuple<Id, std::string, std::string>> renamedViews;   // 1.51.0 : (vue, ancien nom, nouveau)
     for (View v : c.views) {
         const Id old = v.id;
         if (v.id == kNoId || p.view(v.id)) v.id = p.allocate();
         viewIds[old] = v.id;
+        const std::string was = v.name;
         if (p.viewByName(v.name)) renameTo(v.name, uniqueViewName(p, v.name));
+        if (v.name != was) renamedViews.emplace_back(v.id, was, v.name);
         p.views.push_back(std::move(v));
     }
     Id firstView = kNoId;
@@ -283,6 +293,16 @@ bool restore(Project& p, Id item, std::string* shown, std::string* why) {
     }
     for (HmiType t : c.programs.types) {
         if (t.id == kNoId || p.hmiType(t.id)) t.id = p.allocate();
+        // 1.51.0 : un type d'un symbole suit son symbole (rendu avec lui, ou toujours la) ; sans lui, un type du projet.
+        if (t.symbol != kNoId) {
+            if (const auto f = viewIds.find(t.symbol); f != viewIds.end()) t.symbol = f->second;
+            if (const View* owner = p.view(t.symbol); owner && owner->role == "symbole") {
+                t.ns = owner->name;
+            } else {
+                t.symbol = kNoId;
+                t.ns.clear();
+            }
+        }
         if (p.hmiTypeByName(fullName(t)))
             renameTo(t.name, freeIn(t.ns, t.name, [&](const std::string& full) {
                        for (int i = 2; i < 100000; ++i)
@@ -291,6 +311,9 @@ bool restore(Project& p, Id item, std::string* shown, std::string* why) {
                    }));
         p.programs.types.push_back(std::move(t));
     }
+    // 1.51.0 : un symbole rendu sous un autre nom - ses textes qui nommaient ses types en entier (Ancien.T_Etat) suivent.
+    for (const auto& [id, was, now] : renamedViews)
+        if (symtypes::hasTypes(p, id)) (void)symtypes::renameScopeIn(p, id, was, now);
     for (AlarmDef a : c.alarms) {
         if (a.id == kNoId || p.alarm(a.id)) a.id = p.allocate();
         if (p.alarmByName(a.name)) renameTo(a.name, uniqueAlarmName(p, a.name));

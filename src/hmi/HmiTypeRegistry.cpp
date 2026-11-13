@@ -771,6 +771,7 @@ std::shared_ptr<const Registry> Registry::build(const Project& p, const params::
         e.provenance = en ? "Projet \xC2\xB7 \xC3\x89num\xC3\xA9rations" : cb ? "Projet \xC2\xB7 Rappels" : "Projet \xC2\xB7 Types IHM";
         // 1.13.0 (lot J8) : sa provenance dit son espace, ou sa bibliotheque et sa version.
         if (lib) e.provenance = "Biblioth\xC3\xA8que " + lib->name + (lib->foundVersion.empty() ? std::string{} : " " + lib->foundVersion);
+        else if (t.symbol != kNoId) e.provenance = "Symbole " + t.ns;   // 1.51.0 : un type d'un symbole (Symbole.T_Etat)
         else if (!t.ns.empty()) e.provenance = "Espace " + t.ns;
         e.doc = !t.description.empty() ? t.description
                                       : (en ? "Une \xC3\xA9num\xC3\xA9ration du projet."

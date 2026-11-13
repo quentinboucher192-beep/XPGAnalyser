@@ -2959,7 +2959,7 @@ const std::vector<Topic>& topics() {
                          "Cr\xC3\xA9" "er un symbole type ses param\xC3\xA8tres d'apr\xC3\xA8s les chemins "
                          "choisis (Pompes[1] : T_Pompe).", {}, "1.12.11"},
          },
-         {"objet-instance-de-symbole", "tutoriel-symbole", "popups", "objets", "proprietes", "actions", "verifier", "dossiers", "alarmes-symboles", "groupes-objets", "surcharge-alarmes", "parametres-popups", "operateurs", "dupliquer-reperes"},
+         {"objet-instance-de-symbole", "tutoriel-symbole", "popups", "objets", "proprietes", "actions", "verifier", "dossiers", "alarmes-symboles", "groupes-objets", "surcharge-alarmes", "parametres-popups", "operateurs", "dupliquer-reperes", "types-symbole"},
          {"Symbole", "SymbolInstance", "Instances"},
          {"symboles"},
          {{"PNG_270_selection_carte_armoire.png", "Une carte d'armoire dessin\xC3\xA9" "e dans une vue : cadre, titre, bouteille de gaz, pression, voyant et \xC3\xA9tat, cycles, bouton D\xC3\xA9tails ; tout est choisi."}, {"PNG_271_dialogue_creer_symbole.png", "\xC2\xAB Cr\xC3\xA9" "er un symbole \xC2\xBB : son nom, et les param\xC3\xA8tres propos\xC3\xA9s d'apr\xC3\xA8s la s\xC3\xA9lection (Armoire := Armoires[0])."}, {"PNG_272_symbole_editeur_parametres.png", "Le symbole ouvert dans l'\xC3\xA9" "diteur : ses objets citent Armoire et Nom ; ses param\xC3\xA8tres dans les propri\xC3\xA9t\xC3\xA9s de sa vue."}, {"PNG_273_bibliotheque_symboles_du_projet.png", "La biblioth\xC3\xA8que : la section Symboles du projet, et l'aper\xC3\xA7u du symbole au survol."}, {"PNG_274_vue_cartes_instances_editeur.png", "Trois instances dans la vue, chacune ses arguments : l'\xC3\xA9" "diteur les dessine d\xC3\xA9j\xC3\xA0 reli\xC3\xA9" "es (Armoires[1], 'B')."}, {"PNG_275_sim_cartes_armoires.png", "En marche : chaque carte montre son armoire (A active, B bouteille vide, en rouge) ; le bouton D\xC3\xA9tails de la carte B ouvre la popup de CETTE armoire."}, {"PNG_277_generer_symboles.png", "G\xC3\xA9n\xC3\xA9rer : un argument que le symbole ne d\xC3\xA9" "clare pas (Couleur), \xC3\xA0 c\xC3\xB4t\xC3\xA9 des autres constats du projet."}, {"PNG_950_alarmes_du_symbole.png", "Le sous-onglet Alarmes de Sym_Pompe : ses alarmes \xC3\xA9" "crites avec ses param\xC3\xA8tres."}},
@@ -2967,6 +2967,61 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Concevoir les vues  Modeles, popups et symboles / types-symbole
+        {"types-symbole", "Les types IHM d'un symbole", "Concevoir les vues \xE2\x80\xBA Mod\xC3\xA8les, popups et symboles",
+         "Un symbole porte ses propres types IHM - une structure, une \xC3\xA9num\xC3\xA9ration, une "
+         "interface, un rappel - \xC3\xA0 c\xC3\xB4t\xC3\xA9 de ses param\xC3\xA8tres, de ses fonctions et "
+         "de ses popups : ils partent avec lui (dupliquer, exporter, importer, copier, supprimer) et ne se "
+         "m\xC3\xAAlent pas aux types du projet.",
+         {
+             {K::Heading, "Cr\xC3\xA9" "er un type dans un symbole", {}},
+             {K::Paragraph, "Ouvre le symbole, sous-onglet **Types IHM (n)** (apr\xC3\xA8s Fonctions) : le "
+                         "m\xC3\xAAme volet que Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Types IHM "
+                         "- **Nouveau type \xE2\x96\xBE** (structure, \xC3\xA9num\xC3\xA9ration, rappel, "
+                         "interface), ses membres, ses m\xC3\xA9thodes, la visibilit\xC3\xA9, "
+                         "l'h\xC3\xA9ritage, les interfaces, les g\xC3\xA9n\xC3\xA9riques, Dupliquer, "
+                         "Supprimer, Renommer. Chaque geste est un Ctrl+Z. Dans l'arbre, le symbole a une "
+                         "partie **Types IHM [n]** : un clic sur un type ouvre ce sous-onglet sur lui. La "
+                         "liste Types IHM du projet ne les montre pas.", {}},
+             {K::Heading, "Dans le symbole : le nom court", {}},
+             {K::Paragraph, "Ses param\xC3\xA8tres (`Etat : T_Etat`), ses fonctions, ses scripts, les formules "
+                         "de ses objets nomment ses types par leur **nom court** : `T_Etat`, "
+                         "`T_Mode#Marche`. C'est **la port\xC3\xA9" "e la plus proche** : si le projet a "
+                         "aussi un `T_Etat`, celui du symbole passe avant dans le symbole. Un type du "
+                         "symbole peut employer les types du projet (un membre, un parent, une interface). "
+                         "\xC2\xAB Choisir un type \xC2\xBB met ses types en t\xC3\xAAte, dans leur puce "
+                         "**Types du symbole**.", {}},
+             {K::Tip, "Quand un nom court d\xC3\xA9signerait un autre type (un homonyme du projet ou d'un "
+                         "autre symbole), le type d'un param\xC3\xA8tre, d'une d\xC3\xA9" "claration ou d'un "
+                         "membre s'\xC3\xA9" "crit en entier (`S_Pompe.T_Etat`), dans la m\xC3\xAAme "
+                         "commande.", {}},
+             {K::Heading, "Ailleurs : Symbole.Type", {}},
+             {K::Paragraph, "Hors du symbole - une variable IHM, un script, une fonction, une vue qui pose une "
+                         "instance, un autre symbole - un type du symbole se nomme **par son symbole** : "
+                         "`S_Pompe.T_Etat`, `S_Pompe.T_Mode#Marche` (comme une fonction du symbole se nomme "
+                         "par son instance, `Vue.Pompe_1.Ouvrir()` ; un type n'a pas d'instance). Compiler "
+                         "propose de qualifier un nom court.", {}},
+             {K::Heading, "Ce qui suit", {}},
+             {K::Bullet, "**Renommer le type** : ses emplois dans le symbole, et `S_Pompe.T_Etat` partout "
+                         "ailleurs ; un homonyme ne bouge pas.", {}},
+             {K::Bullet, "**Renommer le symbole** : `S_Pompe.T_Etat` devient `S_Vanne.T_Etat` partout.", {}},
+             {K::Bullet, "**Supprimer un type employ\xC3\xA9** : refus\xC3\xA9 ; ses emplois s'affichent "
+                         "d'abord (l'onglet Emplois).", {}},
+             {K::Bullet, "**Dupliquer, exporter (.xpgsymboles), importer, copier le symbole** : ses types "
+                         "partent avec lui ; import\xC3\xA9 sous un autre nom, ses types suivent ce nom. "
+                         "**Supprimer** le symbole les met avec lui dans la corbeille.", {}},
+             {K::Warning, "Le fichier : la ligne `type_ihm` d'un type du symbole porte `symbole=<id>`. Une "
+                         "IHM Studio d'avant la 1.51.0 l'ignore et lit un type de l'espace de noms du "
+                         "symbole : rien ne se perd.", {}},
+         },
+         {"symboles", "types-ihm", "enum-types", "objets-types", "paquets-symboles", "biblio-espaces"},
+         {"types du symbole", "type du symbole", "Types IHM du symbole", "port\xC3\xA9" "e", "Symbole.T_Etat"},
+         {"symboles"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.51.0"},
         // ---- Concevoir les vues  Modeles, popups et symboles / tutoriel-symbole
         {"tutoriel-symbole", "Tutoriel : cr\xC3\xA9" "er un symbole de projet", "Concevoir les vues \xE2\x80\xBA Mod\xC3\xA8les, popups et symboles",
          "Pas \xC3\xA0 pas, le parcours \xC2\xAB Cr\xC3\xA9" "er un symbole de projet \xC2\xBB du "

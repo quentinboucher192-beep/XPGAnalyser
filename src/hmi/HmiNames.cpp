@@ -4,6 +4,7 @@
 #include "HmiNames.hpp"
 #include "HmiScript.hpp"   // splitDeclarations, forEachCode
 #include "HmiExpr.hpp"     // isStandardFunction
+#include "HmiSymbolTypes.hpp"   // 1.51.0 : l'espace d'un symbole
 
 #include <algorithm>
 #include <cctype>
@@ -861,7 +862,8 @@ std::string reservedClash(const Project& p, std::string_view ns) {
     const std::string head(ns.substr(0, ns.find('.')));
     const std::string intro = "le nom " + head + " est \xC3\xA0 la fois un espace de noms et ";
     if (p.variable(head)) return intro + "une variable IHM";
-    if (p.viewByName(head)) return intro + "une vue";
+    // 1.51.0 : l'espace d'un symbole (ses types IHM : MonSymbole.T_Etat) est a lui - pas un conflit avec sa vue.
+    if (p.viewByName(head) && !symtypes::symbolScope(p, head)) return intro + "une vue";
     for (const auto& t : p.programs.types) if (t.ns.empty() && same(t.name, head)) return intro + "un type IHM";
     for (const auto& f : p.programs.functions) if (f.ns.empty() && same(f.name, head)) return intro + "une fonction IHM";
     for (const auto& s : p.programs.scripts) if (s.ns.empty() && same(s.name, head)) return intro + "un script g\xC3\xA9n\xC3\xA9ral";
@@ -1012,7 +1014,7 @@ std::vector<SpaceCount> projectSpaces(const Project& p) {
         out.push_back(SpaceCount{ns});
         return out.back();
     };
-    for (const auto& t : p.programs.types) if (!t.ns.empty()) ++slot(t.ns).types;
+    for (const auto& t : p.programs.types) if (!t.ns.empty() && t.symbol == kNoId) ++slot(t.ns).types;   // 1.51.0 : pas ceux d'un symbole
     for (const auto& f : p.programs.functions) if (!f.ns.empty()) ++slot(f.ns).functions;
     for (const auto& s : p.programs.scripts) if (!s.ns.empty()) ++slot(s.ns).scripts;
     if (const auto it = p.listFolders.find("espaces"); it != p.listFolders.end())

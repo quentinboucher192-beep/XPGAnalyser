@@ -1315,7 +1315,7 @@ Seulement **les membres modifiés depuis la capture** : si l'automate a changé 
 # l'infobulle (la description, ou « Attend : <type> »), une saisie = une commande params en forme nommée ; plusieurs objets ou sans paramètre : la ligne Arguments.
 @mots Symbole, SymbolInstance, Instances
 @lieux symboles
-@voir objet-instance-de-symbole, tutoriel-symbole, popups, objets, proprietes, actions, verifier, dossiers, alarmes-symboles, groupes-objets, surcharge-alarmes, parametres-popups, operateurs, dupliquer-reperes
+@voir objet-instance-de-symbole, tutoriel-symbole, popups, objets, proprietes, actions, verifier, dossiers, alarmes-symboles, groupes-objets, surcharge-alarmes, parametres-popups, operateurs, dupliquer-reperes, types-symbole
 @capture PNG_270_selection_carte_armoire.png | Une carte d'armoire dessinée dans une vue : cadre, titre, bouteille de gaz, pression, voyant et état, cycles, bouton Détails ; tout est choisi.
 @capture PNG_271_dialogue_creer_symbole.png | « Créer un symbole » : son nom, et les paramètres proposés d'après la sélection (Armoire := Armoires[0]).
 @capture PNG_272_symbole_editeur_parametres.png | Le symbole ouvert dans l'éditeur : ses objets citent Armoire et Nom ; ses paramètres dans les propriétés de sa vue.
@@ -1367,6 +1367,26 @@ Un symbole a ses opérateurs (onglet du symbole › **Opérateurs (n)**, après 
 @nouveau 1.12.11
 
 1.12.11 : dans un symbole, un libellé, un titre, un texte d'état à trous ({Nom}) reçoivent l'argument de l'instance, comme le Texte. Créer un symbole type ses paramètres d'après les chemins choisis (Pompes[1] : T_Pompe).
+
+== types-symbole | Les types IHM d'un symbole
+: Un symbole porte ses propres types IHM - une structure, une énumération, une interface, un rappel - à côté de ses paramètres, de ses fonctions et de ses popups : ils partent avec lui (dupliquer, exporter, importer, copier, supprimer) et ne se mêlent pas aux types du projet.
+@depuis 1.51.0
+@mots types du symbole, type du symbole, Types IHM du symbole, portée, Symbole.T_Etat
+@lieux symboles
+@voir symboles, types-ihm, enum-types, objets-types, paquets-symboles, biblio-espaces
+### Créer un type dans un symbole
+Ouvre le symbole, sous-onglet **Types IHM (n)** (après Fonctions) : le même volet que Programmation générale › Types IHM - **Nouveau type ▾** (structure, énumération, rappel, interface), ses membres, ses méthodes, la visibilité, l'héritage, les interfaces, les génériques, Dupliquer, Supprimer, Renommer. Chaque geste est un Ctrl+Z. Dans l'arbre, le symbole a une partie **Types IHM [n]** : un clic sur un type ouvre ce sous-onglet sur lui. La liste Types IHM du projet ne les montre pas.
+### Dans le symbole : le nom court
+Ses paramètres (`Etat : T_Etat`), ses fonctions, ses scripts, les formules de ses objets nomment ses types par leur **nom court** : `T_Etat`, `T_Mode#Marche`. C'est **la portée la plus proche** : si le projet a aussi un `T_Etat`, celui du symbole passe avant dans le symbole. Un type du symbole peut employer les types du projet (un membre, un parent, une interface). « Choisir un type » met ses types en tête, dans leur puce **Types du symbole**.
+> Quand un nom court désignerait un autre type (un homonyme du projet ou d'un autre symbole), le type d'un paramètre, d'une déclaration ou d'un membre s'écrit en entier (`S_Pompe.T_Etat`), dans la même commande.
+### Ailleurs : Symbole.Type
+Hors du symbole - une variable IHM, un script, une fonction, une vue qui pose une instance, un autre symbole - un type du symbole se nomme **par son symbole** : `S_Pompe.T_Etat`, `S_Pompe.T_Mode#Marche` (comme une fonction du symbole se nomme par son instance, `Vue.Pompe_1.Ouvrir()` ; un type n'a pas d'instance). Compiler propose de qualifier un nom court.
+### Ce qui suit
+- **Renommer le type** : ses emplois dans le symbole, et `S_Pompe.T_Etat` partout ailleurs ; un homonyme ne bouge pas.
+- **Renommer le symbole** : `S_Pompe.T_Etat` devient `S_Vanne.T_Etat` partout.
+- **Supprimer un type employé** : refusé ; ses emplois s'affichent d'abord (l'onglet Emplois).
+- **Dupliquer, exporter (.xpgsymboles), importer, copier le symbole** : ses types partent avec lui ; importé sous un autre nom, ses types suivent ce nom. **Supprimer** le symbole les met avec lui dans la corbeille.
+! Le fichier : la ligne `type_ihm` d'un type du symbole porte `symbole=<id>`. Une IHM Studio d'avant la 1.51.0 l'ignore et lit un type de l'espace de noms du symbole : rien ne se perd.
 
 == tutoriel-symbole | Tutoriel : créer un symbole de projet
 : Pas à pas, le parcours « Créer un symbole de projet » du didacticiel : une carte d'armoire dessinée pour Armoires[0] devient un symbole, posé une deuxième fois pour Armoires[1] ; un changement dans le symbole change les deux cartes ; la simulation les montre chacune avec son armoire.

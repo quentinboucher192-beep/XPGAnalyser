@@ -1,5 +1,6 @@
 #include "HmiScript.hpp"
 #include "HmiNames.hpp"   // 1.13.0 (lot J8) : les directives USING
+#include "HmiSymbolTypes.hpp"   // 1.51.0 : le code d'un symbole lit ses types sans prefixe
 #include "HmiScriptC.hpp"  // 1.50.0 : le C et le C++ compiles pour le moteur des scripts
 #include "../sim/DialectLib.hpp"   // 1.12.7 : les templates (NUMERIC_LIMITS<T>, NUMBERS) ne sont pas des variables
 
@@ -1733,41 +1734,53 @@ void visitProject(P& p, Visit& visit) {
     for (auto& v : p.views) {
         // Le code d'un symbole, et d'une popup qu'il porte : un appel court y vise d'abord ses fonctions.
         const View* scope = isSymbolView(v) ? &v : popupOwner(p, v);
+        // 1.51.0 : le code d'un symbole qui porte des types IHM est un item de son espace (MonSymbole) : un nom court y vise
+        // d'abord ses types (renommer, Appelee par, Generer le lisent comme le moteur).
+        const std::string symbolNs = isSymbolView(v) ? symtypes::scopeOf(p, v) : std::string{};
+        auto scoped = [&](auto& text, CodeForm form, const CodeSite& site) {
+            if (symbolNs.empty() || !site.ns.empty()) {
+                visit(text, form, site);
+                return;
+            }
+            CodeSite inside = site;
+            inside.ns = symbolNs;
+            visit(text, form, inside);
+        };
         for (auto& sc : v.scripts)
             if (sc.lang == ScriptLang::ST) {
                 const CodeSite site{.scope = scope, .view = &v, .where = v.name + "." + sc.event, .host = &v, .decls = &sc.decls,
                                     .script = sc.id};
-                visit(sc.body, CodeForm::Code, site);
-                visitDeclarations(sc.decls, site, visit);
+                scoped(sc.body, CodeForm::Code, site);
+                visitDeclarations(sc.decls, site, scoped);
             }
         for (std::size_t i = 0; i < v.actions.size(); ++i) {   // 1.14.0 (lot M1) : action par action (son rang)
             auto& a = v.actions[i];
             const CodeSite site{.scope = scope, .view = &v, .where = v.name + " (action de vue)", .host = &v, .action = static_cast<int>(i)};
             Object holder;
             holder.actions.push_back(a);
-            if (visitPieces(holder, site, visit)) {
+            if (visitPieces(holder, site, scoped)) {
                 if constexpr (!std::is_const_v<P>) a = std::move(holder.actions.front());
             }
             CodeSite reread = site;
             reread.again = actionValueRead(a);
-            visit(a.value, actionForm(a), reread);
+            scoped(a.value, actionForm(a), reread);
         }
-        for (auto& o : v.objects) visitObject(p, o, &v, scope, visit);
+        for (auto& o : v.objects) visitObject(p, o, &v, scope, scoped);
         // Le titre d'une popup et la valeur par defaut d'un parametre ne sont pas qualifies
         // (qualifiedOwnedPopup, symbolArguments) : un appel court y vise une fonction IHM.
-        visit(v.popup.title, CodeForm::Template, CodeSite{.where = v.name + " (titre)", .host = &v});
+        scoped(v.popup.title, CodeForm::Template, CodeSite{.where = v.name + " (titre)", .host = &v});
         for (auto& prm : v.params)
-            visit(prm.defaultValue, CodeForm::Expression, CodeSite{.where = v.name + " (param\xC3\xA8tre " + prm.name + ")", .host = &v});
+            scoped(prm.defaultValue, CodeForm::Expression, CodeSite{.where = v.name + " (param\xC3\xA8tre " + prm.name + ")", .host = &v});
         for (auto& fn : v.functions) {
             const CodeSite site{.scope = scope, .view = &v, .where = "fonction " + v.name + "." + fn.name, .host = &v, .decls = &fn.decls,
                                 .function = fn.id};
-            visit(fn.body, CodeForm::Code, site);
-            visitDeclarations(fn.decls, site, visit);
+            scoped(fn.body, CodeForm::Code, site);
+            visitDeclarations(fn.decls, site, scoped);
         }
         // 1.12.16 : les constantes de la vue - leurs valeurs, leurs calculs.
         if (!v.constants.empty()) {
             const CodeSite site{.scope = scope, .view = &v, .where = v.name + " (constantes)", .host = &v, .decls = &v.constants};
-            visitDeclarations(v.constants, site, visit);
+            visitDeclarations(v.constants, site, scoped);
         }
         ops(v.operators, v.name);
         for (auto& a : v.alarms) alarm(a, "alarme " + v.name + "." + a.name);

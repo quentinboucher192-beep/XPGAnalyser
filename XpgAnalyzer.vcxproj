@@ -756,6 +756,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiRuntimeObjects.cpp" />
     <ClCompile Include="src\hmi\HmiScriptC.cpp" />
     <ClCompile Include="src\hmi\HmiStretch.cpp" />
+    <ClCompile Include="src\hmi\HmiSymbolTypes.cpp" />
     <ClCompile Include="src\hmi\HmiTrash.cpp" />
     <ClCompile Include="src\hmi\HmiTrueType.cpp" />
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp" />
@@ -771,7 +772,12 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\project\GrafcetCheck.cpp" />
     <ClCompile Include="src\project\GrafcetDiagram.cpp" />
     <ClCompile Include="src\project\GrafcetRewrite2.cpp" />
+    <ClCompile Include="src\project\Ladder.cpp" />
+    <ClCompile Include="src\project\LadderEdit.cpp" />
+    <ClCompile Include="src\project\LadderSim.cpp" />
     <ClCompile Include="src\project\ProjectArchive.cpp" />
+    <ClCompile Include="src\project\Sfc.cpp" />
+    <ClCompile Include="src\project\SfcEdit.cpp" />
     <ClCompile Include="src\sim\Rich.cpp" />
     <ClCompile Include="src\sim\RichPacked.cpp" />
     <ClCompile Include="src\sim\ValueText.cpp" />
@@ -1375,6 +1381,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiStandalone.hpp" />
     <ClInclude Include="src\hmi\HmiStretch.hpp" />
     <ClInclude Include="src\hmi\HmiSymbolArgCheck.hpp" />
+    <ClInclude Include="src\hmi\HmiSymbolTypes.hpp" />
     <ClInclude Include="src\hmi\HmiTable.hpp" />
     <ClInclude Include="src\hmi\HmiTrash.hpp" />
     <ClInclude Include="src\hmi\HmiTrueType.hpp" />
@@ -1394,7 +1401,12 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\project\GrafcetCheck.hpp" />
     <ClInclude Include="src\project\GrafcetDiagram.hpp" />
     <ClInclude Include="src\project\GrafcetRewrite2.hpp" />
+    <ClInclude Include="src\project\Ladder.hpp" />
+    <ClInclude Include="src\project\LadderEdit.hpp" />
+    <ClInclude Include="src\project\LadderSim.hpp" />
     <ClInclude Include="src\project\ProjectArchive.hpp" />
+    <ClInclude Include="src\project\Sfc.hpp" />
+    <ClInclude Include="src\project\SfcEdit.hpp" />
     <ClInclude Include="src\sim\Rich.hpp" />
     <ClInclude Include="src\sim\ValueText.hpp" />
     <ClInclude Include="src\ui\NoveltyBoard.hpp" />

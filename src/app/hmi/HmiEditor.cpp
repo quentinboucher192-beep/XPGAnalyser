@@ -20,6 +20,7 @@
 #include "HmiEquipmentLinkPane.hpp"   // 1.12.11 (lot G) : la Liaison Equipement (inspecteur)
 #include "HmiOperatorPanes.hpp"       // 1.10 (S2) : les operateurs du symbole
 #include "HmiFunctionPanes.hpp"       // 1.11.10 : les fonctions du symbole
+#include "HmiVariablePanes.hpp"       // 1.51.0 : les types IHM du symbole (HmiTypesPane)
 #include "HmiSymbolPopupsPane.hpp"    // 1.11.10 : les popups du symbole
 #include "HmiDeclGrid.hpp"            // 1.12.16 : les constantes d'une vue
 #include "HmiActionDialogs.hpp"       // 1.11.10 : la fenetre du script (une redefinition)
@@ -837,6 +838,10 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
             addChild(std::make_unique<HmiSymbolPopupsPane>(this->id() + ".sympops", doc_, viewId_, apply_)));
         symbolPopups_->openView = [this](Id v) { openView->emit(v); };
         symbolPopups_->setVisibility(ui::Visibility::Collapsed);
+        // 1.51.0 : le sous-onglet Types IHM - le volet des types IHM du projet, sur les types du symbole.
+        symbolTypes_ = &static_cast<HmiTypesPane&>(addChild(std::make_unique<HmiTypesPane>(this->id() + ".symtypes", doc_, apply_)));
+        symbolTypes_->setSymbolScope(viewId_);
+        symbolTypes_->setVisibility(ui::Visibility::Collapsed);
         links_ += symbolTabs_->changed->connect([this](int) { invalidateLayout(); invalidate(); });
         wireSymbolTabsMenu(*this, *symbolTabs_, links_);   // 1.12.18 (bug 7)
     } else if (sv) {
@@ -1958,6 +1963,7 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
             if (!form.empty()) spec.current = typepicker::inForm(spec.current, form);
             spec.use = hmi::typereg::UseParameter;
             spec.doc = doc_;
+            if (hmi::isSymbolView(*cur)) spec.symbol = cur->id;   // 1.51.0 : ses types IHM en tete, sous leur nom court
             spec.plc = hmiparams::plcTypesOf(hmiparams::program().get());
             // 1.12.21 : les generiques du symbole ou de la popup (T) - proposes et composables (LIST OF T, CALLBACK (v : T) : STRING).
             if (!cur->generics.empty()) {
@@ -3392,17 +3398,20 @@ void HmiEditor::onLayout() {
         const bool operators = symbolTabs_->current() == HmiSymbolTabs::Operators;   // 1.10 (S2)
         const bool functions = symbolTabs_->current() == HmiSymbolTabs::Functions;   // 1.11.10
         const bool popups = symbolTabs_->current() == HmiSymbolTabs::Popups;         // 1.11.10
+        const bool types = symbolTabs_->current() == HmiSymbolTabs::Types;           // 1.51.0
         const auto shown = [](bool on) { return on ? ui::Visibility::Visible : ui::Visibility::Collapsed; };
         split_->setVisibility(shown(drawing));
-        symbolAlarms_->setVisibility(shown(!drawing && !operators && !functions && !popups));
+        symbolAlarms_->setVisibility(shown(!drawing && !operators && !functions && !popups && !types));
         symbolOperators_->setVisibility(shown(operators));
         symbolFunctions_->setVisibility(shown(functions));
         symbolPopups_->setVisibility(shown(popups));
+        if (symbolTypes_) symbolTypes_->setVisibility(shown(types));
         split_->setBounds(rest);
         symbolAlarms_->setBounds(rest);
         symbolOperators_->setBounds(rest);
         symbolFunctions_->setBounds(rest);
         symbolPopups_->setBounds(rest);
+        if (symbolTypes_) symbolTypes_->setBounds(rest);
     }
     if (viewTabs_) {
         // 1.12.16 : une vue - Constantes et Fonctions a la place du dessin.

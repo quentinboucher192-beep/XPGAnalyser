@@ -1374,6 +1374,13 @@ bool dialectMembers(const Scope& sc, const domain::Project* plc, const std::stri
             it.detail = std::string(m.type) + (m.readOnly ? kDot + "lecture" : std::string{}) + kDot + std::string(m.text);
             it.kind = Kind::Member;
             it.rank = r * 100 + i++;
+            // 1.51.0 : une methode (Get()) - son nom, pose avec ses parentheses.
+            if (it.text.size() > 2 && it.text.compare(it.text.size() - 2, 2, "()") == 0) {
+                it.insert = it.text;
+                it.text.resize(it.text.size() - 2);
+                it.detail = std::string(m.type) + kDot + std::string(m.text);
+                it.kind = Kind::Function;
+            }
             push(std::move(it));
         }
         return true;
@@ -1948,6 +1955,16 @@ bool publicMembers(const hmi::Project& hp, const std::string& path, const std::s
             add(m.name, m.type + "  \xC2\xB7  " + std::string(hmi::pub::accessLabel(m.access)) + "  \xC2\xB7  "
                             + (m.text.empty() ? (m.value.empty() ? std::string("propri\xC3\xA9t\xC3\xA9") : m.value) : m.text),
                 Kind::InstanceVariable);
+        // 1.51.0 : Get() - un POINTER TO Object vers l'objet (ObjPtr := Vue_Accueil.Carte_1.Get();), comme ADR(Vue.Objet).
+        if (const int r = matchRank("Get", needle); r >= 0) {
+            Item it;
+            it.text = "Get";
+            it.insert = "Get()";
+            it.detail = "POINTER TO Object  \xC2\xB7  un pointeur vers " + o.name + " (comme ADR(" + v->name + "." + o.name + "))";
+            it.kind = Kind::Function;
+            it.rank = r;
+            push(std::move(it));
+        }
         // 1.11.1 (decision 108) : son groupe d'alarmes interne, puis ses alarmes (Alarmes.).
         if (hmi::pub::hasAlarmGroup(o)) {
             for (const auto& i : hmi::pub::kAlarmInfo)

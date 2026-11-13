@@ -30,7 +30,7 @@ constexpr gfx::FontId kMono{14};
 constexpr gfx::FontId kTitle{17};
 constexpr float       kRow = 26.f;
 constexpr char        kSep = '\x1F';
-constexpr int         kAll = -2, kRecents = -1;
+constexpr int         kAll = -2, kRecents = -1, kSymbolTypes = -3;   // 1.51.0 : << Types du symbole >>
 // Les libelles de la ligne Construire (kSmall) : leur place, fixe comme la mise en page.
 namespace tf = hmi::typeform;
 
@@ -527,6 +527,7 @@ protected:
         };
         chip("Tous", kAll, 0);
         chip("R\xC3\xA9" "cents", kRecents, 0);
+        if (!symbolEntries_.empty()) chip("Types du symbole", kSymbolTypes, symbolEntries_.size());   // 1.51.0
         for (const auto cat : tr::kCategories) {
             const auto n = countIn(cat);
             if (n) chip(std::string(tr::categoryLabel(cat)), static_cast<int>(cat), n);
@@ -793,6 +794,27 @@ private:
             reg_ = std::make_shared<tr::Registry>();
         }
         usable_ = reg_->usable(spec_.use);
+        // 1.51.0 : les types du symbole ou s'ecrit le type - en tete, sous leur nom court (la portee la plus proche) ; leur
+        // nom complet (Symbole.T_Etat) n'est pas propose une seconde fois.
+        symbolEntries_.clear();
+        if (spec_.doc && spec_.symbol != hmi::kNoId)
+            if (const auto* sym = spec_.doc->project.view(spec_.symbol)) {
+                std::vector<const tr::Entry*> rest;
+                for (const auto* e : usable_) {
+                    const auto* t = e->id != hmi::kNoId ? spec_.doc->project.hmiType(e->id) : nullptr;
+                    if (t && t->symbol == spec_.symbol) {
+                        tr::Entry own = *e;
+                        own.name = t->name;
+                        own.provenance = "Ce symbole \xC2\xB7 " + sym->name;
+                        symbolEntries_.push_back(std::move(own));
+                    } else {
+                        rest.push_back(e);
+                    }
+                }
+                usable_.clear();
+                for (const auto& e : symbolEntries_) usable_.push_back(&e);
+                for (const auto* e : rest) usable_.push_back(e);
+            }
         // 1.12.21 : T, K en tete ; leurs rappels apres ceux du registre.
         if (!genericEntries_.empty()) {
             std::vector<const tr::Entry*> mixed;
@@ -946,6 +968,8 @@ private:
                     if (!e && upperText(g.name) == upperText(n)) e = &g;
                 if (e && e->usable(spec_.use) && std::find(pool.begin(), pool.end(), e) == pool.end()) pool.push_back(e);
             }
+        } else if (chip_ == kSymbolTypes) {   // 1.51.0 : les types du symbole
+            for (const auto& e : symbolEntries_) pool.push_back(&e);
         } else {
             for (const auto* e : usable_)
                 if (chip_ == kAll || static_cast<int>(e->category) == chip_) pool.push_back(e);
@@ -1164,6 +1188,7 @@ private:
     std::vector<const tr::Entry*>          usable_, shown_;
     std::vector<tr::Entry>                 genericEntries_, genericCallbacks_;   // 1.12.21 : T, K et leurs rappels
     int                                    chip_{kAll};
+    std::vector<tr::Entry>                 symbolEntries_;   // 1.51.0 : les types du symbole (Spec::symbol), noms courts
     int                                    sel_{-1};
     int                                    hover_{-1};
     bool                                   hoverClose_{false};

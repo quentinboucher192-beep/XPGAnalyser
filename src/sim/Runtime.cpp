@@ -3,6 +3,7 @@
 #include "../domain/ExecutionOrder.hpp"
 
 #include "../project/BlockLibrary.hpp"
+#include "../project/LadderSim.hpp"
 #include "../project/MemberTree.hpp"
 
 #include <algorithm>
@@ -579,6 +580,18 @@ core::Result<void> Runtime::prepare(std::string_view task) {
             const auto& section = p.sections[si];
             const auto name = std::string(p.strings.text(section.name));
 
+            // 1.51.0 : UNE SECTION LD TOURNE (project/LadderSim) : son schema
+            // compile, a son rang, avec sa condition d'activation.
+            if (section.language == domain::PouLanguage::LD && domain::keepsSourceXml(section)) {
+                if (prepareLadder(p, si, entryIndex, scopeOf(si))) runs = true;
+                continue;
+            }
+            // 1.51.0 (S) : UN GRAFCET (SFC) TOURNE (sim/SfcRuntime.cpp) : son graphe, ses
+            // receptivites (variable, ST, LD), ses actions, a son rang.
+            if (section.language == domain::PouLanguage::SFC && domain::keepsSourceXml(section)) {
+                if (prepareSfc(p, si, entryIndex, scopeOf(si))) runs = true;
+                continue;
+            }
             if (section.language != domain::PouLanguage::ST) {
                 prepareDiagnostics_.push_back(Diagnostic{
                     Diagnostic::Severity::Warning,
@@ -654,6 +667,76 @@ core::Result<void> Runtime::prepare(std::string_view task) {
     return {};
 }
 
+// 1.51.0 : UNE SECTION LD. Compilee une fois (expressions, broches, sauts) ; une
+// expression illisible est dite (avertissement) et son element ne conduit pas.
+bool Runtime::prepareLadder(const domain::Project& p, domain::Index si, std::uint32_t entry, const std::string& scope) {
+    const auto& section = p.sections[si];
+    const auto name = std::string(p.strings.text(section.name));
+    auto compiled = project::ladder::compileXml(section.body, scope + name);
+    if (!compiled) {
+        prepareDiagnostics_.push_back(Diagnostic{
+            Diagnostic::Severity::Error, "LD: " + compiled.error().message(), 0, scope + name});
+        return false;
+    }
+    for (const auto& w : project::ladder::compileWarnings(**compiled))
+        prepareDiagnostics_.push_back(Diagnostic{Diagnostic::Severity::Warning, "LD: " + w, 0, scope + name});
+    Runnable runnable{name, scope, nullptr, entry, {}, {}, true, *compiled,
+                      std::make_shared<project::ladder::State>(), static_cast<std::uint32_t>(tagNames_.size())};
+    tagNames_.push_back(scope + name);
+    tagPrograms_.push_back(nullptr);
+    if (section.activationCondition != 0) {
+        auto text = std::string(p.strings.text(section.activationCondition));
+        text.erase(0, text.find_first_not_of(" \t\r\n"));
+        text.erase(text.find_last_not_of(" \t\r\n;") + 1);
+        if (!text.empty()) {
+            if (auto condition = parseExpression(text)) {
+                runnable.condition = *condition;
+                runnable.conditionText = text;
+            } else {
+                prepareDiagnostics_.push_back(Diagnostic{
+                    Diagnostic::Severity::Warning,
+                    "the activation condition of section '" + name + "' (" + text
+                        + ") cannot be read; the section runs every scan",
+                    0, scope + name});
+            }
+        }
+    }
+    programs_.push_back(std::move(runnable));
+    return true;
+}
+
+bool Runtime::runLadder(Runnable& runnable) {
+    project::ladder::RunOptions o;
+    o.scanStatements = &scanStatements_;
+    o.maxStatements = maxScanStatementsSetting_;
+    trace_.tag = runnable.ladderTag;
+    trace_.line = 0;
+    const auto r = project::ladder::run(*runnable.ladder, *this, *runnable.ladderState, o);
+    trace_ = {};
+    scanTopStatements_ += static_cast<std::uint32_t>(r.elements);
+    return r.ok && !r.halted;
+}
+
+const project::ladder::LiveState* Runtime::ladderLive(std::string_view section) const {
+    const auto want = lowerOf(section);
+    for (const auto& r : programs_) {
+        if (!r.ladder || !r.ladderState) continue;
+        if (lowerOf(r.scope + r.section) == want) return &r.ladderState->live;
+    }
+    for (const auto& r : programs_) {
+        if (!r.ladder || !r.ladderState) continue;
+        if (lowerOf(r.section) == want) return &r.ladderState->live;
+    }
+    return nullptr;
+}
+
+std::vector<std::string> Runtime::ladderSections() const {
+    std::vector<std::string> out;
+    for (const auto& r : programs_)
+        if (r.ladder) out.push_back(r.scope + r.section);
+    return out;
+}
+
 void Runtime::reset() {
     for (auto& [name, slot] : slots_) {
         slot.value = Value::defaultOf(slot.value.type());
@@ -686,6 +769,7 @@ void Runtime::reset() {
     clockMs_ = 0;
     scans_   = 0;
     halted_  = false;
+    resetSfc();   // 1.51.0 (S) : les GRAFCET repartent de leur situation initiale
 }
 
 namespace {
@@ -1789,7 +1873,7 @@ void Runtime::runRunnable(std::size_t index, bool& halted) {
 
 void Runtime::runSection(std::size_t index, bool& halted) {
     auto& runnable = programs_[index];
-    if (!runnable.program) return;
+    if (!runnable.program && !runnable.ladder && !runnable.sfc) return;
     scopePrefix_ = runnable.scope;
     currentSection_ = runnable.section;
     currentRunnable_ = index;
@@ -1809,6 +1893,20 @@ void Runtime::runSection(std::size_t index, bool& halted) {
     // blocs appeles compris (le compteur partage du cycle), et sa duree.
     const auto t0 = monotonicMicros();
     const auto s0 = scanStatements_;
+    if (runnable.ladder) {   // 1.51.0 : une section LD
+        const bool ok = runLadder(runnable);
+        pendingTimes_[index] = {scanStatements_ - s0, monotonicMicros() - t0};
+        ++scanSectionsRun_;
+        if (!ok) halted = true;
+        return;
+    }
+    if (runnable.sfc) {      // 1.51.0 (S) : un GRAFCET
+        const bool ok = runSfc(runnable);
+        pendingTimes_[index] = {scanStatements_ - s0, monotonicMicros() - t0};
+        ++scanSectionsRun_;
+        if (!ok) halted = true;
+        return;
+    }
     const auto r = execute(*runnable.program, *this, scanLimits_);
     pendingTimes_[index] = {scanStatements_ - s0, monotonicMicros() - t0};
     scanTopStatements_ += r.statements;

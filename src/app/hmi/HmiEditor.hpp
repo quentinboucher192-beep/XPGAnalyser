@@ -44,6 +44,7 @@ class HmiSymbolTabs;          // 1.9 : HmiObjectAlarmPanes.hpp
 class HmiSymbolAlarmsPane;
 class HmiOperatorsPane;       // 1.10 (S2) : HmiOperatorPanes.hpp
 class HmiFunctionsPane;       // 1.11.10 : HmiFunctionPanes.hpp (les fonctions du symbole)
+class HmiTypesPane;           // 1.51.0 : HmiVariablePanes.hpp (les types IHM du symbole)
 class HmiSymbolPopupsPane;    // 1.11.10 : HmiSymbolPopupsPane.hpp
 class HmiDeclGrid;            // 1.12.16 : les constantes d'une vue (HmiDeclGrid.hpp)
 namespace hmitree { struct Line; }   // 1.10.3 (Q1103) : HmiTreeData.hpp
@@ -85,6 +86,7 @@ public:
     [[nodiscard]] HmiOperatorsPane*    symbolOperators() noexcept { return symbolOperators_; }   // 1.10 (S2)
     [[nodiscard]] HmiFunctionsPane*    symbolFunctions() noexcept { return symbolFunctions_; }   // 1.11.10
     [[nodiscard]] HmiSymbolPopupsPane* symbolPopups() noexcept { return symbolPopups_; }         // 1.11.10
+    [[nodiscard]] HmiTypesPane*        symbolTypes() noexcept { return symbolTypes_; }           // 1.51.0 : ses types IHM
     // 1.12.16 : une vue ou une popup (pas un symbole) - les sous-onglets Dessin | Constantes | Fonctions
     // (nuls : un symbole).
     [[nodiscard]] HmiSymbolTabs*       viewTabs() noexcept { return viewTabs_; }
@@ -358,6 +360,7 @@ private:
     std::shared_ptr<bool> alive_{std::make_shared<bool>(true)};   // 1.11.10 : une fenetre qui se ferme apres l'editeur
     bool confirmedRemoval_{false};   // 1.11.22 : la suppression d'un parametre employe, confirmee
     HmiSymbolPopupsPane* symbolPopups_{nullptr};      // 1.11.10 : le sous-onglet Popups
+    HmiTypesPane*        symbolTypes_{nullptr};       // 1.51.0 : le sous-onglet Types IHM (le volet des types, sur le symbole)
     core::ConnectionScope links_;
     bool              syncing_{false};
     History           history_;

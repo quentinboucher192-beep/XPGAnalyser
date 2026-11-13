@@ -6,6 +6,7 @@
 //  qui est appele. Les types et les divisions passent par exprcheck.
 // =============================================================================
 #include "HmiScriptCheck.hpp"
+#include "HmiSymbolTypes.hpp"   // 1.51.0 : la portee des types d'un symbole
 #include "HmiCalc.hpp"   // 1.12.7 : les constantes qualifiees (Reglages.Seuils)
 #include "../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas d'espace API.
 #include "HmiNatives.hpp"   // 1.12.0 : les couleurs, l'aleatoire
@@ -1572,6 +1573,88 @@ private:
             if (const View* o = sc_.project->view(sc_.view->ownerSymbol); o && isSymbolView(*o)) return o;
         return nullptr;
     }
+    // 1.51.0 : UN OBJET DE VUE, DESIGNE SEUL. [i, j) est-il : Vue.Objet (une vue, une popup - un objet de son modele
+    // aussi), le nom court d'un objet de la vue du script (Carte_1), une locale Object ou REF_TO Object (o, r), la
+    // cible d'un POINTER TO Object (p^) ? `path` : vrai pour les deux premiers (un chemin sans propriete).
+    [[nodiscard]] bool objectAt(std::size_t i, std::size_t j, bool* isPath = nullptr) const {
+        if (isPath) *isPath = false;
+        if (atEnd(i) || j <= i || toks_[i].k != Tok::K::Ident || !sc_.project) return false;
+        const Project& p = *sc_.project;
+        const std::string& root = toks_[i].text;
+        // Le type vise par une locale : Object, REF_TO Object (lue a travers), POINTER TO Object (avec ^).
+        const auto aims = [](std::string t, int& pointers) {
+            pointers = 0;
+            for (;;) {
+                while (!t.empty() && std::isspace(static_cast<unsigned char>(t.front()))) t.erase(0, 1);
+                while (!t.empty() && std::isspace(static_cast<unsigned char>(t.back()))) t.pop_back();
+                const std::string u = up(t);
+                if (u.rfind("REF_TO ", 0) == 0) t.erase(0, 7);
+                else if (u.rfind("POINTER TO ", 0) == 0) { t.erase(0, 11); ++pointers; }
+                else return u;
+            }
+        };
+        if (const auto* l = local(root)) {
+            int pointers = 0;
+            if (aims(l->type, pointers) != "OBJECT") return false;
+            if (j == i + 1) return pointers == 0;
+            return j == i + 2 && isOp(i + 1, "^") && pointers == 1;
+        }
+        if (counter(root) || selfName(root) || param(root) || p.variable(root) || dialectName(root, toks_[i].at)) return false;
+        if (j == i + 1) {
+            const View* here = composed_ ? &*composed_ : sc_.view;
+            if (!here || !here->objectByName(root)) return false;
+            if (isPath) *isPath = true;
+            return true;
+        }
+        // Vue.Objet : des noms separes par des points, rien d'autre.
+        if ((j - i) % 2 == 0) return false;
+        std::string dotted = root;
+        for (std::size_t k = i + 1; k < j; k += 2) {
+            if (!isOp(k, ".") || !isIdent(k + 1)) return false;
+            dotted += "." + toks_[k + 1].text;
+        }
+        const View* pv = pub::viewNamed(p, root);
+        if (!pv) return false;
+        std::optional<View> borrowed;
+        if (inherits(p, *pv)) borrowed = compose(p, *pv);
+        const auto r = pub::resolve(p, dotted, borrowed ? &*borrowed : pv);
+        if (r.what != pub::Resolved::What::Incomplete || !r.object) return false;
+        if (isPath) *isPath = true;
+        return true;
+    }
+    // 1.51.0 : [i, e) suivi de '(' en e est-il objet.Get (Vue_Accueil.Carte_1.Get(), Carte_1.Get(), o.Get(), p^.Get()) ?
+    // Vrai : l'appel est lu ici (un argument est une faute) ; `after` : l'index apres sa ')'.
+    bool objectGet(std::size_t i, std::size_t e, std::size_t& after) {
+        if (e < i + 3 || !isOp(e, "(") || !isIdent(e - 1) || up(toks_[e - 1].text) != "GET" || !isOp(e - 2, ".")) return false;
+        if (!objectAt(i, e - 2)) return false;
+        int depth = 0;
+        std::size_t close = e;
+        for (; !atEnd(close); ++close) {
+            if (isOp(close, "(") || isOp(close, "[") || isOp(close, "{")) ++depth;
+            else if ((isOp(close, ")") || isOp(close, "]") || isOp(close, "}")) && --depth == 0) break;
+        }
+        if (close > e + 1) {
+            reportTok(e - 1, std::min(close + 1, toks_.size()), Finding::Severity::Error,
+                      textOf(i, e) + "() ne prend pas d'argument : il rend un POINTER TO Object vers l'objet");
+            walkNames(e + 1, close);
+        }
+        after = atEnd(close) ? close : close + 1;
+        return true;
+    }
+    // 1.51.0 : la valeur [a, b) est-elle un objet de vue SEUL - un chemin sans propriete (Vue_Accueil.Carte_1, Carte_1) :
+    // 1 ; un pointeur vers lui (Vue_Accueil.Carte_1.Get(), ADR(Vue_Accueil.Carte_1)) : 2 ; autre chose : 0.
+    [[nodiscard]] int bareObject(std::size_t a, std::size_t b) {
+        if (b <= a || atEnd(a)) return 0;
+        if (bool whole = false; objectAt(a, b, &whole) && whole) return 1;
+        // ADR(objet), REF(objet)
+        if (b >= a + 4 && (isWord(a, "ADR") || isWord(a, "REF")) && isOp(a + 1, "(") && isOp(b - 1, ")") && objectAt(a + 2, b - 1)) return 2;
+        // objet.Get()
+        if (b >= a + 5 && isOp(b - 1, ")") && isOp(b - 2, "(") && isIdent(b - 3) && up(toks_[b - 3].text) == "GET" && isOp(b - 4, ".")
+            && objectAt(a, b - 4))
+            return 2;
+        return 0;
+    }
+
     // 1.11.10 : [i, j) est-il un appel de fonction d'instance (Vanne_3.Ouvrir, SUPER.Ouvrir,
     // Vue_Vannes.Vanne_3.Ouvrir) ? Rend la fonction ; nul : non.
     const HmiFunction* instanceFunction(std::size_t i, std::size_t j) const {
@@ -2172,6 +2255,10 @@ private:
                     k = std::max(instanceCall(k, e, *f, false), k + 1);
                     continue;
                 }
+            if (std::size_t past = k; objectGet(k, e, past)) {   // 1.51.0 : Vue_Accueil.Carte_1.Get() - un POINTER TO Object
+                k = std::max(past, k + 1);
+                continue;
+            }
             (void)path(k, e, false);
             ++k;            // les indices sont relus (leurs noms)
         }
@@ -2234,6 +2321,14 @@ private:
 
     void condition(std::size_t a, std::size_t b, const std::string& word) {
         walkNames(a, b);
+        // 1.51.0 : IF Vue_Accueil.Carte_1 THEN - un objet seul n'est pas une condition : il manque la propriete.
+        if (bareObject(a, b) == 1) {
+            const std::string given = textOf(a, b);
+            reportTok(a, b, Finding::Severity::Error,
+                      given + " : chemin incomplet (Vue.Objet.Propri\xC3\xA9t\xC3\xA9) - " + word + " attend un BOOL : \xC3\xA9" "cris "
+                          + given + ".Visible (ou une autre propri\xC3\xA9t\xC3\xA9 BOOL)");
+            return;
+        }
         for (auto& pb : typeProblems(a, b, exprcheck::Want::Bool)) {
             const bool expected = pb.message.find("est attendu") != std::string::npos;
             // 1.13.0 : IF Pression > PressionBasse - une faute d'unite est une erreur, avec sa correction d'un clic.
@@ -2270,6 +2365,19 @@ private:
         walkNames(j + 1, e);
         if (e <= j + 1) return;
         const Kind kind = kindOf(type);
+        // 1.51.0 : un objet de vue seul (ObjPtr := Vue_Accueil.Carte_1) va dans un Object, un POINTER TO Object, un
+        // REF_TO Object ; la ou une valeur simple est attendue (un BOOL, un nombre, un texte), il manque la propriete.
+        if (kind != Kind::Other)
+            if (const int obj = bareObject(j + 1, e)) {
+                const std::string given = textOf(j + 1, e);
+                reportTok(j + 1, e, Finding::Severity::Error,
+                          obj == 1 ? given + " : chemin incomplet (Vue.Objet.Propri\xC3\xA9t\xC3\xA9) - " + target + " est un " + up(type)
+                                         + " : \xC3\xA9" "cris " + given + ".Propri\xC3\xA9t\xC3\xA9 (" + given + ".Visible...), ou range l'objet "
+                                           "dans une variable Object ou POINTER TO Object"
+                                   : target + " est un " + up(type) + " : " + given + " rend un POINTER TO Object (un pointeur vers "
+                                         "l'objet) - range-le dans une variable POINTER TO Object");
+                return;
+            }
         using W = exprcheck::Want;
         const W want = kind == Kind::Bool ? W::Bool : kind == Kind::Num ? W::Number : W::Any;
         for (auto& pb : typeProblems(j + 1, e, want)) {
@@ -2768,6 +2876,7 @@ std::vector<Issue> projectIssues(const Project& p, const NameExists& plcHasName,
         s.function = f;
         s.plcKnown = plcHasName;
         s.plc = plcPaths;
+        if (v) s.ns = symtypes::scopeOf(p, *v);   // 1.51.0 : le code d'un symbole lit ses types sans prefixe
         return s;
     };
     const auto severity = [](Finding::Severity s) {

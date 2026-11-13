@@ -289,6 +289,7 @@ void laGrille() {
 } // namespace
 
 #include "pointeurs_dimensions.inl"   // 1.50.1 : Tableau a N dimensions, + Dimension
+#include "pointeurs_objets151.inl"   // 1.51.0 : un pointeur vers un objet de la vue (Vue.Objet, Get(), ADR)
 
 int main() {
     std::printf("POINTER TO : un vrai pointeur ; le selecteur de types (Acces)\n");
@@ -297,6 +298,7 @@ int main() {
     leSelecteur();
     laGrille();
     leSelecteurDimensions();
+    pointeurVersObjet151();
     std::printf("%d controles, %d echecs\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

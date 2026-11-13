@@ -405,7 +405,8 @@ namespace app {
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).
-        enum class HmiPart : std::uint8_t { Objects, Scripts, Animations, Layers, Groups, Functions, Popups, Count };
+        // 1.51.0 : + Types (ses types IHM, la derniere partie d'un symbole ; ses enfants : des HmiTypeNode).
+        enum class HmiPart : std::uint8_t { Objects, Scripts, Animations, Layers, Groups, Functions, Popups, Types, Count };
         // 1.11.12 : ce que dit la barre d'etat quand on ouvre une partie depuis l'arbre.
         // Une phrase pour CHAQUE partie (nullptr pour Count et au-dela) : la 1.11.11
         // lisait une table de 5 phrases avec les 7 parties - un clic sur Fonctions ou

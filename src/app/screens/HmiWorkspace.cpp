@@ -2662,8 +2662,8 @@ void MainAnalysisScreen::openHmiView(std::uint64_t viewId, int part, std::uint64
     using Part = ProjectTreeModel::HmiPart;
     if (part >= 0 && part < static_cast<int>(Part::Count)) {
         const auto which = static_cast<Part>(part);
-        if (auto* tabs = editor->symbolTabs(); tabs && (which == Part::Functions || which == Part::Popups))
-            tabs->setCurrent(which == Part::Functions ? HmiSymbolTabs::Functions : HmiSymbolTabs::Popups);
+        if (auto* tabs = editor->symbolTabs(); tabs && (which == Part::Functions || which == Part::Popups || which == Part::Types))
+            tabs->setCurrent(which == Part::Functions ? HmiSymbolTabs::Functions : which == Part::Types ? HmiSymbolTabs::Types : HmiSymbolTabs::Popups);
         if (const char* hint = ProjectTreeModel::hmiPartHint(which)) status_->setTransientMessage(hint, 8.0);
     }
 }
@@ -4522,6 +4522,17 @@ HmiTypesPane* MainAnalysisScreen::showHmiType(std::uint64_t typeId) {
         if (auto* own = dynamic_cast<HmiTypesPane*>(hmiTab("type:" + std::to_string(typeId)))) {
             (void)showPage(own);
             return own;
+        }
+    // 1.51.0 : un type d'un symbole - l'editeur du symbole, son sous-onglet Types IHM, sur lui.
+    if (typeId != 0 && app_.hmi())
+        if (const auto* ty = app_.hmi()->project.hmiType(asId(typeId)); ty && ty->symbol != hmi::kNoId) {
+            const auto symbol = static_cast<std::uint64_t>(ty->symbol);
+            openHmiView(symbol);
+            auto* editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(symbol)));
+            if (!editor || !editor->symbolTabs() || !editor->symbolTypes()) return nullptr;
+            editor->symbolTabs()->setCurrent(HmiSymbolTabs::Types);
+            editor->symbolTypes()->selectType(asId(typeId));
+            return editor->symbolTypes();
         }
     openHmiPane("scripts");
     auto* pane = dynamic_cast<HmiScriptsPane*>(hmiTab("scripts"));

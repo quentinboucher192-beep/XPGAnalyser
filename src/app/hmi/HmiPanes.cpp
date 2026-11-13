@@ -14,6 +14,7 @@
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiOperators.hpp"   // 1.10
 #include "../../hmi/HmiSymbols.hpp"     // 1.24.0 : les instances d'un symbole (supprimer plusieurs vues)
+#include "../../hmi/HmiSymbolTypes.hpp"   // 1.51.0 : un symbole duplique emporte ses types
 #include "../../hmi/HmiProduction.hpp"  // 1.12.7 (lot D) : le calendrier des postes
 #include "../../import/ProjectAnalyzer.hpp"
 #include "../../ui/Theme.hpp"
@@ -915,6 +916,7 @@ HmiViewsPane::HmiViewsPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                     copy.activeLayer = ids.count(copy.activeLayer) ? ids[copy.activeLayer] : copy.layers.front().id;
                     made = copy.id;
                     p.views.push_back(std::move(copy));
+                    (void)hmi::symtypes::copyTypes(p, sel, made);   // 1.51.0 : un symbole emporte ses types IHM
                 }));
                 refresh();
                 selectView(made);

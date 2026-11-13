@@ -23,6 +23,7 @@
 #include "../hmi/HmiPublicVars.hpp"
 #include "../hmi/HmiNatives.hpp"   // 1.12.0 : la branche Natives
 #include "../hmi/HmiNames.hpp"     // 1.13.0 (lot J8) : les espaces de noms
+#include "../hmi/HmiSymbolTypes.hpp"   // 1.51.0 : les types IHM d'un symbole (sa partie Types IHM)
 #include "../hmi/HmiLibrary.hpp"   // 1.13.0 (lot J8) : les bibliotheques reliees
 #include "../hmi/HmiUnits.hpp"     // 1.13.0 (lot J6b) : Configuration > Unites de mesure (le compte)
 #include "../hmi/HmiRecording.hpp" // 1.14.0 (M4) : Ressources > Enregistrements (le compte)
@@ -1114,6 +1115,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                     [](const hmi::Object& o) { return o.kind == hmi::Kind::Group; }));
             case HmiPart::Functions:  return overloadUnits(v->functions).size();  // 1.11.10 ; 1.11.21 : les surcharges regroupees
             case HmiPart::Popups:     return ownedPopups(hmi_.get(), v).size();
+            case HmiPart::Types:      return hmi::symtypes::typesOf(hmi_->project, v->id).size();   // 1.51.0
             case HmiPart::Count:      break;
             }
             return 0;
@@ -1258,7 +1260,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiRoles:      return hmi_ ? hmi_->project.security.roles.size() : 0;
         // lot 9 : + variables systeme, d'instances ; lot 16 : + types IHM ; 1.12.0 : + Natives ; 1.12.2 : - Variables employees
         // 1.13.0 (lot J8) : un 8e dossier, Bibliotheques, quand le projet emploie des espaces ou des bibliotheques.
-        case NodeKind::HmiScripts:    return hmi_ ? (hmi::names::active(hmi_->project) ? 8 : 7) : 0;
+        case NodeKind::HmiScripts:    return hmi_ ? (hmi::symtypes::projectSpacesUsed(hmi_->project) ? 8 : 7) : 0;
         case NodeKind::HmiLibrariesFolder: return hmi_ ? hmi_->project.libraries.size() : 0;   // 1.13.0 (lot J8)
         case NodeKind::HmiLibraryNode:     return 0;
         // ---- 1.12.0 : les natives (hmi::natives::tree) ----
@@ -1663,6 +1665,10 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 const auto pops = ownedPopups(hmi_.get(), v);
                 return k < pops.size() ? pack(NodeKind::HmiView, static_cast<Index>(pops[k]->id & kMask28)) : ui::kInvalidNode;
             }
+            case HmiPart::Types: {                                             // 1.51.0 : ses types IHM
+                const auto own = hmi::symtypes::typesOf(hmi_->project, v->id);
+                return k < own.size() ? pack(NodeKind::HmiTypeNode, static_cast<Index>(own[k]->id & kMask28)) : ui::kInvalidNode;
+            }
             case HmiPart::Count: break;
             }
             return ui::kInvalidNode;
@@ -1808,7 +1814,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                                                    NodeKind::HmiVariablesFolder,
                                                    NodeKind::HmiSysFolder, NodeKind::HmiInstFolder, NodeKind::NativesFolder};
             // 1.13.0 (lot J8) : Bibliotheques, en dernier (les sept d'avant ne bougent pas).
-            if (k == std::size(folders) && hmi_ && hmi::names::active(hmi_->project)) return pack(NodeKind::HmiLibrariesFolder, 0);
+            if (k == std::size(folders) && hmi_ && hmi::symtypes::projectSpacesUsed(hmi_->project)) return pack(NodeKind::HmiLibrariesFolder, 0);
             return k < std::size(folders) ? pack(folders[k], 0) : ui::kInvalidNode;
         }
         case NodeKind::HmiLibrariesFolder:              // 1.13.0 (lot J8) : chaque bibliotheque reliee
@@ -2877,6 +2883,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case HmiPart::Groups:     return "Groupes  [" + std::to_string(groups) + "]";
             case HmiPart::Functions:  return "Fonctions  [" + std::to_string(v.functions.size()) + "]";              // 1.11.10
             case HmiPart::Popups:     return "Popups  [" + std::to_string(ownedPopups(hmi_.get(), &v).size()) + "]";
+            case HmiPart::Types:      return "Types IHM  [" + std::to_string(hmi::symtypes::typesOf(hmi_->project, v.id).size()) + "]";   // 1.51.0
             case HmiPart::Count:      break;
             }
             return {};
@@ -3539,6 +3546,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case HmiPart::Animations: t.key = key("animations", id); t.label = "ses animations"; t.code = true; break;
             case HmiPart::Functions:  t.paths = {path + "/Fonctions"}; t.label = "ses fonctions"; t.code = true; break;
             case HmiPart::Popups:     t.paths = {path + "/Popups"}; t.label = "ses popups"; t.code = true; break;
+            case HmiPart::Types:      t.paths = {path + "/Types IHM"}; t.label = "ses types IHM"; t.code = true; break;   // 1.51.0
             default: break;
             }
             break;
@@ -4265,6 +4273,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             case HmiPart::Groups:     s.icon = ui::Icon::Folder; break;
             case HmiPart::Functions:  s.icon = ui::Icon::FunctionBlock; s.iconTone = ui::Tone::InOut; break;   // 1.11.10 : en violet
             case HmiPart::Popups:     s.icon = ui::Icon::Screen; s.iconTone = ui::Tone::Family2; break;
+            case HmiPart::Types:      s.icon = ui::Icon::DerivedType; break;   // 1.51.0 : comme Types IHM
             case HmiPart::Count:      break;
             }
             break;
@@ -5320,6 +5329,9 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                        "red\xC3\xA9" "finissables par instance).";
             case HmiPart::Popups:
                 return "Popups du symbole : son sous-onglet \xC2\xAB Popups \xC2\xBB (chaque instance ouvre la sienne).";
+            case HmiPart::Types:   // 1.51.0
+                return "Types IHM du symbole : son sous-onglet \xC2\xAB Types IHM \xC2\xBB (dans le symbole : T_Etat ; ailleurs : "
+                       "Symbole.T_Etat).";
             case HmiPart::Count:
                 break;
         }

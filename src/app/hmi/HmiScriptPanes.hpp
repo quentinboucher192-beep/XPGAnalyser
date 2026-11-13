@@ -246,6 +246,9 @@ public:
     //  La liste montre OnOpen, OnCycle deballe (un script de cycle par ligne, son moment), OnClose ; la section
     //  Execution, les 10 etapes et les scripts sous l'etape qu'ils suivent. Chaque changement est une commande (Ctrl+Z).
     [[nodiscard]] HmiCycleStages* cycleStages() noexcept { return stages_; }
+    // 1.51.0 : la section Execution (et sa phrase dans la barre) ne se montre que pour un script de cycle - le titre
+    // OnCycle, l'OnCycle encore vide aussi ; OnOpen, OnClose, rien de choisi : cachee, sa largeur va a l'editeur.
+    [[nodiscard]] bool cycleColumnShown() const noexcept { return cycleShown_; }
     [[nodiscard]] HmiCycleAdd*    cycleAdd() noexcept { return cycleAdd_; }
     static constexpr std::size_t kLastRank = static_cast<std::size_t>(-1);
     // Un nouveau script de cycle (ST, un nom libre), apres l'etape `moment` (0 : celle du script de cycle choisi, sinon
@@ -303,6 +306,9 @@ private:
     [[nodiscard]] std::vector<const hmi::Script*> list() const;
     void refreshStages();                // 1.27.0 : la section Execution suit la vue (ses scripts de cycle, la mesure)
     [[nodiscard]] bool cycleRow(int row) const;   // 1.27.0 : la ligne d'un script de cycle
+    [[nodiscard]] bool cycleSelected() const;     // 1.51.0 : un script de cycle (ou l'OnCycle) est choisi
+    void updateCycleColumn();                     // 1.51.0 : la section Execution montree ou cachee, selon le choix
+    [[nodiscard]] std::string cycleHint() const;  // 1.51.0 : la phrase de la barre qui l'explique
 
     hmi::DocumentPtr  doc_;
     Apply             apply_;
@@ -338,6 +344,8 @@ private:
     HmiCycleStages*          stages_{nullptr};
     HmiCycleAdd*             cycleAdd_{nullptr};
     HmiTitledPanel*          stagesPanel_{nullptr};
+    bool                     cycleShown_{true};    // 1.51.0 : la section Execution est montree
+    float                    cycleLent_{0.f};      // 1.51.0 : sa part de largeur, pretee a l'editeur quand elle est cachee
     std::function<std::optional<CycleMeasures>()> measuresSource_;
     CycleMeasures            measures_{};
     std::uint64_t            measuredCycle_{0};

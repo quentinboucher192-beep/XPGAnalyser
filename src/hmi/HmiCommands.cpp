@@ -1,4 +1,5 @@
 #include "HmiCommands.hpp"
+#include "HmiSymbolTypes.hpp"   // 1.51.0 : les types des symboles
 #include "HmiTrash.hpp"            // 1.26.1 : la corbeille du projet
 #include "../core/CallTrail.hpp"   // 1.10.2 (CR) : les commandes du document, dans le journal interne
 
@@ -325,6 +326,8 @@ core::CommandPtr changeView(const DocumentPtr& doc, Id view, std::string label, 
     View before = *current;
     View after = before;
     fn(doc->project, after);
+    // 1.51.0 : les types d'un symbole - un nom court qu'un homonyme rendrait ambigu s'ecrit en entier (HmiSymbolTypes).
+    (void)symtypes::normalizeView(doc->project, after);
     // 1.11.18 (lot 3) : une declaration copiee (une instance, un script dupliques) recoit un identifiant neuf.
     uniqueDeclarationIds(doc->project, after);
     if (after == before) return nullptr;
@@ -343,6 +346,9 @@ core::CommandPtr makeProjectCommand(const DocumentPtr& doc, std::string label, c
     Project before = doc->project;
     Project after = before;
     fn(after);
+    // 1.51.0 : les types des symboles suivent leur symbole (son nom, sa suppression : ils partent avec lui, dans le meme
+    // element de la corbeille) ; un nom court ambigu s'ecrit en entier (HmiSymbolTypes).
+    (void)symtypes::normalize(after);
     // 1.26.1 : la corbeille ne change que par ses gestes (un projet remplace en entier la laisse telle qu'elle est).
     if (mode != TrashMode::Edit) after.trash = before.trash;
     if (mode == TrashMode::Capture) {

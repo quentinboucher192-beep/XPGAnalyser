@@ -326,7 +326,8 @@ class HmiSymbolTabs final : public ui::Widget {
 public:
     // 1.11.10 : + Fonctions et Popups (les fonctions et les popups propres au symbole).
     // 1.12.16 : + Constantes (une vue, une popup).
-    enum Tab : int { Drawing = 0, Alarms = 1, Instances = 2, Operators = 3, Functions = 4, Popups = 5, Constants = 6 };
+    // 1.51.0 : + Types IHM (les types IHM propres au symbole, HmiSymbolTypes.hpp).
+    enum Tab : int { Drawing = 0, Alarms = 1, Instances = 2, Operators = 3, Functions = 4, Popups = 5, Constants = 6, Types = 7 };
     HmiSymbolTabs(std::string id, hmi::DocumentPtr doc, hmi::Id symbol);
     // Les sous-onglets montres, dans l'ordre (un symbole, ou une vue).
     [[nodiscard]] std::vector<int> order() const;

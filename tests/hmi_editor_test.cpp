@@ -50019,8 +50019,15 @@ void cycleVue1270() {
 
 #include "hmi_editor_etirer.inl"   // 1.50.0 (planche 02) : Etirer dans le clic droit d'un objet de la vue
 #include "hmi_editor_methodes1501.inl"   // 1.50.1 : Essayer une methode, ses surcharges, la signature d'une virtuelle, le gris
+#include "hmi_editor_symtypes151.inl"   // 1.51.0 : les types IHM d'un symbole
 
 int main(int argc, char** argv) {
+    // 1.51.0 : HMI_TEST_SYMT=1 - les types IHM d'un symbole, seuls.
+    if (const char* only = std::getenv("HMI_TEST_SYMT"); only && *only == '1') {
+        symtypes151();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.50.0 : HMI_TEST_ETI=1 - Etirer (le moteur, le menu, la barre, l'apercu, la fenetre), seul.
     if (const char* only = std::getenv("HMI_TEST_ETI"); only && *only == '1') {
         etirer1500();
@@ -50804,6 +50811,7 @@ int main(int argc, char** argv) {
     objets113();                            // 1.13.0 (J1b) : l'ecran des objets - methodes, visibilite, heritage, interfaces
     methodes150();                          // 1.50.0 (planche 01) : les methodes des types IHM = les fonctions des symboles
     methodes1501();                         // 1.50.1 : Essayer une methode, ses surcharges, la signature d'une virtuelle, le gris
+    symtypes151();                          // 1.51.0 : les types IHM d'un symbole
     testsUnitaires113();                    // 1.13.0 (lot J4b) : les tests unitaires - l'onglet Tests, les verdicts, l'arbre
     unites113();                            // 1.13.0 (lot J6b) : les unites - la colonne Unite, le selecteur, Unites de mesure
     lotF3_113();                            // 1.13.0 (lot F3) : les defauts vus aux captures (unites, tests, aide F1)

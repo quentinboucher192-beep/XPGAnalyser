@@ -2,6 +2,7 @@
 
 #include "../import/ProjectParser.hpp"
 #include "BlockLibrary.hpp"
+#include "Ladder.hpp"                    // 1.51.0 : une section LD neuve est un ladder vide
 #include "../domain/ExecutionOrder.hpp"
 
 #include <algorithm>
@@ -333,6 +334,12 @@ namespace project {
         if (owner_ == kNoIndex && !subroutine_) s.task = p.strings.intern(task_);
         s.body = "(* " + name_ + " *)\n";
         s.lineCount = 2;
+        // 1.51.0 : UNE SECTION LD NEUVE est un ladder vide (un reseau), le XML de
+        // Control Expert - l'editeur graphique la dessine, l'export la rend telle quelle.
+        if (language_ == PouLanguage::LD) {
+            s.body = ladder::emptySourceXml(11, owner_ == kNoIndex ? 2 : 3);
+            s.lineCount = 1;
+        }
 
         // Execution order: after everything already in the same task - its
         // sections AND its program units, which run as a block at their own rank

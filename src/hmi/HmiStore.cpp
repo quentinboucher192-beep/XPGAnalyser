@@ -7,6 +7,7 @@
 #include "HmiPopupParams.hpp"
 #include "HmiTypeRegistry.hpp"     // 1.11.19 (refonte, lot 6) : la cle du type d'une declaration
 #include "HmiZones.hpp"
+#include "HmiSymbolTypes.hpp"      // 1.51.0 : les types des symboles
 #include "HmiStyles.hpp"           // 1.23.0 : les styles par type d'objet (les cibles par type)
 
 #include <algorithm>
@@ -1259,6 +1260,8 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         index += "type_ihm" + fieldInt("id", ty.id) + field("nom", ty.name) + field("description", ty.description)
                + (ty.folder.empty() ? std::string{} : field("dossier", ty.folder))   // lot 21
                + (ty.ns.empty() ? std::string{} : field("espace", ty.ns))           // 1.13.0 (lot J8, format 33)
+               // 1.51.0 : un type d'un symbole - la vue qui le porte (une version d'avant l'ignore : un type de l'espace).
+               + (ty.symbol == kNoId ? std::string{} : fieldInt("symbole", ty.symbol))
                // 1.13.0 (lot J1, format 31) : le parent (EXTENDS) et les interfaces (IMPLEMENTS, jointes par ';').
                + (ty.base.empty() ? std::string{} : field("herite", ty.base))
                + (ty.interfaces.empty() ? std::string{} : field("implemente", joinSemicolon(ty.interfaces))) + "\n";
@@ -2117,6 +2120,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             ty.description = toStr(r.get("description"));
             ty.folder = toStr(r.get("dossier"));                    // lot 21
             ty.ns = toStr(r.get("espace"));                         // 1.13.0 (lot J8) : son espace de noms
+            ty.symbol = static_cast<Id>(toInt(r.get("symbole"), 0));   // 1.51.0 : le symbole qui le porte
             ty.base = toStr(r.get("herite"));                       // 1.13.0 (lot J1) : son parent (EXTENDS)
             if (const std::string impl = toStr(r.get("implemente")); !impl.empty())   // 1.13.0 : ses interfaces
                 for (std::size_t from = 0, semi; from <= impl.size(); from = semi + 1) {
@@ -2953,6 +2957,12 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
         if (e.id == kNoId) e.id = p.nextId++;
     if (p.config.startView != kNoId && !p.view(p.config.startView) && report)
         report->warnings.push_back("vue de d\xC3\xA9marrage " + std::to_string(p.config.startView) + " introuvable");
+    // 1.51.0 : les types des symboles - l'espace de chacun est le nom de son symbole ; un symbole introuvable (son fichier
+    // manque) : le type reste, type du projet de cet espace (rien ne se perd).
+    for (const auto& ty : p.programs.types)
+        if (ty.symbol != kNoId && !p.view(ty.symbol) && report)
+            report->warnings.push_back("type IHM " + ty.name + " : son symbole " + std::to_string(ty.symbol) + " est introuvable, il reste un type du projet");
+    (void)symtypes::normalize(p, false);
     for (const auto& u : p.security.users)
         if (!p.group(u.group) && report) report->warnings.push_back("utilisateur '" + u.login + "' : groupe introuvable");
     // 1.13.0 (lot J8) : les bibliotheques reliees, depuis le cache de leur interface (sans disque ici ; load() les

@@ -1,4 +1,5 @@
 #include "HmiPipeline.hpp"
+#include "HmiSymbolTypes.hpp"   // 1.51.0 : la portee des types d'un symbole
 #include "../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas de phase API
 
 #include "HmiComm.hpp"
@@ -1501,6 +1502,7 @@ std::map<std::string, std::vector<Diagnostic>> compileElements(const Project& p,
         s.function = fn;
         s.plcKnown = o.plcHasName;
         s.plc = o.plcPaths;
+        s.ns = symtypes::scopeOf(p, *sym);   // 1.51.0 : ses types IHM, sans prefixe
         for (const auto& fd : scriptcheck::check(s, fn->body, fn->decls, decl::Role::Function)) {
             Diagnostic x;
             x.severity = fd.severity == scriptcheck::Finding::Severity::Error ? Severity::Error : Severity::Warning;

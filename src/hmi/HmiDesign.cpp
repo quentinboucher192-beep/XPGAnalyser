@@ -1,5 +1,6 @@
 #include "HmiDesign.hpp"
 #include "HmiStyles.hpp"   // 1.23.0 : les styles par type d'objet
+#include "HmiSymbolTypes.hpp"   // 1.51.0 : un symbole duplique emporte ses types
 #include "../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas d'automate dans les modeles de pages
 
 #include "HmiEdit.hpp"
@@ -433,6 +434,7 @@ Id duplicateViewReplacing(Project& p, Id viewId, const std::string& newName, std
     if (replacedFields) *replacedFields = fields;
     const Id made = one.views.front().id;
     p.views.push_back(std::move(one.views.front()));
+    (void)symtypes::copyTypes(p, viewId, made);   // 1.51.0 : un symbole duplique emporte ses types IHM
     return made;
 }
 

@@ -76,6 +76,9 @@ public:
         // 1.50.0 (planche 03) : une CONSTANTE (la grille des Constantes) - l'Acces REF_TO / POINTER TO y est grise
         // (une constante ne vise rien).
         bool                           constant{false};
+        // 1.51.0 : LE SYMBOLE OU S'ECRIT LE TYPE (un parametre, une declaration, un membre d'un de ses types) : ses types
+        // IHM en tete, sous leur nom court, dans leur section (la puce << Types du symbole >>) ; kNoId : aucun.
+        hmi::Id                        symbol{hmi::kNoId};
     };
     struct Answer {
         std::string type;                                                  // le type choisi (ecrit : "ARRAY[0..9] OF REAL")

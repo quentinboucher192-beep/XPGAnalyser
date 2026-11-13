@@ -349,6 +349,14 @@ public:
 
     void refresh();
 
+    // ---- 1.51.0 : LES TYPES IHM D'UN SYMBOLE (HmiSymbolTypes.hpp) ----
+    //  Le volet sur les types d'un symbole (le sous-onglet Types IHM de son editeur) : la liste ne montre que les siens
+    //  (sans dossiers), Nouveau type, Dupliquer, Supprimer et Renommer y restent (un homonyme du projet est permis : la
+    //  portee la plus proche) ; le reste - membres, methodes, visibilite, heritage, interfaces, generiques, Ctrl+Z - est
+    //  celui de Types IHM. kNoId (par defaut) : les types du projet, sans ceux des symboles.
+    void setSymbolScope(hmi::Id symbol);
+    [[nodiscard]] hmi::Id symbolScope() const noexcept { return scope_; }
+
     hmi::Id addType(const std::string& name, std::string* why = nullptr);
     bool renameType(hmi::Id, const std::string& name, std::string* why = nullptr);
     bool setTypeDescription(hmi::Id, const std::string& text);
@@ -610,6 +618,9 @@ private:
     Apply             apply_;
     Hosts             hosts_;
     hmi::Id           document_{hmi::kNoId};   // 1.13.1 (lot K4) : l'onglet de document de ce type (kNoId : la page)
+    hmi::Id           scope_{hmi::kNoId};      // 1.51.0 : le symbole dont le volet montre les types (kNoId : le projet)
+    hmi::Id addScopedType(const std::string& name, hmi::HmiTypeKind kind, std::string* why, const std::string& signature = {});
+    [[nodiscard]] std::string freeTypeName(const std::string& base) const;   // libre dans la liste montree
     HmiToolStrip*     tools_{nullptr};
     ui::Splitter*     split_{nullptr};
     ui::TableView*    types_{nullptr};

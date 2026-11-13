@@ -15,6 +15,7 @@
 
 #include "../../hmi/HmiExpr.hpp"
 #include "../../hmi/HmiPublicVars.hpp"
+#include "../../hmi/HmiSymbolTypes.hpp"         // 1.51.0 : le sous-onglet Types IHM d'un symbole
 #include "../../hmi/HmiAlarmGroupCommands.hpp"   // 1.10.2 (AL) : la case Groupe de l'IHM
 #include "../../hmi/HmiSymbols.hpp"
 #include "../../hmi/HmiRanges.hpp"   // 1.12.10 (lot F) : les seuils pris a la variable
@@ -1525,7 +1526,7 @@ HmiSymbolTabs::HmiSymbolTabs(std::string id, hmi::DocumentPtr doc, hmi::Id symbo
 }
 
 std::vector<int> HmiSymbolTabs::order() const {
-    if (symbolMode_) return {Drawing, Alarms, Instances, Operators, Functions, Popups};
+    if (symbolMode_) return {Drawing, Alarms, Instances, Operators, Functions, Types, Popups};   // 1.51.0 : Types IHM
     return {Drawing, Constants, Functions};   // 1.12.16 : une vue, une popup
 }
 
@@ -1544,6 +1545,7 @@ std::string HmiSymbolTabs::label(int tab) const {
     if (tab == Alarms) return "Alarmes (" + std::to_string(sym ? sym->alarms.size() : 0) + ")";
     if (tab == Operators) return "Op\xC3\xA9rateurs (" + std::to_string(sym ? sym->operators.size() : 0) + ")";   // 1.10 (S2)
     if (tab == Functions) return "Fonctions (" + std::to_string(sym ? sym->functions.size() : 0) + ")";            // 1.11.10
+    if (tab == Types) return "Types IHM (" + std::to_string(sym ? hmi::symtypes::typesOf(doc_->project, sym->id).size() : 0) + ")";   // 1.51.0
     if (tab == Popups) {
         std::size_t n = 0;
         for (const auto& v : doc_->project.views) n += sym && v.ownerSymbol == sym->id ? 1 : 0;
@@ -1576,7 +1578,7 @@ void HmiSymbolTabs::onPaint(const ui::PaintContext& ctx) {
         const gfx::Color glyph = t == Functions ? ctx.theme.brand.scopeInOut : cur ? c.accent : c.textMuted;
         drawHmiGlyph(ctx.r, t == Drawing ? (symbolMode_ ? HmiGlyph::Symbol : HmiGlyph::View) : t == Alarms ? HmiGlyph::Bell
                           : t == Operators ? HmiGlyph::Compare : t == Functions ? HmiGlyph::Code : t == Popups ? HmiGlyph::Popup
-                          : t == Constants ? HmiGlyph::List : HmiGlyph::Duplicate,
+                          : t == Constants ? HmiGlyph::List : t == Types ? HmiGlyph::Template : HmiGlyph::Duplicate,
                      {r.x + 6, r.y + (r.h - 14) / 2, 14, 14}, glyph);
         ctx.r.drawText({r.x + 26, r.y + (r.h - 16) / 2}, label(t), ctx.theme.font.smallUi, cur ? c.accent : c.text);
     }

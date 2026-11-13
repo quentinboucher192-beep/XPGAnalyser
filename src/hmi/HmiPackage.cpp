@@ -469,6 +469,19 @@ Package collect(const Project& p, const std::vector<Id>& chosen) {
         }
     };
     for (const auto& var : c.programs.variables) wantTypesIn(var.type);
+    // 1.51.0 : les types IHM des symboles emportes (HmiType::symbol) partent avec eux, et les types du projet qu'ils
+    // emploient (membres, parent, interfaces, parametres du symbole).
+    std::set<Id> ownedTypes;
+    for (const auto& t : p.programs.types)
+        if (t.symbol != kNoId && in.count(t.symbol)) {
+            ownedTypes.insert(t.id);
+            for (const auto& m : t.members) wantTypesIn(m.type);
+            wantTypesIn(t.base);
+            for (const auto& i : t.interfaces) wantTypesIn(i);
+        }
+    for (const auto& v : c.views)
+        if (isSymbolView(v))
+            for (const auto& prm : v.params) wantTypesIn(prm.type);
     for (std::size_t guard = 0; guard < 8; ++guard) {
         const std::size_t before = wantedTypes.size();
         for (const auto& t : p.programs.types)
@@ -477,7 +490,7 @@ Package collect(const Project& p, const std::vector<Id>& chosen) {
         if (wantedTypes.size() == before) break;
     }
     for (const auto& t : p.programs.types)
-        if (wantedTypes.count(t.name)) c.programs.types.push_back(t);
+        if (ownedTypes.count(t.id) || (t.symbol == kNoId && wantedTypes.count(t.name))) c.programs.types.push_back(t);
     return out;
 }
 
@@ -951,6 +964,7 @@ Plan plan(const Project& dst, const Package& pkg) {
         pl.items.push_back(std::move(it));
     }
     for (const auto& t : src.programs.types) {
+        if (t.symbol != kNoId) continue;   // 1.51.0 : un type d'un symbole suit le choix de son symbole
         Item it;
         it.kind = ItemKind::Type;
         it.name = t.name;
@@ -1262,6 +1276,7 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
         if (x.kind == ItemKind::Type) typeItems.push_back(&x);
     std::size_t typeAt = 0;
     for (const auto& t : src.programs.types) {
+        if (t.symbol != kNoId) continue;   // 1.51.0 : apres (avec son symbole)
         const Item* it = typeAt < typeItems.size() ? typeItems[typeAt] : itemOf(ItemKind::Type, t.name);
         ++typeAt;
         const Choice choice = it ? it->choice : Choice::Add;
@@ -1288,6 +1303,34 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
         dst.programs.types.push_back(std::move(copy));
         if (choice == Choice::Rename && it) res.renamed.push_back("type " + it->name + " \xE2\x86\x92 " + t.name);
         else res.added.push_back("type " + t.name);
+    }
+    // 1.51.0 : LES TYPES DES SYMBOLES suivent leur symbole - ajoute ou renomme : ses types ajoutes ; remplace : ceux du
+    // projet remplaces par ceux du paquet ; garde : rien. Leur espace suit son nom (symtypes::normalize, dans la commande).
+    {
+        std::set<Id> replacedSymbols;
+        for (const auto& [from, to] : placed) {
+            (void)from;
+            const View* sv = nullptr;
+            for (const auto& v : src.views)
+                if (v.id == from) sv = &v;
+            if (!sv || !isSymbolView(*sv)) continue;
+            const Item* it = itemOfView.count(from) ? itemOfView[from] : nullptr;
+            if (it && it->choice == Choice::Replace) {
+                replacedSymbols.insert(to);
+                auto& all = dst.programs.types;
+                all.erase(std::remove_if(all.begin(), all.end(), [&](const HmiType& x) { return x.symbol == to; }), all.end());
+            }
+            for (const auto& t : src.programs.types) {
+                if (t.symbol != from) continue;
+                HmiType copy = t;
+                copy.id = dst.allocate();
+                copy.symbol = to;
+                for (auto& op : copy.operators) op.id = dst.allocate();
+                renumberMethodsOf(dst, copy);
+                dst.programs.types.push_back(std::move(copy));
+                (replacedSymbols.count(to) ? res.replaced : res.added).push_back("type " + sv->name + "." + t.name);
+            }
+        }
     }
     // 1.11.20 : les fonctions du paquet et leurs lignes du plan, dans le meme ordre (deux surcharges
     // portent le meme nom : le nom ne suffit pas a retrouver la sienne).

@@ -46,7 +46,7 @@ void forEachFolder(Project& p, List list, F&& f) {
                 if (listOfView(v) == list) f(v.id, v.folder);
             break;
         case List::Scripts:   for (auto& s : p.programs.scripts) f(s.id, s.folder); break;
-        case List::Types:     for (auto& t : p.programs.types) f(t.id, t.folder); break;
+        case List::Types:     for (auto& t : p.programs.types) if (t.symbol == kNoId) f(t.id, t.folder); break;   // 1.51.0 : sans ceux des symboles
         case List::Styles:    for (auto& s : p.styles) f(s.id, s.folder); break;
         case List::Resources: for (auto& r : p.assets.resources) f(r.id, r.folder); break;
         case List::Count:     break;
@@ -166,7 +166,8 @@ std::vector<Item> items(const Project& p, List list) {
                 if (listOfView(v) == list) out.push_back({v.id, v.name, v.folder});
             break;
         case List::Scripts:   for (const auto& s : p.programs.scripts) out.push_back({s.id, s.name, s.folder}); break;
-        case List::Types:     for (const auto& t : p.programs.types) out.push_back({t.id, t.name, t.folder}); break;
+        // 1.51.0 : les types d'un symbole sont sous leur symbole, pas dans Types IHM.
+        case List::Types:     for (const auto& t : p.programs.types) if (t.symbol == kNoId) out.push_back({t.id, t.name, t.folder}); break;
         case List::Styles:    for (const auto& s : p.styles) out.push_back({s.id, s.name, s.folder}); break;
         case List::Resources: for (const auto& r : p.assets.resources) out.push_back({r.id, r.name, r.folder}); break;
         case List::Count:     break;

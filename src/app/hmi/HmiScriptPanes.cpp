@@ -737,7 +737,18 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     if (cycleAdd_) {
         links_ += cycleAdd_->clicked->connect([this] { (void)addCycleScript(); });
         cycleAdd_->startDrag = [this] {
-            if (stages_) stages_->beginExternalDrag(kNoId, "Nouveau script de cycle");
+            if (!stages_) return;
+            if (!cycleShown_ && split_ && split_->paneCount() == 3) {   // 1.51.0 : cachee (OnOpen choisi) - elle se montre
+                cycleShown_ = true;
+                auto r = split_->ratios();
+                r[2] = std::max(0.05f, r[2] - cycleLent_);
+                cycleLent_ = 0.f;
+                split_->setRatios(r);
+                split_->collapsePane(1, false);
+                split_->setOrder({});
+                layout();
+            }
+            stages_->beginExternalDrag(kNoId, "Nouveau script de cycle");
         };
     }
     if (!general()) {
@@ -1027,11 +1038,10 @@ void HmiScriptsPane::refresh() {
     showSelected();
     const auto st = doc_->project.statistics();
     (void)st;
+    // 1.51.0 : la phrase du cycle seulement quand la section Execution est montree ; sinon, l'etat du script choisi.
     std::string msg = general() ? std::to_string(doc_->project.programs.scripts.size()) + " script(s) g\xC3\xA9n\xC3\xA9raux, "
                                       + std::to_string(doc_->project.programs.variables.size()) + " variable(s) IHM"
-                                : std::string("Glisse un script de cycle entre deux \xC3\xA9tapes : il s'ex\xC3\xA9" "cutera exactement l\xC3\xA0, \xC3\xA0 chaque "
-                                              "cycle de la vue (ou 1 cycle sur N). OnOpen \xC3\xA0 l'ouverture, OnClose \xC3\xA0 la fermeture ; un "
-                                              "projet existant garde son OnCycle entre 4 et 5 \xE2\x80\x94 rien ne change sans toi.");
+                    : cycleShown_ ? cycleHint() : current() ? statusText_ : std::string{};
     status_->setMessage(msg);
     refreshStages();                      // 1.27.0 : la section Execution suit
     invalidate();
@@ -1040,6 +1050,45 @@ void HmiScriptsPane::refresh() {
 // ---- 1.27.0 : LE CYCLE DE LA VUE, DEBALLE ----------------------------------------------------------------------------
 bool HmiScriptsPane::cycleRow(int row) const {
     return row >= 0 && static_cast<std::size_t>(row) < rowKinds_.size() && rowKinds_[static_cast<std::size_t>(row)] == RowKind::CycleScript;
+}
+
+// ---- 1.51.0 : LA SECTION EXECUTION, SEULEMENT POUR UN SCRIPT DE CYCLE -------------------------------------------------
+//  << afficher l'onglet des cycles que si je suis dans le onCycle sinon ca prend de l'espace >>. Un script de cycle choisi,
+//  le titre OnCycle deballe ou l'OnCycle encore vide : la section est montree (on y glisse les scripts). OnOpen, OnClose,
+//  rien de choisi : elle est cachee et sa largeur va a l'editeur (la liste garde la sienne) ; la phrase de la barre qui
+//  l'explique part avec elle. Le volet cache se range au bout (a droite) : la poignee entre la liste et l'editeur reste
+//  celle qu'on tire.
+bool HmiScriptsPane::cycleSelected() const {
+    if (general()) return false;
+    if (const auto* sc = current()) return hmi::viewcycle::isCycleScript(*sc);
+    return selectedEvent() == hmi::viewcycle::kCycleEvent;
+}
+
+std::string HmiScriptsPane::cycleHint() const {
+    return "Glisse un script de cycle entre deux \xC3\xA9tapes : il s'ex\xC3\xA9" "cutera exactement l\xC3\xA0, \xC3\xA0 chaque "
+           "cycle de la vue (ou 1 cycle sur N). OnOpen \xC3\xA0 l'ouverture, OnClose \xC3\xA0 la fermeture ; un "
+           "projet existant garde son OnCycle entre 4 et 5 \xE2\x80\x94 rien ne change sans toi.";
+}
+
+void HmiScriptsPane::updateCycleColumn() {
+    if (general() || !stagesPanel_ || !split_ || split_->paneCount() != 3) return;
+    const bool show = cycleSelected();
+    if (show == cycleShown_) return;
+    cycleShown_ = show;
+    auto r = split_->ratios();
+    if (show) {
+        r[2] = std::max(0.05f, r[2] - cycleLent_);      // l'editeur rend la part de la section
+        cycleLent_ = 0.f;
+    } else {
+        cycleLent_ = r[1];                               // la part de la section va a l'editeur
+        r[2] += cycleLent_;
+    }
+    split_->setRatios(r);
+    split_->collapsePane(1, !show);
+    split_->setOrder(show ? std::vector<std::size_t>{} : std::vector<std::size_t>{0, 2, 1});
+    // La phrase du cycle part avec la section (et revient avec elle).
+    if (!show && status_->message() == cycleHint()) status_->setMessage(current() ? statusText_ : std::string{});
+    invalidateLayout();
 }
 
 std::string HmiScriptsPane::measuredText(Id id) const {
@@ -1146,6 +1195,7 @@ void HmiScriptsPane::showSelected() {
     rebuildProperties();
     updateDiagnostics();
     refreshDeclarations();
+    updateCycleColumn();                  // 1.51.0 : la section Execution, seulement pour un script de cycle
 }
 
 // 1.11.18 (refonte, lot 5) : les grilles du script montre, les titres de leurs onglets

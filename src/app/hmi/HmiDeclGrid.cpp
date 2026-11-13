@@ -1408,6 +1408,12 @@ void HmiDeclGrid::pickType(std::size_t row) {
     spec.use = hmi::typereg::UseDeclaration;
     spec.doc = doc_;
     spec.constant = d.kind == hmi::DeclKind::Constant;   // 1.50.0 (planche 03) : une constante ne vise rien
+    // 1.51.0 : le code d'un symbole (ses scripts, ses fonctions, ses operateurs) ou d'une methode d'un de ses types : ses
+    // types IHM en tete du selecteur, sous leur nom court.
+    if (place_ && doc_) {
+        if (const auto* v = doc_->project.view(place_->view); v && hmi::isSymbolView(*v)) spec.symbol = v->id;
+        if (const auto* t = doc_->project.hmiType(place_->type); t && t->symbol != hmi::kNoId) spec.symbol = t->symbol;
+    }
     const std::weak_ptr<int> alive = alive_;
     const hmi::Id id = d.id;
     typepicker::ask(std::move(spec), [this, alive, id](const HmiTypePicker::Answer& a) {

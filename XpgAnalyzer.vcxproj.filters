@@ -1873,6 +1873,9 @@
     <ClCompile Include="src\hmi\HmiStretch.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiSymbolTypes.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiTrash.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1918,7 +1921,22 @@
     <ClCompile Include="src\project\GrafcetRewrite2.cpp">
       <Filter>project</Filter>
     </ClCompile>
+    <ClCompile Include="src\project\Ladder.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\LadderEdit.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\LadderSim.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
     <ClCompile Include="src\project\ProjectArchive.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\Sfc.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
+    <ClCompile Include="src\project\SfcEdit.cpp">
       <Filter>project</Filter>
     </ClCompile>
     <ClCompile Include="src\sim\Rich.cpp">
@@ -3685,6 +3703,9 @@
     <ClInclude Include="src\hmi\HmiSymbolArgCheck.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\hmi\HmiSymbolTypes.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\hmi\HmiTable.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
@@ -3742,7 +3763,22 @@
     <ClInclude Include="src\project\GrafcetRewrite2.hpp">
       <Filter>project</Filter>
     </ClInclude>
+    <ClInclude Include="src\project\Ladder.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\LadderEdit.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\LadderSim.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
     <ClInclude Include="src\project\ProjectArchive.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\Sfc.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
+    <ClInclude Include="src\project\SfcEdit.hpp">
       <Filter>project</Filter>
     </ClInclude>
     <ClInclude Include="src\sim\Rich.hpp">

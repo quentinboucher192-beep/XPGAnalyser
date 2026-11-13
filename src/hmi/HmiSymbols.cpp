@@ -14,6 +14,8 @@
 #include "HmiTypes.hpp"
 #include "HmiRuntime.hpp"
 #include "HmiScript.hpp"        // 1.11.10 : splitDeclarations (les noms qu'une fonction de symbole cache)
+#include "HmiNames.hpp"         // 1.51.0 : le code du symbole, ses types en entier
+#include "HmiSymbolTypes.hpp"   // 1.51.0 : les types IHM d'un symbole
 #include "HmiSources.hpp"       // 1.12.7 (lot E) : le joker [*], le dossier /*
 #include "HmiMarquee.hpp"      // 1.12.12 (lot H) : la source des messages d'un texte defilant
 #include "HmiTemplates.hpp"
@@ -1317,8 +1319,12 @@ Expansion expandInstance(const Project& p, const Object& inst, int depth, std::s
     for (const auto& so : sym->objects) siblings.insert(so.name);
     // 1.11.24 : les reperes du symbole lui-meme ($Cuve$.Niveau, Tab[$I$]) tombent avant le
     // remplacement : I := 3 aurait donne Tab[$3$] (pas un repere : illisible).
+    // 1.51.0 : les types du symbole - son code les nomme par leur nom court (T_Etat) ; le moteur, par leur nom complet
+    // (MonSymbole.T_Etat), ecrit AVANT les arguments (qui viennent de la vue : ils ne sont pas dans la portee du symbole).
+    const std::string scope = symtypes::scopeOf(p, *sym);
     const auto relink = [&](std::string_view t, bool code) {
-        const std::string bare = markers::strip(t);
+        std::string bare = markers::strip(t);
+        if (!scope.empty()) bare = names::qualify(p, bare, scope, {}, false);
         if (!calls) return substituteParams(bare, args, code);
         return substituteParams(qualifySymbolCalls(bare, p, *sym, q), args, code);
     };
@@ -1330,7 +1336,7 @@ Expansion expandInstance(const Project& p, const Object& inst, int depth, std::s
         c.parent = so->parent != kNoId && sym->object(so->parent) ? expandedId(inst.id, so->parent) : inst.id;
         c.locked = false;
         addOwnedPopupArguments(p, *sym, q, c.actions);          // 1.11.10 : ses popups recoivent l'instance
-        if (!args.empty() || calls) rewriteNames(c, relink);
+        if (!args.empty() || calls || !scope.empty()) rewriteNames(c, relink);
         if (auto* tp = c.find("text")) tp->value = resolveLiteralHoles(tp->value);
         // 1.12.11 (lot G, D6) : chaque texte montre ({Nom} recu en 'P1' : P1), pas seulement le Texte.
         for (auto& tp : c.props)
@@ -1358,9 +1364,12 @@ Expansion expandInstance(const Project& p, const Object& inst, int depth, std::s
         Script s = sc;
         s.id = expandedId(inst.id, sc.id);
         s.name = inst.name + "." + sc.name;
-        if (s.lang == ScriptLang::ST && (!args.empty() || calls)) {
+        if (s.lang == ScriptLang::ST && (!args.empty() || calls || !scope.empty())) {
             s.body = relink(s.body, true);
-            for (auto& d : s.decls) d.value = relink(d.value, false);   // 1.11.18 (lot 3) : une valeur initiale cite un parametre
+            for (auto& d : s.decls) {
+                d.value = relink(d.value, false);   // 1.11.18 (lot 3) : une valeur initiale cite un parametre
+                if (!scope.empty()) d.type = symtypes::typeIn(p, *sym, d.type);   // 1.51.0 : ses types, en entier
+            }
         }
         out.scripts.push_back(std::move(s));
     }
@@ -1368,7 +1377,7 @@ Expansion expandInstance(const Project& p, const Object& inst, int depth, std::s
         Object holder;
         holder.actions = sym->actions;
         addOwnedPopupArguments(p, *sym, q, holder.actions);
-        if (!args.empty() || calls) rewriteNames(holder, relink);
+        if (!args.empty() || calls || !scope.empty()) rewriteNames(holder, relink);
         for (auto& a : holder.actions) out.actions.push_back(std::move(a));
     }
     return out;
@@ -1764,7 +1773,10 @@ bool boundSymbolFunction(const Project& p, std::string_view call, BoundFunction&
                args.end());
     out.function = *f;
     out.function.decls.clear();                                   // dans le texte (une copie pour l'appel)
-    out.function.body = substituteParams(qualifySymbolCalls(body, p, *at.symbol, path), args, true);
+    // 1.51.0 : les types du symbole par leur nom complet (T_Etat -> MonSymbole.T_Etat), avant les arguments de l'instance.
+    const std::string own = symtypes::qualify(p, *at.symbol, body, true, {f->name});
+    out.function.body = substituteParams(qualifySymbolCalls(own, p, *at.symbol, path), args, true);
+    out.function.returnType = symtypes::typeIn(p, *at.symbol, f->returnType);
     // Un identifiant a lui (les compteurs d'appels du moteur) : stable pour ce chemin.
     std::uint64_t h = 1469598103934665603ull;
     for (const char c : upperCopy(call)) { h ^= static_cast<unsigned char>(c); h *= 1099511628211ull; }

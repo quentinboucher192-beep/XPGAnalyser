@@ -1327,6 +1327,9 @@ struct HmiType {
     // 1.13.0 (lot J8 : les espaces de noms) : son espace de noms ("Gaz") ; vide : la racine (comme avant). Son nom
     //  complet devient Gaz.T_Vanne (une variable de type Gaz.T_Vanne) ; l'identifiant (ihm:615) ne change pas.
     std::string ns{};
+    // 1.51.0 : LE SYMBOLE QUI PORTE LE TYPE (un type IHM d'un symbole, HmiSymbolTypes.hpp) ; kNoId : un type du projet.
+    //  Son espace (ns) est alors le nom du symbole : MonSymbole.T_Etat ; dans le symbole, T_Etat (la portee la plus proche).
+    Id          symbol{kNoId};
     bool operator==(const HmiType&) const = default;
 };
 

@@ -646,6 +646,8 @@ const std::vector<HandleMember>& handleMembers(std::string_view type) {
         {"Pressed", "BOOL", "la souris l'enfonce", true},
         {"Focused", "BOOL", "il a le clavier", true},
         {"Shown", "BOOL", "il est \xC3\xA0 l'\xC3\xA9" "cran", true},
+        // 1.51.0 : une methode - p := Vue_Accueil.Carte_1.Get(); (comme ADR(Vue_Accueil.Carte_1)).
+        {"Get()", "POINTER TO Object", "un pointeur vers l'objet (comme ADR(Vue.Objet)) : p := Vue_Accueil.Carte_1.Get();", false},
     };
     static const std::vector<HandleMember> font = {
         {"Name", "STRING", "la ressource ('Carlito-Bold.ttf')", true}, {"Family", "STRING", "sa famille ('Carlito')", true},

@@ -33,7 +33,12 @@
 #include <unordered_map>
 #include <vector>
 
+// 1.51.0 : les sections LD (project/LadderSim.hpp).
+namespace project::ladder { class Program; struct State; struct LiveState; }
+
 namespace sim {
+
+struct SfcChartRun;   // 1.51.0 (S) : sim/SfcRun.hpp
 
 struct ScanReport {
     std::uint32_t             scan{0};
@@ -227,6 +232,21 @@ public:
 
     void breakpointReached(std::uint32_t tag, std::uint32_t line, LineProbe& probe) override;
 
+    // ---- 1.51.0 : le ladder en direct ------------------------------------------------
+    // Le dernier passage d'une section LD preparee : "Section" ou "Unite.Section"
+    // (sans la casse). Nul : pas une section LD de la tache.
+    [[nodiscard]] const project::ladder::LiveState* ladderLive(std::string_view section) const;
+    [[nodiscard]] std::vector<std::string> ladderSections() const;
+
+    // ---- 1.51.0 (S) : les GRAFCET (SFC) - sim/SfcRun.hpp, sim/SfcRuntime.cpp ------------
+    // L'etat d'une section SFC preparee : "Section" ou "Unite.Section" (sans la casse).
+    [[nodiscard]] const SfcChartRun* sfcChart(std::string_view section) const;
+    [[nodiscard]] std::vector<std::string> sfcSections() const;
+    // Forcer une etape (l'activer ou la desactiver), entre deux cycles ; son temps repart.
+    bool sfcSetStep(std::string_view section, std::string_view step, bool active);
+    // La situation initiale au prochain cycle (toutes les etapes desactivees).
+    bool sfcInit(std::string_view section);
+
 private:
     std::uint64_t maxScanStatementsSetting_{2000000};
     std::int64_t  maxScanMsSetting_{1500};
@@ -325,6 +345,13 @@ private:
         std::shared_ptr<const Expression> condition;
         std::string                  conditionText;
         bool                         active{true};
+        // 1.51.0 : UNE SECTION LD - son schema compile et sa memoire (fronts, le
+        // dernier passage pour l'editeur) ; `program` est alors nul.
+        std::shared_ptr<const project::ladder::Program> ladder{};
+        std::shared_ptr<project::ladder::State>         ladderState{};
+        std::uint32_t                                   ladderTag{0};
+        // 1.51.0 (S) : UN GRAFCET (SFC) - son graphe et son etat ; `program` est alors nul.
+        std::shared_ptr<SfcChartRun>                    sfc{};
     };
     std::vector<Runnable> programs_;
     std::string           scopePrefix_;
@@ -423,6 +450,14 @@ private:
     void       armDeadline();
     void       runRunnable(std::size_t index, bool& halted);
     void       runSection(std::size_t index, bool& halted);    // 1.10.2 : sans les parametres
+    // 1.51.0 : une section LD - la preparer (faux : elle ne tourne pas), la faire tourner.
+    bool       prepareLadder(const domain::Project& p, domain::Index si, std::uint32_t entry, const std::string& scope);
+    bool       runLadder(Runnable& runnable);
+    // 1.51.0 (S) : une section SFC - la preparer (faux : elle ne tourne pas), un cycle, tout remettre.
+    bool       prepareSfc(const domain::Project& p, domain::Index si, std::uint32_t entry, const std::string& scope);
+    bool       runSfc(Runnable& runnable);
+    void       resetSfc();
+    SfcChartRun* sfcChartMutable(std::string_view section);
     ScanReport finishScan(bool halted);
     void       noteWrite(Slot& slot) noexcept;
     void       resolveBreakpoints();

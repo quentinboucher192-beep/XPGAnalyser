@@ -2845,7 +2845,7 @@ void checkPublicVars(const Project& p, std::vector<Issue>& out) {
         return &it->second;
     };
     // Un chemin : `write` s'il est ecrit. Le rapport dit ou (vue, objet, propriete).
-    const auto check = [&](const std::string& path, bool write, const std::function<void(std::string)>& report) {
+    const auto check = [&](const std::string& path, bool write, const std::function<void(std::string)>& report, bool script = false) {
         const auto dot = path.find('.');
         if (dot == std::string::npos) return;
         const View* pv = pub::viewNamed(p, std::string_view(path).substr(0, dot));
@@ -2853,6 +2853,9 @@ void checkPublicVars(const Project& p, std::vector<Issue>& out) {
         using W = pub::Resolved::What;
         if (r.what == W::None) return;
         if (r.what == W::Unknown) { report(r.error); return; }
+        // 1.51.0 : Vue.Objet seul, lu dans un script (ObjPtr := Vue_Accueil.Carte_1, ADR(Vue.Objet), Hide(Vue.Objet)) : un
+        // objet - le controle des scripts (scriptcheck) dit, a sa place, s'il est la ou une valeur simple est attendue.
+        if (r.what == W::Incomplete && script && r.object && !write) return;
         if (r.what == W::Incomplete) { report(path + " : chemin incomplet (Vue.Objet.Propri\xC3\xA9t\xC3\xA9)"); return; }
         if (write && r.access == pub::Access::Read)
             report(path + (r.what == W::Sys ? std::string(" : variable syst\xC3\xA8me, en lecture seule")
@@ -2881,7 +2884,7 @@ void checkPublicVars(const Project& p, std::vector<Issue>& out) {
         return out1;
     };
     const auto code = [&](const std::string& text, const std::function<void(std::string, int)>& report) {
-        for (const auto& u : scriptPaths(text)) check(u.path, u.assigned, [&](std::string m) { report(std::move(m), u.line); });
+        for (const auto& u : scriptPaths(text)) check(u.path, u.assigned, [&](std::string m) { report(std::move(m), u.line); }, true);
     };
     const auto expr = [&](const std::string& text, bool write, const std::function<void(std::string)>& report) {
         // 1.11.1 (REP) : scriptPaths lit sans les $ ; la cible ecrite aussi ($Vanne$.Ouv ecrit Vanne.Ouv).

@@ -684,6 +684,9 @@ if(XPG_BUILD_TESTS)
     # 1.12.24 : un ladder et un GRAFCET gardes tels quels (import, export, dossier, lecture).
     xpg_add_test_executable(graphxml_test tests/graphxml_test.cpp)
     xpg_target_link_libraries(graphxml_test PRIVATE xpg_import)
+    # 1.51.0 : le ladder (LD) - lire, ecrire a l'identique, les gestes de l'editeur, la simulation.
+    xpg_add_test_executable(ladder_test tests/ladder_test.cpp)
+    xpg_target_link_libraries(ladder_test PRIVATE xpg_import)
     # ---- Lot API 8 : Simulation > Debogage (les phrases, la pile, les temps, la marge de l'editeur) ----
     xpg_add_test_executable(simdebugui_test tests/simdebugui_test.cpp src/app/SimDebugText.cpp)
     xpg_target_link_libraries(simdebugui_test PRIVATE xpg_import xpg_ui)
@@ -1393,6 +1396,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME mastimport   COMMAND mastimport_test ${XPG_FIXTURE} ${XHW_FIXTURE})
     xpg_add_test(NAME projectstats COMMAND projectstats_test ${XPG_FIXTURE})
     xpg_add_test(NAME graphxml COMMAND graphxml_test)
+    xpg_add_test(NAME ladder   COMMAND ladder_test)                         # 1.51.0 : le ladder (LD)
     xpg_add_test(NAME simdebugui   COMMAND simdebugui_test ${XPG_FIXTURE})   # ---- Lot API 8 : Simulation > Debogage ----
     xpg_add_test(NAME dialogwindow COMMAND dialogwindow_test)                # ---- Lot API 8 : les dialogues dans la fenetre detachee ----
     xpg_add_test(NAME crashreport COMMAND crashreport_test)                  # 1.12.28 : la fenetre du plantage et du blocage

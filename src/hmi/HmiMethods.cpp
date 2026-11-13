@@ -4,6 +4,7 @@
 //  FUNCTION interne (methodFunctionText) que l'interpreteur appelle (resolveMethod).
 // =============================================================================
 #include "HmiMethods.hpp"
+#include "HmiSymbolTypes.hpp"   // 1.51.0 : renommer un type d'un symbole
 
 #include "HmiCalc.hpp"       // hmi::closest : le nom connu le plus proche (veux-tu dire ?)
 #include "HmiDecl.hpp"       // 1.11.18 : les declarations du modele, reconstruites (decl::codeOf)
@@ -855,6 +856,8 @@ std::size_t renameTypeEverywhere(Project& p, Id id, std::string_view newName) {
     HmiType* t = p.hmiType(id);
     const std::string name = trimmed(newName);
     if (!t || name.empty() || t->name == name) return 0;
+    // 1.51.0 : un type d'un symbole - son nom court ne compte que dans son symbole ; ailleurs, son nom complet.
+    if (t->symbol != kNoId) return symtypes::renameType(p, id, name);
     const std::string before = t->name;
     const std::string beforeFull = fullName(*t), afterFull = qualifiedName(t->ns, name);
     // Qui en herite, qui l'implemente : par IDENTITE (lu depuis l'espace de chacun), avant de renommer - un homonyme

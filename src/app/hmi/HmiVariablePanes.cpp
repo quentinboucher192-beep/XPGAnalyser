@@ -26,6 +26,7 @@
 #include "../../ui/Theme.hpp"
 #include "../../hmi/HmiTypeRegistry.hpp"   // 1.11.19 (refonte, lot 6) : les types, un seul catalogue
 #include "../../hmi/HmiNames.hpp"          // 1.13.0 (lot J8) : l'espace de noms d'un type
+#include "../../hmi/HmiSymbolTypes.hpp"    // 1.51.0 : les types IHM d'un symbole
 #include "../../hmi/HmiMethods.hpp"        // 1.13.0 : les methodes, l'heritage, les interfaces ; renommer un type partout
 #include "HmiTypePicker.hpp"                // 1.11.19 (refonte, lot 6) : "Choisir un type..."
 #include "../../hmi/HmiEquipmentLink.hpp"   // 1.12.11 (lot G) : la liaison Equipement suit le type et ses membres
@@ -242,6 +243,7 @@ bool askTypeIn(const hmi::DocumentPtr& doc, std::string field, std::string curre
     spec.current = std::move(current);
     spec.use = hmi::typereg::UseVariable;         // 1.12.4 : toutes les formes (un membre objet : sans place Modbus)
     spec.doc = doc;
+    if (owner) spec.symbol = owner->symbol;       // 1.51.0 : un type d'un symbole - les types du symbole en tete
     if (owner && !owner->generics.empty()) {
         spec.generics = owner->generics;
         std::string names;
@@ -3533,6 +3535,7 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
                "Importer\xE2\x80\xA6");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setVisibleWhen(TExport, [this] { return static_cast<bool>(hosts_.exportItems); });
+    tools_->setVisibleWhen(TFolder, [this] { return scope_ == kNoId; });   // 1.51.0 : la liste d'un symbole n'a pas de dossiers
     tools_->setVisibleWhen(TImport, [this] { return static_cast<bool>(hosts_.importAny); });
     tools_->setEnabledWhen(TMember, [this] { return selectedType() != kNoId && !callbackPage_ && !showsInterface(); });   // 1.12.20 ; 1.13.0 : ni une interface
     // 1.24.0 : plusieurs membres choisis - Supprimer les retire tous (un Ctrl+Z) ; Monter, Descendre : un a la fois.
@@ -3770,8 +3773,7 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
             if (a == 1) tools_->triggered->emit(kMenuBase);           // Structure... : comme l'ancien + Type
             else if (a == 2) openEnumCreation();
             else if (a == 3) {                                        // 1.12.20 (lot T) : Rappel...
-                std::string name = "T_Rappel", why;
-                for (int i = 2; doc_->project.hmiTypeByName(name) && i < 1000; ++i) name = "T_Rappel" + std::to_string(i);
+                std::string name = freeTypeName("T_Rappel"), why;   // 1.51.0 : libre dans la liste montree
                 const Id made = addCallbackType(name, "CALLBACK (x : REAL) : BOOL", &why);
                 if (made == kNoId) {
                     say("Refus\xC3\xA9 : " + why, true);
@@ -3779,8 +3781,7 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
                     (void)types_->beginCellEdit(static_cast<ui::RowIndex>(row), 0);
                 }
             } else if (a == 4) {                                      // 1.13.0 (J1b) : Interface...
-                std::string name = "I_Interface", why;
-                for (int i = 2; doc_->project.hmiTypeByName(name) && i < 1000; ++i) name = "I_Interface" + std::to_string(i);
+                std::string name = freeTypeName("I_Interface"), why;   // 1.51.0
                 const Id made = addInterfaceType(name, &why);
                 if (made == kNoId) {
                     say("Refus\xC3\xA9 : " + why, true);
@@ -3801,8 +3802,7 @@ HmiTypesPane::HmiTypesPane(std::string id, hmi::DocumentPtr doc, Apply apply, Id
                 break;
             case TAdd: openNewTypeMenu(); break;                      // 1.10 (chantier U)
             case kMenuBase: {                                         // une structure
-                std::string name = "T_Type";
-                for (int i = 2; doc_->project.hmiTypeByName(name) && i < 1000; ++i) name = "T_Type" + std::to_string(i);
+                std::string name = freeTypeName("T_Type");   // 1.51.0 : libre dans la liste montree
                 const Id made = addType(name, &why);
                 if (made != kNoId) {
                     selectType(made);
@@ -3988,13 +3988,20 @@ void HmiTypesPane::say(std::string text, bool warning) {
 
 void HmiTypesPane::refresh() {
     const auto& p = doc_->project;
+    // 1.51.0 : la page Types IHM montre ceux du projet ; le sous-onglet d'un symbole, les siens (HmiType::symbol).
+    const auto shown = [this](const hmi::HmiType& t) { return t.symbol == scope_; };
     if (isDocument()) current_ = document_;     // 1.13.1 (lot K4) : l'onglet de document reste sur son type
-    else if (!p.hmiType(current_)) current_ = p.programs.types.empty() ? kNoId : p.programs.types.front().id;
+    else if (const auto* cur = p.hmiType(current_); !cur || !shown(*cur)) {
+        current_ = kNoId;
+        for (const auto& t : p.programs.types)
+            if (shown(t)) { current_ = t.id; break; }
+    }
     typeOrder_.clear();
     std::map<Id, std::vector<std::string>> cells;
     std::map<Id, bool> broken;
     std::set<Id> interfaces;   // 1.13.0 (J1b) : leur icone a part
     for (const auto& t : p.programs.types) {
+        if (!shown(t)) continue;
         typeOrder_.push_back(t.id);
         // 1.13.0 : par le nom complet (Gaz.T_Vanne a cote d'un T_Vanne racine : les siens, pas ceux de l'homonyme).
         const std::string full = hmi::fullName(t);
@@ -4037,7 +4044,9 @@ void HmiTypesPane::refresh() {
     }
     syncing_ = true;
     // Lot 21 : la liste rangee en dossiers.
-    folders_->rebuild(hmi::fold::List::Types, typeOrder_, {"Nom", "Membres", "Mots", "Utilis\xC3\xA9 par"},
+    // 1.51.0 : les types d'un symbole, une liste sans dossiers.
+    folders_->rebuild(scope_ == kNoId ? std::optional<hmi::fold::List>(hmi::fold::List::Types) : std::nullopt, typeOrder_,
+                      {"Nom", "Membres", "Mots", "Utilis\xC3\xA9 par"},
                       [&cells](Id id) { return cells[id]; },
                       [&broken, &interfaces](Id id, std::size_t c) {
                           ui::CellStyle st;
@@ -4054,6 +4063,13 @@ void HmiTypesPane::refresh() {
     fitTypeColumns();   // 1.13.1 (lot K4) : un nom plus long, un type de plus
     refreshMembers();
     rebuildProperties();
+    if (scope_ != kNoId && message_.empty() && !isDocument()) {
+        const auto* sym = p.view(scope_);
+        const std::string sn = sym ? sym->name : std::string("le symbole");
+        status_->setMessage(std::to_string(typeOrder_.size()) + " type(s) IHM du symbole " + sn + " : dans le symbole, par leur nom (T_Etat) ; "
+                            "ailleurs, " + sn + ".T_Etat Â· les mÃªmes onglets que Types IHM Â· Ctrl+Z");
+        return;
+    }
     status_->setMessage(message_.empty() ? std::to_string(p.programs.types.size())
                                                + (core::hasApi() ? " type(s) IHM : des structures, comme les DDT de l'automate. "
                                                                  : " type(s) IHM : des structures et des \xC3\xA9num\xC3\xA9rations. ")   // 1.12.2
@@ -4472,7 +4488,51 @@ bool HmiTypesPane::change(Id id, std::string label, const std::function<bool(hmi
     return ok;
 }
 
+// 1.51.0 : un type du symbole du volet (nom libre dans le symbole ; un homonyme du projet est permis).
+Id HmiTypesPane::addScopedType(const std::string& raw, hmi::HmiTypeKind kind, std::string* why, const std::string& signature) {
+    const std::string name = trimmed(raw);
+    if (!hmi::symtypes::validName(doc_->project, scope_, name, kNoId, why)) return kNoId;
+    const auto* sym = doc_->project.view(scope_);
+    if (!sym) {
+        if (why) *why = "symbole introuvable";
+        return kNoId;
+    }
+    Id made = kNoId;
+    std::string reason;
+    apply_(hmi::changeProject(doc_, "Nouveau type " + name + " du symbole " + sym->name, [&](hmi::Project& p) {
+        made = hmi::symtypes::addType(p, scope_, name, kind, &reason);
+        if (auto* t = p.hmiType(made); t && kind == hmi::HmiTypeKind::Callback && !signature.empty()) t->signature = signature;
+    }));
+    if (made == kNoId) {
+        if (why) *why = reason;
+        return kNoId;
+    }
+    current_ = made;
+    member_ = -1;
+    refresh();
+    const auto* now = doc_->project.view(scope_);
+    say("Type IHM du symbole crÃ©Ã© : " + name + " (ailleurs : " + (now ? now->name : std::string("Symbole")) + "." + name
+        + ") Â· Ctrl+Z annule");
+    if (hosts_.typeCreated) hosts_.typeCreated(made);
+    return made;
+}
+
+std::string HmiTypesPane::freeTypeName(const std::string& base) const {
+    if (scope_ != kNoId) return hmi::symtypes::uniqueName(doc_->project, scope_, base);
+    std::string name = base;
+    for (int i = 2; doc_->project.hmiTypeByName(name) && i < 1000; ++i) name = base + std::to_string(i);
+    return name;
+}
+
+void HmiTypesPane::setSymbolScope(Id symbol) {
+    scope_ = symbol;
+    current_ = kNoId;
+    member_ = -1;
+    refresh();
+}
+
 Id HmiTypesPane::addType(const std::string& raw, std::string* why) {
+    if (scope_ != kNoId) return addScopedType(raw, hmi::HmiTypeKind::Structure, why);
     const std::string name = trimmed(raw);
     std::string reason;
     if (!hmi::isIdentifier(name)) reason = "nom invalide : lettres, chiffres et _";
@@ -4501,6 +4561,15 @@ Id HmiTypesPane::addType(const std::string& raw, std::string* why) {
 
 // 1.12.20 (lot T) : un type rappel nomme (T_Filtre) - sa signature se lit avant d'entrer.
 Id HmiTypesPane::addCallbackType(const std::string& raw, const std::string& signature, std::string* why) {
+    if (scope_ != kNoId) {   // 1.51.0
+        hmi::typeform::CallbackParts parts;
+        std::string reason;
+        if (!hmi::typeform::callbackParts(doc_->project, signature, parts, &reason)) {
+            if (why) *why = reason;
+            return kNoId;
+        }
+        return addScopedType(raw, hmi::HmiTypeKind::Callback, why, trimmed(signature));
+    }
     const std::string name = trimmed(raw);
     std::string reason;
     hmi::typeform::CallbackParts parts;
@@ -4608,6 +4677,7 @@ bool HmiTypesPane::setTypeImplements(Id id, const std::string& raw, bool on, std
 }
 
 Id HmiTypesPane::addInterfaceType(const std::string& raw, std::string* why) {
+    if (scope_ != kNoId) return addScopedType(raw, hmi::HmiTypeKind::Interface, why);   // 1.51.0
     const std::string name = trimmed(raw);
     std::string reason;
     if (!hmi::isIdentifier(name)) reason = "nom invalide : lettres, chiffres et _";
@@ -4725,6 +4795,8 @@ bool HmiTypesPane::setTypeDescription(Id id, const std::string& text) {
 bool HmiTypesPane::setTypeNamespace(Id id, const std::string& text, std::string* why) {
     const auto* t = doc_->project.hmiType(id);
     if (!t) return fail(why, "type introuvable");
+    if (t->symbol != kNoId)   // 1.51.0
+        return fail(why, "un type d'un symbole est dans l'espace de son symbole (" + t->ns + "." + t->name + ")");
     std::string ns = trimmed(text);
     if (ns == "(racine)") ns.clear();
     if (ns == t->ns) return true;
@@ -4741,6 +4813,22 @@ bool HmiTypesPane::setTypeNamespace(Id id, const std::string& text, std::string*
 bool HmiTypesPane::deleteType(Id id, std::string* why) {
     const auto* t = doc_->project.hmiType(id);
     if (!t) return fail(why, "type introuvable");
+    // 1.51.0 : un type d'un symbole employe - ses emplois d'abord (l'onglet Emplois), et rien n'est supprime.
+    if (t->symbol != kNoId) {
+        const auto uses = usesOf(doc_->project, *t);
+        const auto users = ty::usersOf(doc_->project, hmi::fullName(*t));
+        if (!uses.empty() || !users.empty()) {
+            std::vector<std::string> where;
+            for (const auto& u : uses) where.push_back(u.where);
+            for (const auto& u : users)
+                if (std::find(where.begin(), where.end(), u) == where.end()) where.push_back(u);
+            const std::string name = t->name;
+            selectType(id);
+            showTypeTab(TabUses);
+            return fail(why, name + " est employ\xC3\xA9 (" + std::to_string(where.size()) + ") : " + several::names(where, 4)
+                             + " \xE2\x80\x94 ses emplois sont dans l'onglet Emplois ; change-les d'abord");
+        }
+    }
     const auto users = ty::usersOf(doc_->project, hmi::fullName(*t));   // 1.13.0 : les siens, pas ceux d'un homonyme
     if (!users.empty()) {
         std::string list;
@@ -4836,6 +4924,12 @@ void HmiTypesPane::deleteTypeSelection() {
 Id HmiTypesPane::duplicateType(Id id) {
     const auto* t = doc_->project.hmiType(id);
     if (!t) return kNoId;
+    if (t->symbol != kNoId) {   // 1.51.0 : un type d'un symbole, copie dans son symbole
+        Id made = kNoId;
+        apply_(hmi::changeProject(doc_, "Dupliquer le type " + t->name, [&](hmi::Project& p) { made = hmi::symtypes::duplicateType(p, id); }));
+        selectType(made);
+        return made;
+    }
     std::string name = t->name + "_copie";
     for (int i = 2; doc_->project.hmiTypeByName(name) && i < 1000; ++i) name = t->name + "_copie" + std::to_string(i);
     const hmi::HmiType copy = *t;
@@ -5845,15 +5939,16 @@ std::vector<HmiTypesPane::TypeUse> HmiTypesPane::usesOf(const hmi::Project& p, c
         for (const auto& d : sc.decls)
             if (namesType(p, sc.ns, d.type, t)) add(K::Script, sc.name, declWord(d.kind) + d.name + " du script", d.type, sc.id);
     for (const auto& v : p.views) {
+        const std::string vns = hmi::symtypes::scopeOf(p, v);   // 1.51.0 : un symbole lit ses types sans prefixe
         for (const auto& pa : v.params)
-            if (namesType(p, {}, pa.type, t)) add(K::ViewParam, v.name + "." + pa.name, "param\xC3\xA8tre de " + v.name, pa.type, v.id);
+            if (namesType(p, vns, pa.type, t)) add(K::ViewParam, v.name + "." + pa.name, "param\xC3\xA8tre de " + v.name, pa.type, v.id);
         for (const auto& c : v.constants)
-            if (namesType(p, {}, c.type, t)) add(K::ViewConstant, v.name + "." + c.name, "constante de " + v.name, c.type, v.id);
+            if (namesType(p, vns, c.type, t)) add(K::ViewConstant, v.name + "." + c.name, "constante de " + v.name, c.type, v.id);
         for (const auto& f : v.functions)
-            code(K::ViewFunction, v.name + "." + f.name, " de la fonction de " + v.name, {}, f.returnType, f.decls, v.id, f.id);
+            code(K::ViewFunction, v.name + "." + f.name, " de la fonction de " + v.name, vns, f.returnType, f.decls, v.id, f.id);
         for (const auto& sc : v.scripts)
             for (const auto& d : sc.decls)
-                if (namesType(p, {}, d.type, t))
+                if (namesType(p, vns, d.type, t))
                     add(K::ViewScript, v.name + "." + (sc.name.empty() ? std::string(hmi::eventLabel(sc.event)) : sc.name),
                         declWord(d.kind) + d.name + " d'un script de " + v.name, d.type, v.id, sc.id);
     }
@@ -6203,7 +6298,25 @@ void HmiTypesPane::openEnumCreation() {
 
 Id HmiTypesPane::createEnumerationFromPanel(std::string* why) {
     if (!create_) return kNoId;
-    const Id made = createEnumeration(doc_, apply_, create_->name(), create_->values(), why);
+    Id made = kNoId;
+    if (scope_ != kNoId) {   // 1.51.0 : une enumeration du symbole (ses valeurs, son toString et son fromString)
+        const std::string name = trimmed(create_->name());
+        const auto values = create_->values();
+        if (values.empty()) {
+            if (why) *why = "donne au moins une valeur";
+            return kNoId;
+        }
+        if (!hmi::symtypes::validName(doc_->project, scope_, name, kNoId, why)) return kNoId;
+        apply_(hmi::changeProject(doc_, "Nouvelle \xC3\xA9num\xC3\xA9ration " + name, [&](hmi::Project& p) {
+            made = hmi::symtypes::addType(p, scope_, name, hmi::HmiTypeKind::Enumeration);
+            if (auto* t = p.hmiType(made)) {
+                t->values = values;
+                (void)hmi::regenerateEnumConversions(p, *t);
+            }
+        }));
+    } else {
+        made = createEnumeration(doc_, apply_, create_->name(), create_->values(), why);
+    }
     if (made == kNoId) return kNoId;
     create_->close();
     current_ = made;
