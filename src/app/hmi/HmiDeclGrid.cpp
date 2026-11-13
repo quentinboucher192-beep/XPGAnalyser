@@ -4,6 +4,8 @@
 // =============================================================================
 #include "HmiDeclGrid.hpp"
 
+#include "HmiMethodFollow.hpp"   // 1.50.1 : la signature d'une virtuelle suivie par ses redefinitions
+
 #include "HmiAssist.hpp"       // 1.12.7 : l'aide a la saisie du code d'un calcul
 #include "HmiIcons.hpp"
 #include "HmiInitModel.hpp"    // 1.12.19 (U3) : iv::zeroOf, l'invite d'une case vide
@@ -11,6 +13,7 @@
 #include "HmiUnitPanes.hpp"    // 1.13.0 (lot J6b) : la case Unite (le selecteur d'unites, l'aide a la saisie)
 #include "../../hmi/HmiRoles.hpp"      // 1.12.19 (U3) : defaultInvite
 #include "../../hmi/HmiCalc.hpp"       // 1.12.7 : les valeurs calculees au demarrage
+#include "../../hmi/HmiMethods.hpp"     // 1.50.1 : une methode virtuelle et ses redefinitions
 #include "../../hmi/HmiMigrate.hpp"
 #include "../../hmi/HmiRuntime.hpp"    // 1.12.7 : leur apercu et leur deballage (Runtime::computedObjects)
 #include "../../hmi/HmiTypes.hpp"      // 1.12.7 : une structure se deballe aussi
@@ -938,6 +941,27 @@ bool HmiDeclGrid::change(const std::string& label, const std::function<bool(hmi:
         return false;
     }
     std::string why;
+    // 1.50.1 : les parametres d'une methode VIRTUELLE redefinie dans des sous-types - ses redefinitions prennent la meme
+    // signature (une question qui les nomme, une commande pour tout : un Ctrl+Z).
+    if (place_->kind == de::Place::Kind::TypeMethod && tab_ == de::Tab::Parameters)
+        if (const auto* m = hmi::methodById(doc_->project, place_->id); m && m->isVirtual && !hmi::overridesOf(doc_->project, m->id).empty()) {
+            hmi::Project trial = doc_->project;
+            if (!edit(trial, &why)) {
+                say("Refus\xC3\xA9 : " + why, true);
+                return false;
+            }
+            const std::weak_ptr<int> alive = alive_;
+            const auto f = followSignature(doc_, apply_, m->id, trial, label, &why, [this, alive] {
+                if (alive.expired()) return;
+                paste::forget(paste_);
+                refresh();
+            });
+            if (f == Follow::Refused) {
+                say("Refus\xC3\xA9 : " + why, true);
+                return false;
+            }
+            if (f == Follow::Done) return true;
+        }
     bool ok = false;
     auto cmd = hmi::changeProject(doc_, label, [&](hmi::Project& p) { ok = edit(p, &why); });
     if (!ok) {

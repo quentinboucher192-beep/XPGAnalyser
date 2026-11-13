@@ -268,6 +268,21 @@ Shape shapeOfType(const hmi::Project& p, std::string_view type) {
         case tf::Form::Array:
         case tf::Form::Array2D: {
             const auto dims = splitTop(sh.parameter);
+            // 1.50.1 : un grand tableau (plus de 10 000 cases) : une valeur pour toutes (FALSE, 0) ou un litteral, ecrits tels
+            // quels - pas une grille de millions de cases.
+            if (hmi::types::totalCells(s.type) > 10000) {
+                s.kind = Kind::Scalar;
+                s.element = hmi::types::leafElement(s.type);
+                return s;
+            }
+            // 1.50.1 : trois dimensions ou plus - une ligne par premier indice, chacune la couche du dessous (un litteral).
+            if (dims.size() > 2 && bounds(dims[0], s.low, s.high)) {
+                std::string rest;
+                for (std::size_t k = 1; k < dims.size(); ++k) rest += (k > 1 ? ", " : "") + trim(dims[k]);
+                s.kind = Kind::Array;
+                s.element = "ARRAY[" + rest + "] OF " + sh.element;
+                return s;
+            }
             if (sh.form == tf::Form::Array2D && dims.size() == 2 && bounds(dims[0], s.low, s.high) && bounds(dims[1], s.low2, s.high2)) {
                 s.kind = Kind::Matrix;
                 return s;

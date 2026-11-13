@@ -28,6 +28,14 @@
 //  (hors des bornes : bloque ; adresse ou nom deja pris : avertit). « Tableau (Excel) »
 //  garde la grille d'avant : la premiere colonne figee, le defilement, seules les cases
 //  visibles se dessinent.
+//
+//  1.50.1 (les limites levees) : la liste se groupe sur PLUSIEURS NIVEAUX (« Grouper par » :
+//  Profondeur - l'arbre Armoires[.] > Departs[.] > Voies[.] -, Profondeur > Objet, Objet >
+//  Profondeur, Objet, Rien), comptee, depliee / repliee a chaque niveau, toujours virtuelle ;
+//  chaque repere peut porter SA REGLE dans sa case Regle (un groupe de textes a plusieurs
+//  regles, celle du groupe pour les autres) ; dans « Tableau (Excel) », Echap annule la case
+//  ouverte (la valeur revient, la fenetre reste ; Echap encore la ferme, comme partout) et
+//  Entree valide et descend.
 // =============================================================================
 #pragma once
 
@@ -139,24 +147,43 @@ public:
     bool resetOwn(std::string_view marker);
     // La regle a part ecrite : une formule (un repere a indices : pour la profondeur `group`, vide : la plus grande).
     bool setOwnFormula(std::string_view marker, std::string formula, std::string_view group = {});
+    // 1.50.1 : SA REGLE DANS LA LISTE (la case Regle du repere, double-clic ou F2) : une formule ('Mesure {i+1}',
+    // %M(200 + 8 * i + j), 5 + 4 * i pour sa profondeur la plus grande) ; « garder » ; vide, ou la formule de son
+    // groupe : comme son groupe. Il reste dans son groupe (pas « a part ») : plusieurs regles dans un groupe.
+    bool setMarkerRule(std::string_view marker, std::string text);
+    // Les reperes d'un groupe qui ont leur regle (dans la liste).
+    [[nodiscard]] std::size_t markerRules(std::string_view group) const;
     // ---- la liste des reperes (virtuelle) ----
     enum class ListFilter : std::uint8_t { All, Indices, Addresses, Texts, Own, Conflicts };
-    enum class Grouping : std::uint8_t { Depth, Object, None };
+    // 1.50.1 : PLUSIEURS NIVEAUX. Profondeur : l'arbre des profondeurs (Armoires[.] > Departs[.] > Voies[.]), les
+    // adresses, les textes, les variables ; Profondeur > Objet : sous chaque profondeur, ses reperes par objet ;
+    // Objet > Profondeur : l'inverse ; Objet : par objet ; Rien : a plat.
+    enum class Grouping : std::uint8_t { Depth, Object, None, DepthObject, ObjectDepth };
+    [[nodiscard]] static std::string             groupingLabel(Grouping g);   // "Profondeur \xE2\x80\xBA Objet"
+    [[nodiscard]] static std::optional<Grouping> groupingNamed(std::string_view text);   // "profondeur>objet", le libelle...
+    [[nodiscard]] Grouping grouping() const noexcept { return grouping_; }
     struct ListRow {
         bool        group{false};
-        std::string key;             // un groupe : sa cle ; un repere : markerKey
+        std::string key;             // un groupe : sa cle (unique dans l'arbre) ; un repere : markerKey
         std::size_t marker{0};       // un repere : son rang dans scanned().markers
         std::string text, where, rule, last;
-        std::size_t count{0};        // un groupe : ses reperes montres
+        std::size_t count{0};        // un groupe : ses reperes montres (tout son sous-arbre)
         bool        expanded{true};
-        bool        own{false};      // a part
+        bool        own{false};      // a part (ou ses cases, garder)
         int         conflict{0};     // 0 aucun, 1 avertissement, 2 faute
+        // 1.50.1 : l'arbre.
+        int         level{0};        // son niveau (0 : en tete) - le retrait
+        std::string groupKey;        // un groupe qui est une profondeur, les adresses, les textes... : sa cle (Group::key)
+        std::vector<std::size_t> members;   // un groupe : ses reperes (tout son sous-arbre, meme replie)
+        bool        rule2{false};    // un repere : sa regle a lui, dans la liste (Own::inList)
     };
     void setSearch(std::string text);
     void setListFilter(ListFilter f);
     void setGrouping(Grouping g);
-    void expandAll(bool expanded);                       // « Tout deplier » / « Tout replier »
+    void expandAll(bool expanded);                       // « Tout deplier » / « Tout replier » (a tous les niveaux)
     void toggleGroup(std::string_view key);
+    // 1.50.1 : deplier (ses parents aussi) ou replier les groupes de ce nom ("Departs", "Textes", "Depart_0_0") ; faux : aucun.
+    bool setGroupExpanded(std::string_view name, bool expanded);
     [[nodiscard]] const std::vector<ListRow>& listRows() const noexcept { return listRows_; }
     [[nodiscard]] std::size_t listCount(ListFilter f) const;
     // ---- l'apercu ----
@@ -187,6 +214,12 @@ public:
     };
     [[nodiscard]] SheetStats sheetStats() const;
     void scrollSheet(float x, float y);
+    // 1.50.1 : la case (ligne, colonne : 0 le nom) du tableau a l'ecran (vide : pas visible) ; son champ (une case
+    // ouverte d'un clic : Entree valide et descend, Echap annule et rend la valeur - la fenetre reste ; Echap encore la ferme).
+    [[nodiscard]] gfx::Rect      sheetCell(int row, int column) const;
+    [[nodiscard]] ui::InputText* sheetEditor() const noexcept;
+    [[nodiscard]] bool           sheetEditing() const noexcept;
+    [[nodiscard]] ui::DropDown*  groupingList() const noexcept { return groupBy_; }
 
     // 1.11 (R111) : "veux-tu dire" sur un membre de l'automate. `path` ne mene a
     // rien (Armoires[0].sortie.V8) : le debut qui existe reste (Armoires[0]) ;
@@ -194,6 +227,12 @@ public:
     // que l'aide a la saisie propose apres le point (les membres de la DDT) ; un
     // premier morceau inconnu, la variable la plus proche de `variables`. Seuls
     // les chemins qui existent sont proposes (Armoires[0].sorties.V8), 3 au plus.
+    // 1.50.1 : L'EXEMPLE DES CAPTURES (la commande dupliquer-exemple) - dans `v`, un depart FICTIF sur 7 objets (Depart_0_0,
+    // Voyant_V5, Afficheur_I5 : Voies[5], Mesures[0..3], l'armoire ; Afficheur_P : %MW1000, %M200 ; Titre_0, Legende_0,
+    // Code_0 : trois textes), les types IHM qui tiennent chaque chemin (T_Armoire, T_Depart, T_Voie, T_Mesure), les
+    // variables Armoires (ARRAY[0..3] OF T_Armoire) et Compteur (%MW1037 : une adresse deja prise). Rend les objets poses.
+    [[nodiscard]] static std::vector<hmi::Id> addExample(hmi::Project& p, hmi::View& v);
+
     [[nodiscard]] static std::vector<std::string> memberSuggestions(std::string_view path, const hmi::dup::PathExists& exists,
                                                                     const ui::InputText::Assist& assist,
                                                                     const std::vector<std::string>& variables = {});
@@ -249,6 +288,12 @@ private:
     Grouping                             grouping_{Grouping::Depth};
     std::set<std::string>                collapsed_;
     std::vector<ListRow>                 listRows_;
+    // 1.50.1 : les groupes de l'arbre (tous, meme sous un groupe replie) : (cle, parent, les noms qui le designent).
+    struct NodeName {
+        std::string              key, parent;
+        std::vector<std::string> names;
+    };
+    std::vector<NodeName>                nodes_;
     bool                                 previewAll_{false};
     std::vector<std::size_t>             editing_;       // les reperes de la regle a part en cours d'ecriture
     int                                  editMode_{0};
@@ -288,7 +333,7 @@ private:
     std::vector<ui::Button*>             ownButtons_;
     std::vector<ui::Button*>             modeButtons_;          // Une suite / Une grille
     std::vector<ui::Button*>             filterButtons_;
-    std::vector<ui::Button*>             groupButtons_;
+    ui::DropDown*                        groupBy_{nullptr};     // 1.50.1 : « Grouper par » (plusieurs niveaux)
     std::vector<ui::Button*>             foldButtons_;          // Tout deplier / Tout replier
     std::vector<ui::InputText*>          rangeFields_;          // i de, a ; j de, a ; k de, a
     ui::Button*                          kButton_{nullptr};

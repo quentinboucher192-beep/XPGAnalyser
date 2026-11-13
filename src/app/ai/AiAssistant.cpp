@@ -895,6 +895,7 @@ bool Assistant::send(std::string text, std::string* why) {
         u.role = "utilisateur";
         u.date = isoDate(now());
         u.text = text;
+        if (const auto* q = replyTo()) chatreply::writeQuote(u, *q);   // 1.50.1 : la demande cite un message
         for (const auto& p : pending_) u.attachments.push_back(p.attachment);
         const bool first = c.messages.empty();
         if (first || c.title == kNewTitle) c.title = text.empty() ? std::string("Pi\xC3\xA8" "ces jointes") : titleFor(text, settings_.provider == "demo");
@@ -937,6 +938,7 @@ bool Assistant::send(std::string text, std::string* why) {
             while (!plain.empty() && (plain.back() == '\n' || plain.back() == ' ')) plain.pop_back();
             notice_ = "Assistant IA : " + plain;
         }
+        reply_.reset();   // 1.50.1 : la citation est partie avec la demande
         ++revision_;
         return true;
     }
@@ -950,6 +952,7 @@ bool Assistant::send(std::string text, std::string* why) {
     u.role = "utilisateur";
     u.date = isoDate(now());
     u.text = text;
+    if (const auto* q = replyTo()) chatreply::writeQuote(u, *q);   // 1.50.1 : la demande cite un message
     for (auto& p : pending_) u.attachments.push_back(p.attachment);
     pending_.clear();
     ctx.attachments = u.attachments;
@@ -1018,9 +1021,39 @@ bool Assistant::send(std::string text, std::string* why) {
     for (const auto& att : cur()->messages[static_cast<std::size_t>(gen_.message) - 1].attachments)
         appendActivity("fichier", "Pi\xC3\xA8" "ce jointe : " + att.name + " (" + formatBytes(att.bytes) + ")");
     save(*cur());
+    reply_.reset();   // 1.50.1 : la citation est partie avec la demande
     ++revision_;
     (void)doc;
     return true;
+}
+
+// ---- 1.50.1 : repondre a un message (AiChatReply.hpp) ------------------------------------------------------------------
+bool Assistant::setReplyTo(int message, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    const Conversation* c = cur();
+    if (!c || message < 0 || message >= static_cast<int>(c->messages.size())) return fail("Pas de tel message dans la conversation.");
+    if (message == generatingMessage()) return fail("Cette r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture : r\xC3\xA9ponds-y quand elle est finie.");
+    const Message& m = c->messages[static_cast<std::size_t>(message)];
+    chatreply::Quote q = chatreply::quoteOf(m);
+    if (q.excerpt.empty()) return fail("Ce message n'a pas de texte \xC3\xA0 citer.");
+    reply_ = PendingReply{c->id, std::move(q)};
+    ++revision_;
+    return true;
+}
+
+void Assistant::clearReply() {
+    if (!reply_) return;
+    reply_.reset();
+    ++revision_;
+}
+
+const chatreply::Quote* Assistant::replyTo() const {
+    const Conversation* c = current();
+    if (!reply_ || !c || c->id != reply_->conversation) return nullptr;
+    return &reply_->quote;
 }
 
 learning::Trial Assistant::tryPhrase(const std::string& phrase) const {
@@ -3322,7 +3355,7 @@ ProviderRequest Assistant::requestFor(const Conversation& c, std::size_t upTo) c
         ProviderTurn t;
         if (m.role == "utilisateur") {
             t.role = ProviderTurn::Role::User;
-            t.text = m.text;
+            t.text = chatreply::forModel(c, m);   // 1.50.1 : une demande qui cite un message : la citation balisee d'abord
             if (settings_.sendAttachments) {
                 // 1.21.0 : l'original quand le modele le lit, sinon le texte extrait ; une piece retiree ne part plus.
                 for (const auto& a : m.attachments) {

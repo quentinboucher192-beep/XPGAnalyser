@@ -692,16 +692,12 @@ std::optional<sources::Source> Runtime::jokerSource(std::string_view name, Id vi
     // Un tableau de l'IHM (deplie en cases) : ses indices ; a deux dimensions, toutes ses cases.
     if (const auto* a = aggregate(src); a && a->array) {
         const auto& sp = a->spec;
-        for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
-            if (sp.dims == 1) {
-                s.indices.push_back(std::to_string(i));
-                s.labels.push_back(std::to_string(i));
-            } else {
-                for (long long j = sp.low[1]; j <= sp.high[1]; ++j) {
-                    s.indices.push_back(std::to_string(i) + "," + std::to_string(j));
-                    s.labels.push_back(std::to_string(i) + "," + std::to_string(j));
-                }
-            }
+        // 1.50.1 : a toutes ses dimensions ("1,2,3" pour trois).
+        for (long long k = 0, n = std::min(sp.length(), types::kMaxElements); k < n; ++k) {
+            const std::string cell = types::cellText(sp, k);
+            const std::string inside = cell.size() >= 2 ? cell.substr(1, cell.size() - 2) : cell;
+            s.indices.push_back(inside);
+            s.labels.push_back(inside);
         }
         return s;
     }
@@ -748,11 +744,7 @@ bool Runtime::resolveChoices(std::string_view source, std::vector<Choice>& out, 
             if (const auto* v = variable(path))
                 out.push_back({shownOf(*v), v->type() == sim::Type::String ? quotedText(v->asString()) : v->display(), false});
         };
-        for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
-            if (sp.dims == 1) add(src + "[" + std::to_string(i) + "]");
-            else
-                for (long long j = sp.low[1]; j <= sp.high[1]; ++j) add(src + "[" + std::to_string(i) + "," + std::to_string(j) + "]");
-        }
+        for (long long k = 0, n = std::min(sp.length(), types::kMaxElements); k < n; ++k) add(src + types::cellText(sp, k));   // 1.50.1 : N dimensions
         return true;
     }
     // Une expression qui rend un texte a;b;c (une STRING de l'IHM, JOIN(L, ';')...) : ses morceaux, leur rang.
@@ -830,15 +822,22 @@ bool Runtime::tableRows(const Object& o, std::vector<std::string>& headers, std:
         const std::vector<TypeMember> members = sources::leafMembers(*project_, sp.element);
         // 1.12.5 (lot A) : un tableau a deux dimensions - une ligne par premier indice, une colonne par
         // second (Tab[i,j]) ; avant : des lignes de cases vides (Tab[i] n'existe pas).
-        if (sp.dims == 2) {
-            for (long long j = sp.low[1]; j <= sp.high[1]; ++j) {
+        // 1.50.1 : trois dimensions ou plus - une ligne par indices de tete (i, j), une colonne par dernier indice.
+        if (sp.dims >= 2) {
+            const auto last = static_cast<std::size_t>(sp.dims - 1);
+            types::Spec head = sp;
+            head.dims = sp.dims - 1;
+            head.low.pop_back();
+            head.high.pop_back();
+            for (long long j = sp.low[last]; j <= sp.high[last]; ++j) {
                 if (members.empty()) headers.push_back("[" + std::to_string(j) + "]");
                 for (const auto& m : members) headers.push_back("[" + std::to_string(j) + "]." + m.name);
             }
-            for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
+            for (long long r = 0, n = head.length(); r < n; ++r) {
+                const std::string lead = types::cellText(head, r);
                 std::vector<std::string> row;
-                for (long long j = sp.low[1]; j <= sp.high[1]; ++j) {
-                    const std::string cell = src + "[" + std::to_string(i) + "," + std::to_string(j) + "]";
+                for (long long j = sp.low[last]; j <= sp.high[last]; ++j) {
+                    const std::string cell = src + lead.substr(0, lead.size() - 1) + "," + std::to_string(j) + "]";
                     if (members.empty()) {
                         const auto* v = variable(cell);
                         row.push_back(v ? shownOf(*v) : std::string{});

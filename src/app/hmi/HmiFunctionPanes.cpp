@@ -1515,6 +1515,10 @@ bool HmiFunctionsPane::tryFunction(Id id, const std::vector<std::string>& argume
     return trial_.ok;
 }
 
+// 1.50.1 : le banc d'un essai, pour les methodes aussi (HmiMethodsPane::tryMethod).
+std::unique_ptr<sim::Environment> trialPlc(sim::Environment* live) { return std::make_unique<TrialPlc>(live); }
+std::string trialValueText(const sim::Value& v) { return trialText(v); }
+
 void HmiFunctionsPane::onLayout() {
     const auto b = bounds();
     tools_->setBounds({b.x, b.y, b.w, 38});

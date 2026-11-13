@@ -7,6 +7,7 @@
 #include "../../hmi/HmiEdit.hpp"
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/Commands.hpp"
+#include "../../ui/widgets/FilterMemory.hpp"   // 1.50.1 : Garder les marges, retenu par projet
 
 #include <algorithm>
 #include <cmath>
@@ -26,7 +27,23 @@ constexpr unsigned kOneEdge[4] = {st::kLeft, st::kRight, st::kTop, st::kBottom};
 
 std::string num(double v) { return hmi::formatNumber(std::round(v * 10.0) / 10.0); }
 
+// 1.50.1 : la cle du reglage du projet (ui::FilterMemory : "filtres.<projet>.hmi.etirer") ; "sans-marges" : decochee.
+constexpr const char* kStretchKey = "hmi.etirer";
+constexpr const char* kNoMargins = "sans-marges";
+
 } // namespace
+
+bool HmiEditor::stretchKeepMargins() const {
+    if (ui::FilterMemory::installed()) return ui::FilterMemory::read(kStretchKey) != kNoMargins;
+    return stretchMargins_;
+}
+
+void HmiEditor::setStretchKeepMargins(bool on) {
+    stretchMargins_ = on;
+    // Retenu par projet, avec ses autres reglages d'editeur (les regles, le suivi) : un autre editeur du projet le
+    // voit, le projet rouvert le retrouve. Coche (d'office) : rien de retenu.
+    if (ui::FilterMemory::installed()) ui::FilterMemory::write(kStretchKey, on ? std::string{} : std::string(kNoMargins));
+}
 
 st::Plan HmiEditor::stretchPlan(const st::Request& request) const {
     const auto* v = doc_->project.view(viewId_);
@@ -42,7 +59,7 @@ std::optional<st::Request> HmiEditor::stretchRequestOf(int menuId) const {
     const int d = menuId - kStretchMenu;
     if (d < 0 || d >= 1000) return std::nullopt;
     st::Request r;
-    r.keepMargins = stretchMargins_;
+    r.keepMargins = stretchKeepMargins();
     if (d >= 0 && d < 7) {
         r.edges = kViewEdges[d];
         return r;
@@ -166,10 +183,11 @@ std::vector<ui::PopupMenu::Item> HmiEditor::stretchItems() const {
     }
     out.push_back(cmd::separator());
     ui::PopupMenu::Item keep;
-    keep.label = "Garder les marges (" + num(st::viewMargin(*v)) + " px)";
+    // 1.50.1 : la valeur gardee (celles de la vue, sinon la grille de colonnes, sinon le pas d'aimantation).
+    keep.label = "Garder les marges (" + st::marginsText(st::viewMargins(*v)) + ")";
     keep.id = kStretchMenu + kStretchMargins;
     keep.checkable = true;
-    keep.checked = stretchMargins_;
+    keep.checked = stretchKeepMargins();
     out.push_back(std::move(keep));
     ui::PopupMenu::Item dialog;
     dialog.label = "\xC3\x89tirer\xE2\x80\xA6";
@@ -185,7 +203,7 @@ std::vector<ui::PopupMenu::Item> HmiEditor::stretchItems() const {
 ui::PopupMenu::Item HmiEditor::stretchEntry() const {
     ui::PopupMenu::Item it;
     it.label = "\xC3\x89tirer";
-    it.note = "nouveau";
+    it.badge = "nouveau";   // 1.50.1 : la pastille violette de la maquette (avant : une note grise)
     it.paintIcon = [](const ui::PaintContext& ctx, gfx::Rect r) {
         const float g = std::min(16.f, std::min(r.w, r.h));
         drawHmiGlyph(ctx.r, HmiGlyph::DistributeH, {r.x + (r.w - g) / 2.f, r.y + (r.h - g) / 2.f, g, g}, ctx.theme.color.accent);
@@ -206,10 +224,14 @@ bool HmiEditor::stretchMenuChosen(int id) {
     stretchHover_ = -1;
     canvas_->setStretchPreview(std::nullopt);
     if (d == kStretchMargins) {
-        stretchMargins_ = !stretchMargins_;
+        const bool on = !stretchKeepMargins();
+        setStretchKeepMargins(on);
         const auto* v = doc_->project.view(viewId_);
-        statusBar_->setTransientMessage(stretchMargins_ ? "\xC3\x89tirer : les marges gard\xC3\xA9" "es (" + num(v ? st::viewMargin(*v) : 0.0) + " px)."
-                                                        : std::string("\xC3\x89tirer : sans marge, l'objet touche le bord."),
+        const auto m = v ? st::viewMargins(*v) : st::Margins{};
+        // 1.50.1 : d'ou vient la marge (la vue, la grille de colonnes, le pas) ; retenu pour le projet.
+        statusBar_->setTransientMessage(on ? "\xC3\x89tirer : marges gard\xC3\xA9" "es, " + st::marginsSource(m) + " (" + st::marginsText(m)
+                                                 + ") - retenu pour ce projet."
+                                           : std::string("\xC3\x89tirer : sans marge, l'objet touche le bord - retenu pour ce projet."),
                                         5.0, ui::StatusBar::Severity::Info);
         return true;
     }
@@ -300,9 +322,12 @@ std::unique_ptr<HmiStretchDialog> HmiEditor::makeStretchDialog() {
     HmiStretchDialog::Spec spec;
     spec.object = one ? one->name : std::to_string(units.size()) + " objets";
     spec.title = "\xC3\x89tirer " + spec.object;
+    // 1.50.1 : les marges de la vue (une par bord) ; egales : la valeur dans le champ, sinon le champ vide (<< celles
+    // de la vue >>, chaque bord la sienne).
+    spec.viewMargins = st::viewMargins(*v);
     spec.viewMargin = st::viewMargin(*v);
-    spec.request.keepMargins = stretchMargins_;
-    spec.request.margin = stretchMargins_ ? spec.viewMargin : 0.0;
+    spec.request.keepMargins = stretchKeepMargins();
+    spec.request.margin = !spec.request.keepMargins ? 0.0 : spec.viewMargins.uniform() ? spec.viewMargin : -1.0;
     const std::weak_ptr<bool> alive = alive_;
     spec.preview = [this, alive](const st::Request& r) -> std::pair<bool, std::string> {
         if (alive.expired()) return {false, {}};

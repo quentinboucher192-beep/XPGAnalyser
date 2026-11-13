@@ -14,6 +14,10 @@
 //  (<< ecrire ARRAY[0..3, 0..9] >>) alors qu'une locale l'acceptait ; M[i][j] sur
 //  deux dimensions et T[i, j] sur un tableau de tableaux etaient refuses.
 //
+//  1.50.1 (tableaux_ndim.inl) : autant de dimensions qu'on veut par niveau (ARRAY[0..3, 0..7, 0..15] OF BOOL),
+//  melangees aux tableaux de tableaux ; a[i] et a[i, j] sur trois dimensions : une couche, une ligne. Les grands
+//  tableaux (10 000 000 de BOOL) ranges serres, mesures (temps, memoire) ; refuse seulement ce qui ne tient pas.
+//
 //  TAB_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
 #include "../src/hmi/HmiDecl.hpp"
@@ -27,6 +31,7 @@
 #include "../src/hmi/HmiTypeForms.hpp"
 #include "../src/hmi/HmiTypeRegistry.hpp"
 #include "../src/hmi/HmiTypes.hpp"
+#include "../src/sim/Rich.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -185,8 +190,9 @@ void lesTypes() {
             {"ARRAY[0..3] OF ARRAY[9..0] OF INT", "ses cases"},
             {"ARRAY[0..3] OF ARRAY[0..x] OF INT", "deux entiers"},
             {"ARRAY[0..3] OF ARRAY[0..1] REAL", "OF"},
-            {"ARRAY[0..999] OF ARRAY[0..999] OF INT", "au plus"},
-            {"ARRAY[0..1, 0..1, 0..1] OF INT", "tableau de tableaux"},
+            // 1.50.1 : 1 000 x 1 000 INT et trois dimensions sont acceptes (tableaux_ndim.inl) ; seul ce qui ne tient pas en
+            // memoire est refuse, avec l'estimation.
+            {"ARRAY[0..99999] OF ARRAY[0..99999] OF INT", "trop grand"},
         };
         for (const auto& b : bad) {
             std::string why;
@@ -232,10 +238,13 @@ void lesChemins() {
         for (const auto& q : exprcheck::check(ctx, "X[1][2] AND X[3, 15]")) fx += q.message + " ; ";
         check(fx.empty(), f + " : une formule X[1][2] AND X[3, 15] sans faute (" + fx + ")");
     }
+    // 1.50.1 : M[1] seul est la ligne 1 (un sous-tableau) - plus une faute ; ses indices se verifient.
     Project p;
     addVar(p, "M", kTwoD);
-    const std::string few = problemsOf(types::pathProblems(p, "M[1] := TRUE;"));
-    check(few.find("2 indices") != std::string::npos, "deux dimensions : M[1] seul est dit (" + few + ")");
+    const std::string row = problemsOf(types::pathProblems(p, "R := M[1].Length;"));
+    check(row.empty() && types::typeOfPath(p, "M[1]") == "ARRAY[0..15] OF BOOL", "deux dimensions : M[1] est une ligne (" + row + ")");
+    const std::string outRow = problemsOf(types::pathProblems(p, "R := M[4].Length;"));
+    check(outRow.find("hors des bornes") != std::string::npos, "... M[4] : hors des bornes (" + outRow + ")");
 }
 
 // ---- le moteur : variables IHM, formules, locales, membres, declarations, fonctions ----------------
@@ -344,11 +353,19 @@ void leMoteur() {
 
 } // namespace
 
+#include "tableaux_ndim.inl"     // 1.50.1 : N dimensions, les grands tableaux
+
 int main() {
     std::printf("tableaux : ARRAY OF ARRAY et ARRAY[a, b], partout\n");
     lesTypes();
     lesChemins();
     leMoteur();
+    lesTypesND();
+    lesCheminsND();
+    leMoteurND();
+    lesGrandsTableaux();
+    lesGrandsTableauxIHM();
+    toutSerre();
     std::printf("%d controles, %d echecs\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

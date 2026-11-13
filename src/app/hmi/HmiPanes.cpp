@@ -1055,6 +1055,10 @@ core::CommandPtr hmiNewViewCommand(const hmi::DocumentPtr& doc, std::string name
         if (height > 0) v.height = height;
         v.description = std::move(description);
         v.role = role.empty() ? std::string("vue") : role;
+        // 1.50.1 : une vue ou une popup neuve a ses marges (16 px, la maquette) - Etirer les garde. Un projet d'avant
+        // n'en a pas (0) : rien n'y change.
+        if (v.role == "vue" || v.role == "popup")
+            v.margins = {hmi::kNewViewMargin, hmi::kNewViewMargin, hmi::kNewViewMargin, hmi::kNewViewMargin};
         if (made) *made = v.id;
         // Lot 12 : le modele de vue choisi (un synoptique, un tableau de bord...).
         if (!templateKey.empty() && templateKey != "vide") hmi::design::fillFromTemplate(p, v, templateKey);

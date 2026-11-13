@@ -13,8 +13,8 @@
 //    | REAL          Elementaires        IEC 61131-3           base:REAL          |
 //    | T_Four        Structures IHM      Projet - Types IHM    ihm:615            |
 //    | T_Four : un four. Membres : Temperature : REAL, Consigne : REAL            |
-//    | Forme : [Simple] [Tableau] [Tableau 2D] [Liste] [Vecteur] [Dictionnaire]...|
-//    |         Bornes : [0..9______]   [ ] REF_TO (une reference)                 |
+//    | Forme : [Simple] [Tableau] [Tableau a N dimensions] [Liste] [Vecteur]...    |
+//    |         Bornes : [0..3, 0..9__] [+ Dimension] [-]   (1.50.1)               |
 //    | Resultat : ARRAY[0..9] OF T_Four                                           |
 //    |                          [Annuler] [Ouvrir la definition] [Choisir]        |
 //    +----------------------------------------------------------------------------+
@@ -110,6 +110,11 @@ public:
     void setMap(bool on);
     bool setForm(std::string_view labelOrKey);         // 1.12.2 : "Liste", "vecteur", "Dictionnaire (MAP)"...
     void composeElement();                             // 1.12.14 : Composer l'element... (un second selecteur)
+    // 1.50.1 : + Dimension (un tableau a une dimension passe a N dimensions) et une de moins ; le nombre de dimensions
+    // de la forme (0 : pas un tableau).
+    void addDimension();
+    void removeDimension();
+    [[nodiscard]] std::size_t dimensions() const;
     [[nodiscard]] std::vector<std::string> shownNames() const;
     [[nodiscard]] std::string result() const;          // le type qu'on choisirait
     [[nodiscard]] std::string finalResult() const;     // 1.12.14 : le type complet du premier selecteur (vide : on y est)

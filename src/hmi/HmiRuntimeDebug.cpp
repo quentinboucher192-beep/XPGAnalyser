@@ -54,6 +54,7 @@
 #include "HmiNames.hpp"
 #include "HmiOperators.hpp"
 #include "HmiScript.hpp"
+#include "HmiScriptC.hpp"   // 1.50.1 : le debogueur des scripts C et C++
 #include "HmiTypes.hpp"
 #include "../sim/DebugShared.hpp"
 #include "../sim/Interpreter.hpp"
@@ -62,6 +63,7 @@
 #include <cctype>
 #include <chrono>
 #include <functional>
+#include <optional>
 #include <set>
 
 namespace hmi {
@@ -127,7 +129,7 @@ std::string codeShownName(const Project& p, Id function, const std::string& name
     const HmiType* owner = nullptr;
     const HmiFunction* m = codeMethodById(p, function, &owner);
     if (!m || !owner) return name;
-    const std::string internal = upperText(methodFunctionName(fullName(*owner), *m));
+    const std::string internal = upperText(methodFunctionName(*owner, *m));   // 1.50.1 : une surcharge, son suffixe
     if (name.size() < internal.size() || upperText(std::string_view(name).substr(0, internal.size())) != internal) return name;
     if (name.size() > internal.size() && identChar(name[internal.size()])) return name;      // METHODE_..._XY : un autre nom
     return m->name + name.substr(internal.size());
@@ -162,8 +164,16 @@ bool debugText(const Project& p, Id script, Id function, std::string& text, bool
             return false;
         }
         if (sc->lang != ScriptLang::ST) {
-            if (why) *why = "ex\xC3\xA9" "cut\xC3\xA9 sans le d\xC3\xA9" "bogueur (C/C++) : il ne s'arr\xC3\xAAtera pas";
-            return false;
+            // 1.50.1 : un script C ou C++ - sa traduction ST, ligne pour ligne (les lignes du texte C).
+            const auto tr = cscript::translated(sc->body, sc->lang, cscript::entryNamesOf(*sc));
+            if (!tr.ok()) {
+                if (why) *why = "le code ne se traduit pas (ligne " + std::to_string(tr.errors.front().line) + " : " + tr.errors.front().message
+                                + ") : il ne s'arr\xC3\xAAtera pas";
+                return false;
+            }
+            text = tr.st;
+            isFunction = false;
+            return true;
         }
         text = markers::strip(decl::codeOf(*sc));
         isFunction = false;
@@ -174,7 +184,7 @@ bool debugText(const Project& p, Id script, Id function, std::string& text, bool
     const HmiType* owner = nullptr;
     if (const HmiFunction* m = codeMethodById(p, function, &owner); m && owner) {
         MethodCall mc;
-        if (!resolveMethodInternal(p, methodFunctionName(fullName(*owner), *m), mc)) {
+        if (!resolveMethodInternal(p, methodFunctionName(*owner, *m), mc)) {   // 1.50.1 : une surcharge
             if (why) *why = "m\xC3\xA9thode introuvable : il ne s'arr\xC3\xAAtera pas";
             return false;
         }
@@ -398,6 +408,37 @@ std::string qualifiedCondition(const Project& p, Id script, Id function, const s
     return at == std::string::npos ? condition : out.substr(at);
 }
 
+// 1.50.1 : la traduction d'un script C ou C++ (vide : un script ST, introuvable, ou qui ne se traduit pas).
+std::optional<cscript::Translation> cTranslation(const Project* p, Id script) {
+    if (!p || script == kNoId) return std::nullopt;
+    const Script* sc = p->script(script);
+    if (!sc || sc->lang == ScriptLang::ST) return std::nullopt;
+    auto tr = cscript::translated(sc->body, sc->lang, cscript::entryNamesOf(*sc));
+    if (!tr.ok()) return std::nullopt;
+    return tr;
+}
+
+// 1.50.1 : une condition, un espion, tels que le moteur les lit : le ST ecrit (avec les noms de l'espace du code), ou, dans
+// un script C ou C++, le C traduit dans la portee de la ligne `line` (0 : le niveau du script). Faux et `why` : il ne se
+// traduit pas. `isC` : le code est un script C ou C++.
+bool conditionText(const Project& p, Id script, Id function, std::uint32_t line, const std::string& written, bool condition,
+                   std::string& out, std::string* why, bool* isC = nullptr) {
+    if (isC) *isC = false;
+    if (script != kNoId)
+        if (const Script* sc = p.script(script); sc && sc->lang != ScriptLang::ST) {
+            if (isC) *isC = true;
+            std::string w;
+            out = cscript::expressionAt(sc->body, sc->lang, cscript::entryNamesOf(*sc), static_cast<int>(line), written, &w, condition);
+            if (out.empty()) {
+                if (why) *why = w.empty() ? std::string("elle ne se lit pas") : w;
+                return false;
+            }
+            return true;
+        }
+    out = qualifiedCondition(p, script, function, written);
+    return true;
+}
+
 } // namespace
 
 // ------------------------------------------------------------------- les codes ---
@@ -494,7 +535,7 @@ const HmiFunction* Runtime::methodOfFrame(std::string_view internalName) const {
     const auto look = [&](const HmiType& t) {
         if (found) return;
         for (const auto& m : t.methods)
-            if (upperText(methodFunctionName(fullName(t), m)) == wanted) {
+            if (upperText(methodFunctionName(t, m)) == wanted) {   // 1.50.1 : une surcharge, son suffixe
                 found = &m;
                 return;
             }
@@ -600,9 +641,12 @@ std::string Runtime::conditionProblem(Id script, Id function, const std::string&
     std::string text, why;
     bool isFunction = false;
     if (!debugTextOf(script, function, text, isFunction, &why)) return why;
-    auto parsed = sim::parseExpression(qualifiedCondition(*project_, script, function, condition), dialectOptions());
+    std::string stText;
+    bool isC = false;
+    if (!conditionText(*project_, script, function, 0, condition, true, stText, &why, &isC)) return why;   // 1.50.1 : du C, traduit
+    auto parsed = sim::parseExpression(stText, dialectOptions());
     if (!parsed) return conditionFrench(parsed.error());
-    const std::string unknown = unknownConditionName(text, script, function, condition);
+    const std::string unknown = unknownConditionName(text, script, function, isC ? stText : condition);
     return unknown.empty() ? std::string{} : unknown + " n'est pas d\xC3\xA9" "clar\xC3\xA9" "e ici";
 }
 
@@ -640,12 +684,19 @@ void Runtime::resolveBreakpoints() {
         bp.effectiveLine = at;
         if (at != bp.line) bp.note = sim::debug::shiftedNote(at, bp.line);
         if (!blank(bp.condition)) {
-            auto parsed = sim::parseExpression(qualifiedCondition(*project_, bp.script, bp.function, bp.condition), dialectOptions());
+            // 1.50.1 : dans un script C ou C++, la condition s'ecrit en C : traduite dans la portee de sa ligne.
+            std::string stCondition, cwhy;
+            bool isC = false;
+            if (!conditionText(*project_, bp.script, bp.function, at, bp.condition, true, stCondition, &cwhy, &isC)) {
+                sim::debug::addNote(bp.note, sim::debug::invalidCondition(cwhy));
+                continue;
+            }
+            auto parsed = sim::parseExpression(stCondition, dialectOptions());
             if (!parsed) {
                 sim::debug::addNote(bp.note, sim::debug::invalidCondition(conditionFrench(parsed.error())));
                 continue;
             }
-            const std::string unknown = unknownConditionName(text, bp.script, bp.function, bp.condition);
+            const std::string unknown = unknownConditionName(text, bp.script, bp.function, isC ? stCondition : bp.condition);
             if (!unknown.empty()) {
                 sim::debug::addNote(bp.note, sim::debug::invalidCondition(unknown + " n'est pas d\xC3\xA9" "clar\xC3\xA9" "e ici"));
                 continue;
@@ -728,7 +779,7 @@ void Runtime::debugTick(double now) {
     if (!debugOn_ || !project_ || now - codeBreaksAt_ < 1.0) return;
     codeBreaksAt_ = now;
     bool any = false;
-    const auto script = [&](const Script& sc) { any = any || (sc.lang == ScriptLang::ST && writesCodeBreak(sc.body)); };
+    const auto script = [&](const Script& sc) { any = any || writesCodeBreak(sc.body); };   // 1.50.1 : le C et le C++ aussi
     const auto type = [&](const HmiType& t) {
         for (const auto& m : t.methods) any = any || writesCodeBreak(m.body);
         for (const auto& o : t.operators) any = any || writesCodeBreak(o.body);
@@ -795,6 +846,12 @@ std::vector<DebugFrame> Runtime::debugStack(const std::vector<sim::LineProbe::Fr
         if (f->function.empty()) d.label = code.empty() ? std::string("code") : code;
         else if (f->standalone) d.label = code.empty() ? "fonction " + f->function : code;
         else d.label = f->function + " (fonction interne de " + (code.empty() ? std::string("ce code") : code) + ")";
+        // 1.50.1 : un script C ou C++ - ses fonctions et ses variables sous leur nom C (carre, Pompe::demarrer, this).
+        if (script != kNoId && !f->standalone)
+            if (const auto tr = cTranslation(project_, script)) {
+                if (!f->function.empty()) d.label = cscript::shownFunction(*tr, f->function) + " (" + (code.empty() ? std::string("ce code") : code) + ")";
+                cscript::showLocals(*tr, f->function, d.locals);
+            }
         // Une fonction IHM simple : ses locales sont dans le cadre du moteur.
         if (f->function.empty() && function != kNoId) {
             for (std::size_t k = cursor; k < debugExec_.size(); ++k) {
@@ -852,6 +909,9 @@ void Runtime::debugReached(std::uint32_t tag, std::uint32_t line, sim::LineProbe
     if (here.empty()) return;
     const auto owner = frameOwner(here.back());
     const bool known = owner.first != kNoId || owner.second != kNoId;
+    // 1.50.1 : un script C ou C++ ; l'aiguillage d'une methode virtuelle (du C++ traduit) se traverse sans s'arreter.
+    const auto ctr = owner.first != kNoId ? cTranslation(project_, owner.first) : std::nullopt;
+    if (ctr && !code && cscript::hiddenFunction(*ctr, here.back().function)) return;
     const std::uint32_t at = frameLine(here.back(), line);         // la ligne du code tel que son editeur le montre
 
     // Pourquoi s'arreter : un point de cette ligne (sa condition vraie - un BOOL), IHM_POINT_ARRET, une pause
@@ -976,6 +1036,12 @@ void Runtime::debugReached(std::uint32_t tag, std::uint32_t line, sim::LineProbe
             value += " (forc\xC3\xA9" "e)";
         }
         if (pausedInCode) name = codeShownName(*project_, owner.second, name);
+    }
+    if (ctr) {                                 // 1.50.1 : les valeurs de la ligne sous leurs noms C (p->x, *p), sans les temporaires
+        std::vector<std::pair<std::string, std::string>> shown;
+        for (auto& [name, value] : hit.values)
+            if (std::string c = cscript::shownName(*ctr, here.back().function, name); !c.empty()) shown.emplace_back(std::move(c), std::move(value));
+        hit.values = std::move(shown);
     }
     hit.stack = debugStack(chain, here);
     hit.context = hit.stack.empty() ? std::string{} : hit.stack.front().label;
@@ -1115,7 +1181,16 @@ void Runtime::clearDebugState() {
 
 bool Runtime::debugEvaluate(const std::string& expression, std::string& value, std::string* why, std::string* type) {
     // En pause : lue comme le code en pause lit ses noms (son espace de noms, ses USING).
-    const std::string text = paused_ && project_ ? qualifiedCondition(*project_, pausedScript_, pausedFunction_, expression) : expression;
+    std::string text = paused_ && project_ ? qualifiedCondition(*project_, pausedScript_, pausedFunction_, expression) : expression;
+    // 1.50.1 : en pause dans un script C ou C++, l'expression s'ecrit en C : traduite dans la portee de la ligne d'arret.
+    if (paused_ && project_ && pausedScript_ != kNoId && debugHit_) {
+        std::string cwhy;
+        bool isC = false;
+        if (!conditionText(*project_, pausedScript_, pausedFunction_, debugHit_->line, expression, false, text, &cwhy, &isC) && isC) {
+            if (why) *why = cwhy;
+            return false;
+        }
+    }
     auto parsed = sim::parseExpression(text, dialectOptions());
     if (!parsed) {
         if (why) *why = conditionFrench(parsed.error());

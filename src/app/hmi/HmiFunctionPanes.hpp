@@ -268,6 +268,12 @@ struct FunctionTabs {
 FunctionTabs makeFunctionTabs(HmiTitledPanel& panel, const std::string& base, hmi::DocumentPtr doc, HmiDeclGrid::Apply apply,
                               ui::WidgetPtr codePage, HmiDeclBanner* banner);
 
+// 1.50.1 : LE BANC D'UN ESSAI, partage par Essayer d'une fonction et d'une methode : l'automate (celui de la simulation
+// s'il tourne, en lecture seule ; sinon un simulateur vide, pour les fonctions standard) et le texte d'une valeur
+// essayee (un REAL garde sa virgule : 18.0 ; une chaine ses guillemets).
+[[nodiscard]] std::unique_ptr<sim::Environment> trialPlc(sim::Environment* live);
+[[nodiscard]] std::string trialValueText(const sim::Value&);
+
 // 1.13.0 (correctifs F2) : les declarations d'une fonction telles que l'ecran les montre (la liste IHM . Fonctions, son
 // inspecteur, Essayer) - TOUT TYPE LU : un parametre de type T (generique), une structure, un tableau. Sans types
 // connus, a : T etait refuse et Max<T>(a : T; b : T) comptait 0 parametre (la colonne disait "-").

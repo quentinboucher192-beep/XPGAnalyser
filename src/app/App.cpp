@@ -24,6 +24,7 @@
 #include "hmi/HmiTestRuns.hpp"       // 1.13.0 (D3b) : les verdicts des tests, oublies a chaque document IHM
 #include "Capture.hpp"
 #include "ClipboardFiles.hpp"
+#include "HeadlessRenderer.hpp"   // 1.50.1 : sans ecran (une construction sans SDL, XPG_SANS_ECRAN=1, --script)
 #include "ScriptRunner.hpp"
 #include "tutorial/TutorialApp.hpp"         // 1.11 (T1) : les tutoriels, branches
 #include "ExportTarget.hpp"                 // Lot API 8 : les clics d'un navigateur n'exportent pas en demandant ou
@@ -91,6 +92,7 @@
 #include <vector>
 #include <cstdio>
 #include <ctime>
+#include <thread>   // 1.50.1 : sans ecran, le rythme des images
 
 // ---------------------------------------------------------------------------
 //  SDL3 is included only here and in platform/. Nothing above this line in the
@@ -798,7 +800,21 @@ core::Status App::initPlatform(const AppOptions& o) {
     ui::installPlatformServices(std::move(services));
     return core::ok();
 #else
-    (void)o;
+    // 1.50.1 : SANS ECRAN (HeadlessRenderer.hpp) - une session rejouee avec XPG_SANS_ECRAN=1 : la vraie police mesure,
+    // rien ne se dessine, le presse-papiers est en memoire (l'essai de bout en bout des sessions : deux Studio sur ce PC).
+    if (headlessWanted(o.script)) {
+        renderer_ = std::make_unique<HeadlessRenderer>(std::max(640, o.width), std::max(480, o.height));
+        ui::PlatformServices services;
+        services.measureWidth = [r = renderer_.get()](std::string_view text, gfx::FontId font) { return r->measure(text, font).width; };
+        services.lineHeight = [r = renderer_.get()](gfx::FontId font) { return r->lineHeight(font); };
+        auto clipboard = std::make_shared<std::string>();
+        services.clipboardGet = [clipboard] { return *clipboard; };
+        services.clipboardSet = [clipboard](std::string_view text) { *clipboard = std::string(text); };
+        services.surfaceSize = [r = renderer_.get()] { return r->surfaceSize(); };
+        ui::installPlatformServices(std::move(services));
+        std::fprintf(stderr, "sans \xC3\xA9" "cran : %dx%d, la police mesure, rien ne se dessine\n", std::max(640, o.width), std::max(480, o.height));
+        return core::ok();
+    }
     // Reaching this means XPG_WITH_SDL was 0 at compile time for THIS file.
     // Check, in order: (1) src/platform/SdlRenderer.cpp and SdlEventPump.cpp are
     // in the project, (2) XPG_WITH_SDL=1 is in the preprocessor definitions,
@@ -2166,6 +2182,8 @@ void App::bindHmi() {
                                                                      : std::string("IHM");
         cfg.created = hmi::nowStamp();
         auto start = hmi::makeView(doc->project, "Vue_Accueil");
+        // 1.50.1 : une vue neuve a ses marges (16 px de chaque cote, la maquette d'Etirer), comme Nouvelle vue.
+        start.margins = {hmi::kNewViewMargin, hmi::kNewViewMargin, hmi::kNewViewMargin, hmi::kNewViewMargin};
         cfg.startView = start.id;
         doc->project.views.push_back(std::move(start));
     }
@@ -3046,7 +3064,25 @@ int App::run() {
     // a qui l'a lancee (un script de CI, un .bat).
     return script_ && script_->failures() > 0 ? 3 : 0;
 #else
-    return 1;
+    // 1.50.1 : SANS ECRAN (initPlatform, HeadlessRenderer.hpp) - les images a l'horloge fixe de la session rejouee, une tous
+    // les 1/60 s de temps reel (une fenetre a 60 Hz : les attentes du script en images gardent leur duree).
+    if (!renderer_ || !script_) return 1;
+    using Clock = std::chrono::steady_clock;
+    wireIncidents();
+    core::perf::attachUiThread();
+    auto next = Clock::now();
+    while (!quit_) {
+        constexpr double dt = 1.0 / 30.0;
+        time_ += dt;
+        core::crash::heartbeat();
+        frame(dt);
+        core::perf::frameEnd();
+        next += std::chrono::microseconds(16667);
+        const auto now = Clock::now();
+        if (next > now) std::this_thread::sleep_until(next);
+        else next = now;
+    }
+    return script_->failures() > 0 ? 3 : 0;
 #endif
 }
 

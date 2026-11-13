@@ -656,16 +656,10 @@ SourceFn projectSources(const Project& p) {
         if (type.empty()) return std::nullopt;
         types::Spec sp;
         if (!types::parseSpec(type, sp) || !sp.array()) return std::nullopt;
-        for (long long i = sp.low[0]; i <= sp.high[0]; ++i) {
-            if (sp.dims == 1) {
-                s.indices.push_back(std::to_string(i));
-                s.labels.push_back(std::to_string(i));
-            } else {
-                for (long long j = sp.low[1]; j <= sp.high[1]; ++j) {
-                    s.indices.push_back(std::to_string(i) + "," + std::to_string(j));
-                    s.labels.push_back(std::to_string(i) + "," + std::to_string(j));
-                }
-            }
+        for (long long k = 0, n = std::min(sp.length(), types::kMaxElements); k < n; ++k) {   // 1.50.1 : a toutes ses dimensions
+            const std::string cell = types::cellText(sp, k);
+            s.indices.push_back(cell.substr(1, cell.size() - 2));
+            s.labels.push_back(cell.substr(1, cell.size() - 2));
         }
         return s;
     };
@@ -751,7 +745,7 @@ std::string sourceProblem(const Project& p, const View* view, std::string_view n
         // Son type declare dit ses bornes (Cuve.Mesures : ARRAY[1..3] - le premier element est 1, pas 0).
         types::Spec sp;
         if (types::parseSpec(typeInView(p, view, n), sp) && sp.array())
-            first = sp.dims == 1 ? std::to_string(sp.low[0]) : std::to_string(sp.low[0]) + "," + std::to_string(sp.low[1]);
+            first = types::cellText(sp, 0).substr(1, types::cellText(sp, 0).size() - 2);   // 1.50.1 : N dimensions
         return {};
     }
     if (dot != std::string::npos && p.variable(root)) return {};

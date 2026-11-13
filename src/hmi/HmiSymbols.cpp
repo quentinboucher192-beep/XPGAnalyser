@@ -1904,24 +1904,40 @@ bool nameTaken(const View& v, std::string_view name, std::string* what, const vo
 
 std::string typeAlong(const Project& p, std::string type, std::string_view rest) {
     std::size_t k = 0;
+    std::size_t pending = 0;     // 1.50.1 : les indices pas encore pris (a[i][j] sur plusieurs dimensions, a[i, j] niveau par niveau)
+    const auto settle = [&] {    // une case pas complete : le sous-tableau (a[i] sur deux dimensions : une ligne)
+        if (pending > 0 && !type.empty()) type = types::subArrayType(type, pending);
+        pending = 0;
+    };
     while (k < rest.size() && !type.empty()) {
         if (rest[k] == '[') {
             int depth = 0;
             std::size_t e = k;
+            std::size_t given = 1;
             for (; e < rest.size(); ++e) {
-                if (rest[e] == '[') ++depth;
-                else if (rest[e] == ']' && --depth == 0) break;
+                if (rest[e] == '[' || rest[e] == '(') ++depth;
+                else if ((rest[e] == ']' || rest[e] == ')') && --depth == 0) break;
+                else if (rest[e] == ',' && depth == 1) ++given;
             }
-            type = types::stepIndex(p, type).type;
+            pending += given;
+            while (pending > 0 && !type.empty()) {
+                const std::size_t need = types::indexCount(type);
+                if (pending < need) break;
+                type = types::stepIndex(p, type).type;
+                pending -= need;
+            }
             k = e + 1;
             continue;
         }
+        settle();
+        if (type.empty()) return {};
         if (rest[k] != '.') return {};
         std::size_t e = k + 1;
         while (e < rest.size() && rest[e] != '.' && rest[e] != '[') ++e;
         type = types::stepMember(p, type, rest.substr(k + 1, e - k - 1)).type;
         k = e;
     }
+    settle();
     return type;
 }
 

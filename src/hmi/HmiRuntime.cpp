@@ -101,7 +101,7 @@ std::string shownCodeNames(const Project* p, std::string text) {
         const auto look = [&](const HmiType& t) {
             if (!label.empty()) return;
             for (const auto& m : t.methods)
-                if (upper(methodFunctionName(fullName(t), m)) == internal) {
+                if (upper(methodFunctionName(t, m)) == internal) {   // 1.50.1 : une surcharge
                     label = "m\xC3\xA9thode " + fullName(t) + "." + m.name;
                     return;
                 }
@@ -1110,6 +1110,7 @@ public:
             return !out.empty();
         }
         for (const auto& m : types::membersOf(*rt_.project_, typeName)) out.emplace_back(m.name, m.type);
+        if (out.empty()) return cscript::structMembers(typeName, out);   // 1.50.1 : une struct, une classe d'un script C/C++
         return !out.empty();
     }
     std::string canonicalName(std::string_view n) override { return resolved(n); }
@@ -1164,6 +1165,25 @@ public:
         out.debugId = c.method;                                       // 1.13.0 (le debogueur) : ses points d'arret
         out.selfType = std::move(c.selfType);        // 1.13.0 : le prive a l'execution
         out.privateWhy = std::move(c.privateWhy);
+        return true;
+    }
+    // 1.50.1 : les surcharges d'une methode (la regle de hmi::overload, celle du controle) - "Regler#615".
+    int methodOverloads(std::string_view ownerType, std::string_view method) override {
+        return rt_.project_ ? static_cast<int>(hmi::effectiveMethods(*rt_.project_, ownerType, method).size()) : 0;
+    }
+    bool chooseMethodOverload(std::string_view ownerType, std::string_view method, const std::vector<sim::ArgShape>& args,
+                              std::string& key, std::string& why) override {
+        if (!rt_.project_) return false;
+        hmi::OwnedMethod chosen;
+        bool uncertain = false;
+        if (!hmi::chooseMethod(*rt_.project_, ownerType, method, overload::argsOf(args), chosen, why, &uncertain)) {
+            // A l'execution, un type encore inconnu ne peut plus attendre : l'appel est ambigu.
+            if (uncertain)
+                why = "appel ambigu de " + std::string(ownerType) + "." + std::string(method)
+                    + " : plusieurs surcharges conviennent autant (le type d'un argument n'est pas connu) - pr\xC3\xA9" "cisez-le (TO_INT(x), INT#5)";
+            return false;
+        }
+        key = std::string(method) + "#" + std::to_string(chosen.method->id);
         return true;
     }
     // 1.13.0 (lot J1) : SUPER.M(...) emis comme METHODE_<parent>_M - l'interpreteur le resout ici.
@@ -3266,9 +3286,10 @@ bool Runtime::runScript(const Script& sc, const std::string& source, double now,
     if (sc.detached && sc.lang == ScriptLang::ST && running_) return startDetached(sc, source, now, error);
     // 1.13.0 : le debogueur - un point arme, un pas ou une pause demandes, IHM_POINT_ARRET dans le projet : le script
     // tourne sur un fil a lui, pour pouvoir s'arreter au milieu. Sinon (et dans une tache deja), ici, comme avant.
-    if (sc.lang == ScriptLang::ST && running_ && !currentTask_ && debugWanted()) return startDebugTask(sc, source, now, error);
+    // 1.50.1 : un script C ou C++ aussi (traduit en ST, ses lignes sont celles du texte C).
+    if (running_ && !currentTask_ && debugWanted()) return startDebugTask(sc, source, now, error);
     // Dans une tache du debogueur : sa copie - il peut s'arreter, et le projet changer pendant la pause.
-    if (currentTask_ && !currentTask_->detached && sc.lang == ScriptLang::ST) {
+    if (currentTask_ && !currentTask_->detached) {
         const Script copy = sc;
         return runScriptHere(copy, source, now, error);
     }
@@ -3421,9 +3442,9 @@ bool stepInto(const sim::ObjRef& from, std::string_view& rest, sim::ObjRef& to) 
     }
     if (type.kind == sim::TypeDesc::Kind::Array) {
         std::size_t flat = 0;
-        if (!sim::flatIndex(type, indices, flat, nullptr) || flat >= from->items.size()) return false;
-        to = from->items[flat];
-        return true;
+        if (!sim::flatIndex(type, indices, flat, nullptr) || flat >= sim::cellCount(*from)) return false;
+        to = sim::cellAt(*from, flat);                         // 1.50.1 : un grand tableau range serre aussi
+        return to != nullptr;
     }
     if (type.kind == sim::TypeDesc::Kind::List && indices.size() == 1 && indices[0] >= 0
         && static_cast<std::size_t>(indices[0]) < from->items.size()) {
@@ -5166,29 +5187,31 @@ bool Runtime::outOfBoundsPath(const std::string& path, std::string* why) const {
         if (close == std::string::npos) return false;
         const std::string inside = path.substr(k + 1, close - k - 1);
         const auto& s = it->second.spec;
-        long long idx[2] = {0, 0};
-        int n = 0;
+        // 1.50.1 : autant d'indices que de dimensions (Cube[1,2,3]) ; moins : une ligne, une couche (M[1]), ses indices
+        // verifies.
+        std::vector<long long> idx;
         std::size_t from = 0;
-        while (n < 2) {
+        for (;;) {
             const auto comma = inside.find(',', from);
             const std::string part = inside.substr(from, comma == std::string::npos ? std::string::npos : comma - from);
             char* end = nullptr;
-            idx[n++] = std::strtoll(part.c_str(), &end, 10);
+            idx.push_back(std::strtoll(part.c_str(), &end, 10));
             if (comma == std::string::npos) break;
             from = comma + 1;
         }
         const auto bounds = [&] {
-            std::string b = std::to_string(s.low[0]) + ".." + std::to_string(s.high[0]);
-            if (s.dims == 2) b += ", " + std::to_string(s.low[1]) + ".." + std::to_string(s.high[1]);
+            std::string b;
+            for (int d = 0; d < s.dims; ++d)
+                b += (d ? ", " : "") + std::to_string(s.low[static_cast<std::size_t>(d)]) + ".." + std::to_string(s.high[static_cast<std::size_t>(d)]);
             return b;
         };
-        if (n != s.dims) {
+        if (static_cast<int>(idx.size()) > s.dims) {
             if (why) *why = it->second.path + " a " + std::to_string(s.dims) + " dimension" + (s.dims > 1 ? "s" : "") + " : "
-                            + std::to_string(s.dims) + " indice" + (s.dims > 1 ? "s" : "") + " entre crochets";
+                            + std::to_string(s.dims) + " indice" + (s.dims > 1 ? "s" : "") + " entre crochets, pas " + std::to_string(idx.size());
             return true;
         }
-        bool out = idx[0] < s.low[0] || idx[0] > s.high[0];
-        if (s.dims == 2) out = out || idx[1] < s.low[1] || idx[1] > s.high[1];
+        bool out = false;
+        for (std::size_t d = 0; d < idx.size(); ++d) out = out || idx[d] < s.low[d] || idx[d] > s.high[d];
         if (out) {
             if (why) *why = "indice hors des bornes de " + it->second.path + " (" + bounds() + ")";
             return true;
@@ -5204,9 +5227,22 @@ void Runtime::reportBounds(const std::string& path, const std::string& why) {
 
 bool Runtime::aggregateRead(const std::string& path, sim::Value& out) {
     // Une propriete : Consignes.Length, Fours[2].Vannes.High, Four1.Words.
-    if (const auto dot = path.rfind('.'); dot != std::string::npos)
-        if (const auto it = aggregates_.find(upper(path.substr(0, dot))); it != aggregates_.end())
+    if (const auto dot = path.rfind('.'); dot != std::string::npos) {
+        if (const auto it = aggregates_.find(upper(path.substr(0, dot))); it != aggregates_.end()) {
             if (types::propertyValue(it->second, std::string_view(path).substr(dot + 1), out)) return true;
+        } else if (project_ && path.find('[') != std::string::npos) {
+            // 1.50.1 : une ligne, une couche d'un tableau IHM (M[1].Length sur deux dimensions, C[1, 2].High sur trois) :
+            // ses proprietes de tableau, d'apres son type (sans poids : ses cases sont celles du tableau).
+            types::Aggregate part;
+            const std::string name = upper(path.substr(dot + 1));
+            if (name != "BYTES" && name != "WORDS" && name != "ELEMENTBYTES" && types::parseSpecShape(types::typeOfPath(*project_, path.substr(0, dot)), part.spec)
+                && part.spec.array()) {
+                part.array = true;
+                part.path = path.substr(0, dot);
+                if (types::propertyValue(part, std::string_view(path).substr(dot + 1), out)) return true;
+            }
+        }
+    }
     // Une case hors des bornes : la valeur par defaut de son type.
     std::string why;
     if (!outOfBoundsPath(path, &why)) return false;

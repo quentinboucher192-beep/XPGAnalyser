@@ -104,14 +104,8 @@ void Runtime::captureCopies(PopupSlot& slot, const View& v, std::string_view /*a
                     types::Spec spec;
                     if (types::parseSpec(t, spec) && spec.array()) {
                         const std::string element = spec.element;
-                        if (spec.dims == 1) {
-                            for (long long i = spec.low[0]; i <= spec.high[0]; ++i)
-                                self(self, element, rel + "[" + std::to_string(i) + "]", depth + 1);
-                        } else {
-                            for (long long i = spec.low[0]; i <= spec.high[0]; ++i)
-                                for (long long j = spec.low[1]; j <= spec.high[1]; ++j)
-                                    self(self, element, rel + "[" + std::to_string(i) + "," + std::to_string(j) + "]", depth + 1);
-                        }
+                        for (long long k = 0, n = std::min(spec.length(), types::kMaxElements); k < n; ++k)   // 1.50.1 : N dimensions
+                            self(self, element, rel + types::cellText(spec, k), depth + 1);
                         return;
                     }
                 }

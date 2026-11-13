@@ -100,8 +100,8 @@ sim::ObjRef walkRich(sim::ObjRef o, std::string_view rest) {
             long long k = std::strtoll(inside.c_str(), &end, 10);
             if (!end || *end) return nullptr;
             if (o->type->kind == sim::TypeDesc::Kind::Array && !o->type->bounds.empty()) k -= o->type->bounds[0].first;
-            if (k < 0 || static_cast<std::size_t>(k) >= o->items.size()) return nullptr;
-            o = o->items[static_cast<std::size_t>(k)];
+            if (k < 0 || static_cast<std::size_t>(k) >= sim::cellCount(*o)) return nullptr;
+            o = sim::cellAt(*o, static_cast<std::size_t>(k));          // 1.50.1 : un grand tableau range serre aussi
         } else {
             return nullptr;
         }
@@ -193,17 +193,20 @@ bool Runtime::tableSource(Id view, const Object& o, TableRowSource& out) const {
         if (kind == sim::TypeDesc::Kind::List || kind == sim::TypeDesc::Kind::Array) {
             if (kind == sim::TypeDesc::Kind::Array && obj->type->bounds.size() > 1) {
                 out.kind = table::SourceKind::Error;
-                out.error = out.path + " est un tableau \xC3\xA0 2 dimensions : prends une ligne (" + out.path + "[1]).";
+                out.error = out.path + " est un tableau \xC3\xA0 " + std::to_string(obj->type->bounds.size()) + " dimensions : prends une ligne ("
+                            + out.path + "[" + std::to_string(obj->type->bounds[0].first) + "]).";
                 return false;
             }
             out.kind = kind == sim::TypeDesc::Kind::List ? table::SourceKind::List : table::SourceKind::Array;
             out.low = kind == sim::TypeDesc::Kind::Array && !obj->type->bounds.empty() ? obj->type->bounds[0].first : 0;
-            for (std::size_t i = 0; i < obj->items.size(); ++i) {
+            // 1.50.1 : un grand tableau range serre - ses cases une a une, les 100 000 premieres au plus.
+            const std::size_t count = std::min<std::size_t>(sim::cellCount(*obj), 100000);
+            for (std::size_t i = 0; i < count; ++i) {
                 TableSourceRow r;
                 r.position = static_cast<long long>(i);
                 r.index = std::to_string(out.low + static_cast<long long>(i));
                 r.element = child("[" + r.index + "]");
-                r.object = obj->items[i];
+                r.object = sim::cellAt(*obj, i);
                 out.rows.push_back(std::move(r));
             }
             return true;
@@ -231,7 +234,7 @@ bool Runtime::tableSource(Id view, const Object& o, TableRowSource& out) const {
         if (a->array) {
             if (a->spec.dims != 1) {
                 out.kind = table::SourceKind::Error;
-                out.error = path + " est un tableau \xC3\xA0 2 dimensions : prends une ligne (" + path + "["
+                out.error = path + " est un tableau \xC3\xA0 " + std::to_string(a->spec.dims) + " dimensions : prends une ligne (" + path + "["
                           + std::to_string(a->spec.low[0]) + "]).";
                 return false;
             }

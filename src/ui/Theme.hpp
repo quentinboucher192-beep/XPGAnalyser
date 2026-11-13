@@ -139,6 +139,9 @@ enum class Tone : std::uint8_t {
     Accent, Info, Ok, Warning, Error, Muted,
     Family0, Family1, Family2, Family3, Family4, Family5,
     Input, Output, InOut,
+    // 1.50.1 : LE VIOLET DE << NOUVEAU >> (la pastille d'une entree de menu, d'un bouton de barre) - celui des
+    // maquettes (--new), le violet du theme (brand.scopeInOut). Une pastille le rend lisible : ui::tagPillColors.
+    New,
 };
 
 [[nodiscard]] constexpr Tone familyTone(int index) noexcept {

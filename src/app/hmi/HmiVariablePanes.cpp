@@ -1144,11 +1144,10 @@ void HmiVariablesPane::emitMembers(const hmi::Variable& v, const Leaves& leaves,
             }
             kids.push_back({path + idx, rel + idx, s.element, {}});
         };
-        if (s.dims == 1)
-            for (long long i = s.low[0]; i <= s.high[0]; ++i) push("[" + std::to_string(i) + "]");
-        else
-            for (long long i = s.low[0]; i <= s.high[0]; ++i)
-                for (long long j = s.low[1]; j <= s.high[1]; ++j) push("[" + std::to_string(i) + "," + std::to_string(j) + "]");
+        // 1.50.1 : a toutes ses dimensions (les cases de trop sont comptees, pas parcourues).
+        const long long total = s.length();
+        for (long long k = 0; k < total && k <= static_cast<long long>(kShown); ++k) push(ty::cellText(s, k));
+        if (total > static_cast<long long>(kShown) + 1) hidden += total - static_cast<long long>(kShown) - 1;
     } else if (!ty::isElementary(s.element)) {
         for (const auto& m : ty::membersOf(p, s.element))
             kids.push_back({path + "." + m.name, rel.empty() ? m.name : rel + "." + m.name, ty::normalized(m.type), m.description, m.initial});
@@ -1388,7 +1387,7 @@ void HmiVariablesPane::emitRich(const hmi::Variable& v, const std::string& path,
             const std::string e = ty::normalized(spec.element);
             std::size_t flat = 0, hidden = 0;
             const auto cell = [&](const std::string& idx) {
-                const sim::ObjRef part = value && flat < value->items.size() ? value->items[flat] : nullptr;
+                const sim::ObjRef part = value && flat < sim::cellCount(*value) ? sim::cellAt(*value, flat) : nullptr;   // 1.50.1 : serre ou non
                 ++flat;
                 if (flat > static_cast<std::size_t>(kShown)) {
                     ++hidden;
@@ -1397,11 +1396,10 @@ void HmiVariablesPane::emitRich(const hmi::Variable& v, const std::string& path,
                 const std::string at = path + idx;
                 emitDetail(v, at, at, e, partText(part), {}, {}, part, at, depth);
             };
-            if (spec.dims == 1)
-                for (long long i = spec.low[0]; i <= spec.high[0]; ++i) cell("[" + std::to_string(i) + "]");
-            else
-                for (long long i = spec.low[0]; i <= spec.high[0]; ++i)
-                    for (long long j = spec.low[1]; j <= spec.high[1]; ++j) cell("[" + std::to_string(i) + "," + std::to_string(j) + "]");
+            // 1.50.1 : N dimensions ; les cases de trop comptees, pas parcourues.
+            const long long total = spec.length();
+            for (long long k = 0; k < total && k <= static_cast<long long>(kShown); ++k) cell(ty::cellText(spec, k));
+            if (total > static_cast<long long>(kShown) + 1) hidden += static_cast<std::size_t>(total - static_cast<long long>(kShown) - 1);
             if (hidden) more(hidden);
             return;
         }
@@ -4179,11 +4177,9 @@ void HmiTypesPane::refreshMembers() {
             ty::Spec s;
             if (!ty::parseSpec(type, s)) return;
             if (s.array()) {
-                const long long n0 = s.count(0), n1 = s.dims > 1 ? s.count(1) : 1;
-                const long long total = n0 * n1;
+                const long long total = s.length();                       // 1.50.1 : a toutes ses dimensions
                 for (long long k = 0; k < total && k < 200; ++k) {
-                    const long long i = s.low[0] + k / n1, j = s.dims > 1 ? s.low[1] + k % n1 : 0;
-                    const std::string index = "[" + std::to_string(i) + (s.dims > 1 ? "," + std::to_string(j) : std::string{}) + "]";
+                    const std::string index = ty::cellText(s, k);
                     children.push_back({rel + index, index, s.element, {}, {}, {}});
                 }
                 if (total > 200) more = static_cast<std::size_t>(total - 200);

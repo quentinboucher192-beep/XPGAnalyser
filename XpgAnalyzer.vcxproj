@@ -476,6 +476,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiAttachments.cpp" />
     <ClCompile Include="src\app\ai\AiAutomate.cpp" />
     <ClCompile Include="src\app\ai\AiBuild.cpp" />
+    <ClCompile Include="src\app\ai\AiChatReply.cpp" />
     <ClCompile Include="src\app\ai\AiLocal.cpp" />
     <ClCompile Include="src\app\ai\AiOpenAI.cpp" />
     <ClCompile Include="src\app\ai\AiUsage.cpp" />
@@ -576,6 +577,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\FileViewer.cpp" />
     <ClCompile Include="src\app\FileViewerWindow.cpp" />
     <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
+    <ClCompile Include="src\app\HeadlessRenderer.cpp" />
     <ClCompile Include="src\app\Licence.cpp" />
     <ClCompile Include="src\app\LicenceService.cpp" />
     <ClCompile Include="src\app\LicenceShop.cpp" />
@@ -622,6 +624,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiImageLibraryPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiIncidentHost.cpp" />
     <ClCompile Include="src\app\hmi\HmiIncidentsPane.cpp" />
+    <ClCompile Include="src\app\hmi\HmiMethodFollow.cpp" />
     <ClCompile Include="src\app\hmi\HmiTestRuns.cpp" />
     <ClCompile Include="src\app\hmi\HmiUnitPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiNativesCards.cpp" />
@@ -770,6 +773,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\project\GrafcetRewrite2.cpp" />
     <ClCompile Include="src\project\ProjectArchive.cpp" />
     <ClCompile Include="src\sim\Rich.cpp" />
+    <ClCompile Include="src\sim\RichPacked.cpp" />
     <ClCompile Include="src\sim\ValueText.cpp" />
     <ClCompile Include="src\ui\NoveltyBoard.cpp" />
     <ClCompile Include="src\ui\NoveltyMarks.cpp" />
@@ -781,6 +785,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\ui\widgets\ListMenu.cpp" />
     <ClCompile Include="src\ui\widgets\UnfoldCard.cpp" />
     <ClCompile Include="src\app\ReportWindow.cpp" />
+    <ClCompile Include="src\app\ScriptChat.cpp" />
     <ClCompile Include="src\app\SessionDialogs.cpp" />
     <ClCompile Include="src\app\SessionMarks.cpp" />
     <ClCompile Include="src\app\SessionWindow.cpp" />
@@ -1129,6 +1134,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ai\AiAttachments.hpp" />
     <ClInclude Include="src\app\ai\AiAutomate.hpp" />
     <ClInclude Include="src\app\ai\AiBuild.hpp" />
+    <ClInclude Include="src\app\ai\AiChatReply.hpp" />
     <ClInclude Include="src\app\ai\AiLocal.hpp" />
     <ClInclude Include="src\app\ai\AiOpenAI.hpp" />
     <ClInclude Include="src\app\ai\AiUsage.hpp" />
@@ -1212,6 +1218,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\FileView.hpp" />
     <ClInclude Include="src\app\FileViewer.hpp" />
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
+    <ClInclude Include="src\app\HeadlessRenderer.hpp" />
     <ClInclude Include="src\app\Licence.hpp" />
     <ClInclude Include="src\app\LicenceService.hpp" />
     <ClInclude Include="src\app\LicenceShop.hpp" />
@@ -1254,6 +1261,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiTestRuns.hpp" />
     <ClInclude Include="src\app\hmi\HmiUnitPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiLive.hpp" />
+    <ClInclude Include="src\app\hmi\HmiMethodFollow.hpp" />
     <ClInclude Include="src\app\hmi\HmiNativesCards.hpp" />
     <ClInclude Include="src\app\hmi\HmiNativesPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiObjectAlarmPanes.hpp" />
@@ -1405,6 +1413,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\ui\widgets\ListMenu.hpp" />
     <ClInclude Include="src\ui\widgets\UnfoldCard.hpp" />
     <ClInclude Include="src\app\ReportWindow.hpp" />
+    <ClInclude Include="src\app\ScriptChat.hpp" />
     <ClInclude Include="src\app\SessionDialogs.hpp" />
     <ClInclude Include="src\app\SessionMarks.hpp" />
     <ClInclude Include="src\app\SessionWindow.hpp" />

@@ -93,9 +93,63 @@ std::string edgesList(unsigned edges) {
 
 } // namespace
 
+double Margins::of(unsigned edge) const noexcept {
+    switch (edge) {
+        case kLeft:   return left;
+        case kRight:  return right;
+        case kTop:    return top;
+        case kBottom: return bottom;
+        default:      return 0;
+    }
+}
+
+bool Margins::uniform() const noexcept {
+    return std::fabs(left - right) < kEps && std::fabs(left - top) < kEps && std::fabs(left - bottom) < kEps;
+}
+
+namespace {
+Margins same(double m, Margins::From from) {
+    Margins out;
+    out.left = out.right = out.top = out.bottom = std::max(0.0, m);
+    out.from = from;
+    return out;
+}
+} // namespace
+
+Margins viewMargins(const View& v) {
+    // 1.50.1 : les marges de la vue d'abord (reglees dans ses proprietes) ; une vue qui n'en a pas (un projet
+    // d'avant) : comme en 1.50.0, la grille de colonnes montree, puis le pas d'aimantation.
+    if (v.margins.any()) {
+        Margins out;
+        out.left = std::max(0.0, v.margins.left);
+        out.right = std::max(0.0, v.margins.right);
+        out.top = std::max(0.0, v.margins.top);
+        out.bottom = std::max(0.0, v.margins.bottom);
+        out.from = Margins::From::View;
+        return out;
+    }
+    if (v.columns.visible) return same(v.columns.margin, Margins::From::Columns);
+    return same(static_cast<double>(std::max(1, v.grid.step)), Margins::From::Snap);
+}
+
 double viewMargin(const View& v) {
-    if (v.columns.visible) return std::max(0.0, v.columns.margin);
-    return static_cast<double>(std::max(1, v.grid.step));
+    const Margins m = viewMargins(v);
+    return std::max({m.left, m.right, m.top, m.bottom});
+}
+
+std::string marginsText(const Margins& m) {
+    if (m.uniform()) return num(m.left) + " px";
+    return "haut " + num(m.top) + " \xC2\xB7 bas " + num(m.bottom) + " \xC2\xB7 gauche " + num(m.left) + " \xC2\xB7 droite " + num(m.right) + " px";
+}
+
+std::string marginsSource(const Margins& m) {
+    switch (m.from) {
+        case Margins::From::View:    return "les marges de la vue";
+        case Margins::From::Columns: return "la marge de la grille de colonnes";
+        case Margins::From::Snap:    return "le pas d'aimantation";
+        case Margins::From::Given:   return "la marge donn\xC3\xA9" "e";
+    }
+    return {};
 }
 
 double neighbourGap(const View& v) { return static_cast<double>(std::max(1, v.grid.step)); }
@@ -168,9 +222,17 @@ Plan plan(const View& v, const std::vector<Id>& selection, const Request& req) {
         p.why = "aucun bord choisi";
         return p;
     }
+    // La marge de chaque bord (View) ; l'espacement (Neighbour).
     double m = 0;
-    if (req.keepMargins && (req.to == To::View || req.to == To::Neighbour))
-        m = req.margin >= 0 ? req.margin : (req.to == To::View ? viewMargin(v) : neighbourGap(v));
+    Margins mm = same(0, Margins::From::Given);
+    if (req.keepMargins && req.to == To::View) {
+        mm = req.margin >= 0 ? same(req.margin, Margins::From::Given) : viewMargins(v);
+        for (const unsigned one : {kLeft, kRight, kTop, kBottom})
+            if (req.edges & one) m = std::max(m, mm.of(one));
+        p.margins = mm;
+    } else if (req.keepMargins && req.to == To::Neighbour) {
+        m = req.margin >= 0 ? req.margin : neighbourGap(v);
+    }
     p.margin = m;
 
     const Box sel = edit::selectionBounds(v, list);
@@ -189,10 +251,10 @@ Plan plan(const View& v, const std::vector<Id>& selection, const Request& req) {
         double l = was.x, r = was.right(), t = was.y, bo = was.bottom();
         switch (req.to) {
             case To::View:
-                if (e & kLeft) l = m;
-                if (e & kRight) r = static_cast<double>(v.width) - m;
-                if (e & kTop) t = m;
-                if (e & kBottom) bo = static_cast<double>(v.height) - m;
+                if (e & kLeft) l = mm.left;
+                if (e & kRight) r = static_cast<double>(v.width) - mm.right;
+                if (e & kTop) t = mm.top;
+                if (e & kBottom) bo = static_cast<double>(v.height) - mm.bottom;
                 break;
             case To::Selection:
                 if (e & kLeft) l = sel.x;
@@ -419,7 +481,26 @@ std::string sentence(const View& v, const Request& req, const Plan& p) {
         else if (dw) s += " : largeur " + num(c.before.w) + arrow + num(c.after.w) + " px";
         else if (dh) s += " : hauteur " + num(c.before.h) + arrow + num(c.after.h) + " px";
     }
-    if (req.to == To::View) s += p.margin > 0 ? " (marge " + num(p.margin) + " px gard\xC3\xA9" "e)" : std::string(" (sans marge)");
+    if (req.to == To::View) {
+        // 1.50.1 : des marges differentes selon le bord (celles de la vue) : chacune dite.
+        std::vector<std::string> parts;
+        double first = -1;
+        bool differ = false;
+        for (const unsigned one : {kTop, kBottom, kLeft, kRight}) {
+            if (!(req.edges & one)) continue;
+            const double mv = p.margins.of(one);
+            if (first < 0) first = mv;
+            else if (std::fabs(mv - first) > kEps) differ = true;
+            parts.push_back(std::string(one == kTop ? "haut " : one == kBottom ? "bas " : one == kLeft ? "gauche " : "droite ") + num(mv));
+        }
+        if (p.margin <= 0) s += " (sans marge)";
+        else if (!differ) s += " (marge " + num(p.margin) + " px gard\xC3\xA9" "e)";
+        else {
+            std::string list;
+            for (std::size_t i = 0; i < parts.size(); ++i) list += (i ? ", " : "") + parts[i];
+            s += " (marges gard\xC3\xA9" "es : " + list + " px)";
+        }
+    }
     else if (req.to == To::Neighbour) s += p.margin > 0 ? " (espacement " + num(p.margin) + " px gard\xC3\xA9)" : std::string(" (contre lui)");
     s += ". Ctrl+Z l'annule.";
     if (!p.skipped.empty()) {

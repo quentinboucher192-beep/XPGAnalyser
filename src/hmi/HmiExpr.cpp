@@ -540,14 +540,11 @@ roles::Shape Expression::shapeOf(sim::Environment& plc, const Scope* scope, cons
     types::Spec spec;
     if (types::parseSpec(type, spec) && spec.array()) {
         std::string items;
-        const long long n = std::min<long long>(spec.count(0), 12);
-        for (long long k = 0; k < n; ++k) {
-            const std::string cell = path + "[" + std::to_string(spec.low[0] + k) + (spec.dims > 1 ? "," + std::to_string(spec.low[1]) : std::string{}) + "]";
-            items += (items.empty() ? "" : " ; ") + shown(cell);
-        }
-        out.aggregate = items + (spec.count(0) > 12 ? " ; ..." : "");
-        out.aggregateWhy = path + " est un tableau (" + type + ") : choisis une case (" + path + "[" + std::to_string(spec.low[0])
-                         + (spec.dims > 1 ? "," + std::to_string(spec.low[1]) : std::string{}) + "])";
+        // 1.50.1 : ses premieres cases, a toutes ses dimensions (Cube[0,0,0], Cube[0,0,1]...).
+        const long long n = std::min<long long>(spec.length(), 12);
+        for (long long k = 0; k < n; ++k) items += (items.empty() ? "" : " ; ") + shown(path + types::cellText(spec, k));
+        out.aggregate = items + (spec.length() > 12 ? " ; ..." : "");
+        out.aggregateWhy = path + " est un tableau (" + type + ") : choisis une case (" + path + types::cellText(spec, 0) + ")";
     }
     return out;
 }

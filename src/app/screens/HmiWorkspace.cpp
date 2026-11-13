@@ -4416,6 +4416,39 @@ void MainAnalysisScreen::wireHmiTypesHosts(HmiTypesPane& types) {
             });
         };
         methods->setTestHosts(std::move(mh));
+        // 1.50.1 : ESSAYER UNE METHODE (comme une fonction) - la fenetre des arguments et de SELF avant (une instance
+        // d'essai du type) ; le resultat et SELF apres aux Sorties du panneau du bas.
+        HmiMethodsPane::TryHosts tryHosts;
+        tryHosts.plc = [this]() -> ::sim::Environment* { return app_.simulation().attached() ? app_.simulationRuntime() : nullptr; };
+        tryHosts.output = [this](const std::vector<std::pair<hmi::pipeline::Severity, std::string>>& lines) {
+            if (!hmiBuildOutput(true) || !bottomPanel_) return;
+            for (const auto& [severity, text] : lines) bottomPanel_->say(severity, "Essai", text);
+            bottomPanel_->showTab(HmiBuildOutputPane::kSorties);
+        };
+        tryHosts.ask = [this, methods, alive = methods->aliveToken()](hmi::Id id) {
+            auto doc = app_.hmi();
+            const hmi::HmiType* t = nullptr;
+            const auto* m = doc ? hmi::methodById(doc->project, id, &t) : nullptr;
+            if (!m || !t) return;
+            const auto fields = methods->tryFields(id);
+            if (fields.empty()) {
+                (void)methods->tryMethod(id, {});
+                return;
+            }
+            std::vector<FormDialog::Field> ff;
+            for (const auto& f : fields) ff.push_back({f.label, "", f.placeholder, false, {}});
+            auto dialog = std::make_unique<FormDialog>(
+                "dialog.hmiTryMethod", "Essayer " + hmi::methodSignature(t->name, *m),
+                "Une valeur telle qu'on la lit (2,5 \xC2\xB7 VRAI \xC2\xB7 5 s) ou =formule. La m\xC3\xA9thode tourne sur une instance d'essai de "
+                    + t->name + " (ses membres \xC3\xA0 leur valeur initiale, puis SELF avant) : ni le projet ni la simulation ne changent.",
+                std::move(ff), "Essayer");
+            for (std::size_t i = 0; i < fields.size(); ++i) dialog->setFieldAssist(i, assist::fieldAssist(assist::sourcesFor(doc)));
+            app_.menus().ShowDialog(std::move(dialog), [methods, alive, id](const menu::DialogResult& r) {
+                if (!r.accepted() || alive.expired()) return;
+                (void)methods->tryWithAnswers(id, FormDialog::split(r.payload));
+            });
+        };
+        methods->setTryHosts(std::move(tryHosts));
     }
     HmiTypesPane::Hosts th;
     th.exportItems = [this](hmi::Id t) { askHmiExportPrograms(0, t); };   // 1.11.2 (decision 174)

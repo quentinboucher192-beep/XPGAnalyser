@@ -31,6 +31,7 @@
 #include "HmiDebugSession.hpp"
 #include "HmiFunctionDialog.hpp"     // 1.50.0 : la fenetre des fonctions (Nouvelle methode du type)
 #include "HmiFunctionPanes.hpp"      // 1.50.0 : makeFunctionTabs, les cinq onglets partages
+#include "HmiMethodFollow.hpp"       // 1.50.1 : la signature d'une virtuelle suivie par ses redefinitions
 #include "HmiPanels.hpp"
 #include "../../core/Command.hpp"
 #include "../../hmi/HmiCommands.hpp"
@@ -94,6 +95,50 @@ public:
     bool    setBody(hmi::Id, const std::string& body);
     // Redefinir une virtuelle heritee : une methode de meme signature, son corps prerempli avec SUPER.
     hmi::Id overrideMethod(hmi::Id inherited, std::string* why = nullptr);
+    // 1.50.1 : NOUVELLE SURCHARGE de `of` (une methode propre, non virtuelle, d'une structure) - comme une fonction : le
+    // meme nom, son retour, sa portee, sa description, sans parametre ; l'onglet Parametres s'ouvre (ce sont eux qui la
+    // distinguent). Une commande. Refusee pour une virtuelle (ses redefinitions la designent par son nom).
+    hmi::Id addOverload(hmi::Id of, std::string* why = nullptr);
+
+    // ---- 1.50.1 : ESSAYER (comme une fonction : des arguments, le resultat, sans toucher le projet) ----
+    //  La methode tourne sur une INSTANCE D'ESSAI du type (le banc des Tests : Essai_SELF, ses membres a leur valeur
+    //  initiale, puis " SELF avant " pose) ; l'essai dit le resultat, SELF apres (chaque membre, ceux qui ont change),
+    //  ce que la methode a ecrit au journal, ses sorties. Le projet n'est jamais touche (une privee s'essaie aussi).
+    struct Trial {
+        hmi::Id                  method{hmi::kNoId};
+        std::string              call;          // "T_Pompe.Demarrer(Consigne := 6.0, Rampe := T#2s)"
+        bool                     ok{false};
+        std::string              result, type;  // "TRUE", "BOOL" ; vide : sans retour
+        std::string              error;
+        std::vector<std::string> before;        // " SELF avant " pose : "Pression := 2.0"
+        std::vector<std::string> self;          // SELF apres : "Debit = 4.0", un par membre lisible
+        std::vector<std::string> changed;       // "SELF.Debit : 0.0 -> 4.0" ; "Compteur : 0 -> 1" (une variable IHM)
+        std::vector<std::string> journal;
+        std::vector<std::string> outputs;       // "Etat (sortie) = 3"
+    };
+    // Les cases de la fenetre d'Essayer : un argument par parametre (dans l'ordre), puis un membre de SELF par ligne
+    // (sa valeur avant l'appel ; vide : sa valeur initiale).
+    struct TryField {
+        std::string name;                       // Consigne ; Debit (un membre)
+        std::string label, placeholder;         // "Consigne : REAL" ; "SELF.Debit : REAL (avant)"
+        bool        member{false};
+    };
+    [[nodiscard]] std::vector<TryField> tryFields(hmi::Id method) const;
+    // `arguments` : un par parametre, en ST ou comme une case (2,5 ; VRAI ; T#5s ; =formule) ; vide : sa valeur par
+    // defaut. `selfBefore` : (membre, valeur) poses sur SELF avant l'appel.
+    bool tryMethod(hmi::Id method, const std::vector<std::string>& arguments,
+                   const std::vector<std::pair<std::string, std::string>>& selfBefore = {});
+    // Les reponses de la fenetre (dans l'ordre de tryFields) : les arguments, puis SELF avant.
+    bool tryWithAnswers(hmi::Id method, const std::vector<std::string>& answers);
+    [[nodiscard]] const Trial& lastTrial() const noexcept { return trial_; }
+    // Les lignes que l'essai envoie aux Sorties du panneau du bas (gravite, texte).
+    [[nodiscard]] std::vector<std::pair<hmi::pipeline::Severity, std::string>> trialLines() const;
+    struct TryHosts {
+        std::function<void(hmi::Id)>                                                              ask;      // la fenetre, puis tryWithAnswers
+        std::function<void(const std::vector<std::pair<hmi::pipeline::Severity, std::string>>&)> output;   // les Sorties
+        std::function<sim::Environment*()>                                                        plc;      // l'automate de la simulation
+    };
+    void setTryHosts(TryHosts h) { tryHosts_ = std::move(h); }
     // La fenetre des fonctions, sur ce type (newfunction::ask) : faux - aucun type, ou aucun hote pour l'ouvrir. Sa
     // reponse passe par createMethod.
     bool    openAddDialog();
@@ -141,7 +186,8 @@ public:
     [[nodiscard]] const std::string&   lastMessage() const noexcept { return message_; }
 
     // Les actions de la barre (les essais, les scripts).
-    enum Action : int { AAdd = 1, AOverride, ADuplicate, ADelete, AUp, ADown, ACompile, ARunTests };
+    // 1.50.1 : AOverload (Nouvelle surcharge) et ATry (Essayer), au bout (les numeros d'avant ne bougent pas).
+    enum Action : int { AAdd = 1, AOverride, ADuplicate, ADelete, AUp, ADown, ACompile, ARunTests, AOverload, ATry };
 
 protected:
     void onLayout() override;
@@ -155,6 +201,9 @@ private:
     void say(std::string text, bool warning = false);
     [[nodiscard]] const hmi::HmiType* owner() const;
     [[nodiscard]] const hmi::HmiFunction* current() const;
+    // 1.50.1 : un geste sur la signature d'une virtuelle redefinie : ses redefinitions suivent (HmiMethodFollow.hpp).
+    Follow followed(hmi::Id method, const std::string& label,
+                    const std::function<bool(hmi::Project&, hmi::HmiFunction&, std::string*)>& edit, std::string* why);
     // Un geste sur une methode : essaye sur une copie (refuse s'il fait naitre une faute de forme), puis une commande.
     bool change(hmi::Id method, std::string label,
                 const std::function<bool(hmi::Project&, hmi::HmiType&, hmi::HmiFunction&, std::string*)>& edit, std::string* why,
@@ -177,6 +226,8 @@ private:
     HmiDeclBanner*     banner_{nullptr};
     HmiFunctionTestsPage* testsPage_{nullptr};
     TestCampaign       campaign_;
+    Trial              trial_;                     // 1.50.1 : le dernier Essayer
+    TryHosts           tryHosts_;
     std::shared_ptr<int> alive_{std::make_shared<int>(0)};
     void refreshTabs();
     HmiBreakpointMargin margin_;

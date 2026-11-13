@@ -1307,7 +1307,6 @@ void HmiCanvas::paintStretchPreview(const ui::PaintContext& ctx, const HmiViewpo
         }
     };
     const bool showMargin = plan.margin > 0 && (plan.to == st::To::View || plan.to == st::To::Neighbour);
-    const std::string marginText = (plan.to == st::To::View ? "marge " : "espacement ") + hmi::formatNumber(plan.margin);
     for (const auto& c : plan.changes) {
         const gfx::Point a0 = vp.toScreen(c.after.x, c.after.y), a1 = vp.toScreen(c.after.right(), c.after.bottom());
         const gfx::Rect ghost{std::min(a0.x, a1.x), std::min(a0.y, a1.y), std::max(1.f, std::fabs(a1.x - a0.x)),
@@ -1337,22 +1336,25 @@ void HmiCanvas::paintStretchPreview(const ui::PaintContext& ctx, const HmiViewpo
         badge(labelAt.value_or(gfx::Point{(ghost.x + ghost.right()) / 2.f, (ghost.y + ghost.bottom()) / 2.f}), st::deltaText(c));
         // La marge gardee : un trait entre le bord atteint et la cible, sa valeur a cote.
         if (showMargin) {
-            const double m = plan.margin;
+            // 1.50.1 : la marge de chaque bord (celles de la vue peuvent differer) ; dite une fois si elles sont egales.
+            const bool toView = plan.to == st::To::View;
+            const auto side = [&](unsigned edge) { return toView ? plan.margins.of(edge) : plan.margin; };
             const double yq = a.y + std::min(18.0, a.h / 4.0), xq = a.x + std::min(18.0, a.w / 4.0);
-            bool said = false;
-            const auto mark = [&](gfx::Point p0, gfx::Point p1, bool horizontal, gfx::Point textAt) {
+            double said = -1;
+            const auto mark = [&](gfx::Point p0, gfx::Point p1, bool horizontal, double m, float dx, float dy, bool fromEnd) {
+                if (m <= 0) return;
                 cote(p0, p1, horizontal);
-                if (!said) badge(textAt, marginText);
-                said = true;
+                if (said >= 0 && std::fabs(said - m) < 0.01) return;
+                const std::string text = (toView ? "marge " : "espacement ") + hmi::formatNumber(m);
+                const float half = ctx.r.measure(text, f).width / 2.f + 14.f;
+                const gfx::Point at = fromEnd ? p0 : p1;
+                badge({at.x + (dx < 0 ? -half : dx > 0 ? half : 0.f), at.y + dy}, text);
+                said = m;
             };
-            if (movedR) { const auto p0 = vp.toScreen(a.right(), yq), p1 = vp.toScreen(a.right() + m, yq);
-                          mark(p0, p1, true, {p0.x - ctx.r.measure(marginText, f).width / 2.f - 14.f, p0.y + 14.f}); }
-            if (movedL) { const auto p0 = vp.toScreen(a.x - m, yq), p1 = vp.toScreen(a.x, yq);
-                          mark(p0, p1, true, {p1.x + ctx.r.measure(marginText, f).width / 2.f + 14.f, p1.y + 14.f}); }
-            if (movedB) { const auto p0 = vp.toScreen(xq, a.bottom()), p1 = vp.toScreen(xq, a.bottom() + m);
-                          mark(p0, p1, false, {p0.x + ctx.r.measure(marginText, f).width / 2.f + 14.f, p0.y - 12.f}); }
-            if (movedT) { const auto p0 = vp.toScreen(xq, a.y - m), p1 = vp.toScreen(xq, a.y);
-                          mark(p0, p1, false, {p1.x + ctx.r.measure(marginText, f).width / 2.f + 14.f, p1.y + 12.f}); }
+            if (movedR) { const double m = side(st::kRight); mark(vp.toScreen(a.right(), yq), vp.toScreen(a.right() + m, yq), true, m, -1.f, 14.f, true); }
+            if (movedL) { const double m = side(st::kLeft); mark(vp.toScreen(a.x - m, yq), vp.toScreen(a.x, yq), true, m, 1.f, 14.f, false); }
+            if (movedB) { const double m = side(st::kBottom); mark(vp.toScreen(xq, a.bottom()), vp.toScreen(xq, a.bottom() + m), false, m, 1.f, -12.f, true); }
+            if (movedT) { const double m = side(st::kTop); mark(vp.toScreen(xq, a.y - m), vp.toScreen(xq, a.y), false, m, 1.f, 12.f, false); }
         }
     }
 }
@@ -1591,6 +1593,13 @@ void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
     }
     paintGrid(ctx, vp, *v);
     paintColumns(ctx, vp, *v);     // 1.12.30 : la grille de colonnes
+    // 1.50.1 : les marges de la vue (Etirer les garde), en tirets ; dans l'editeur seulement, cachees avec les guides.
+    if (v->margins.any() && !v->grid.guidesHidden) {
+        const auto& mg = v->margins;
+        const gfx::Point m0 = vp.toScreen(mg.left, mg.top), m1 = vp.toScreen(v->width - mg.right, v->height - mg.bottom);
+        if (m1.x > m0.x && m1.y > m0.y)
+            simmark::dashedRect(ctx.r, {m0.x, m0.y, m1.x - m0.x, m1.y - m0.y}, gfx::Color::rgb(0x0D9488).withAlpha(150), 1.f, 6.f, 4.f);
+    }
     ctx.r.popClip();
     ctx.r.strokeRect({a.x - 1, a.y - 1, w + 2, h + 2}, ctx.theme.color.borderStrong, 1.f);
     // Lot 8 : une popup montre, au-dessus de son contenu, la barre de titre

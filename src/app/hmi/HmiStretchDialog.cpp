@@ -83,7 +83,9 @@ protected:
         if (d_.marginField_) {
             const auto mr = d_.marginField_->bounds();
             const bool viewOne = std::fabs(d_.request_.margin - d_.spec_.viewMargin) < 0.01;
-            const std::string after = d_.request_.margin <= 0 ? std::string("px \xE2\x80\x94 l'objet touche")
+            // 1.50.1 : < 0 - les marges de la vue, differentes selon le bord (le champ vide).
+            const std::string after = d_.request_.margin < 0 ? std::string("celles de la vue (chaque bord la sienne)")
+                                    : d_.request_.margin == 0 ? std::string("px \xE2\x80\x94 l'objet touche")
                                     : viewOne ? std::string("px \xE2\x80\x94 celle de la vue") : std::string("px");
             ctx.r.drawText({mr.right() + 10.f, mr.y + (28.f - lh) * 0.5f}, after, ctx.theme.font.ui, c.textMuted);
         }
@@ -113,7 +115,9 @@ private:
 // ===========================================================================
 HmiStretchDialog::HmiStretchDialog(Spec spec) : menu::WidgetMenu(spec.id), spec_(std::move(spec)) {
     request_ = spec_.request;
-    if (request_.margin < 0) request_.margin = request_.keepMargins ? spec_.viewMargin : 0.0;
+    // 1.50.1 : des marges de la vue differentes selon le bord : la marge reste << celles de la vue >> (< 0).
+    if (request_.margin < 0 && (!request_.keepMargins || spec_.viewMargins.uniform()))
+        request_.margin = request_.keepMargins ? spec_.viewMargin : 0.0;
     request_.keepMargins = true;   // la marge est celle du champ (0 : l'objet touche)
     request_.index = -1;
     if (request_.to == st::To::Column) request_.to = st::To::View;
@@ -232,7 +236,8 @@ core::Status HmiStretchDialog::buildUi() {
     }
     {
         auto f = std::make_unique<ui::InputText>(base + ".marge");
-        f->setText(hmi::formatNumber(request_.margin));
+        f->setText(request_.margin < 0 ? std::string{} : hmi::formatNumber(request_.margin));
+        if (request_.margin < 0) f->setPlaceholder("la vue");   // 1.50.1 : vide - les marges de la vue, une par bord
         marginField_ = &static_cast<ui::InputText&>(body->addChild(std::move(f)));
         links_ += marginField_->textChanged->connect([this](const std::string& t) {
             if (syncing_) return;

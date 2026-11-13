@@ -260,8 +260,10 @@ public:
     [[nodiscard]] hmi::stretch::Plan stretchPlan(const hmi::stretch::Request& request) const;
     [[nodiscard]] std::vector<ui::PopupMenu::Item> stretchItems() const;          // le sous-menu (la selection)
     [[nodiscard]] std::optional<hmi::stretch::Request> stretchRequestOf(int menuId) const;
-    void setStretchKeepMargins(bool on) { stretchMargins_ = on; }
-    [[nodiscard]] bool stretchKeepMargins() const noexcept { return stretchMargins_; }
+    // 1.50.1 : Garder les marges est un reglage DU PROJET (retenu avec ses reglages d'editeur, comme les regles :
+    // ui::FilterMemory, cle hmi.etirer) - pas une modification du projet (pas de Ctrl+Z). Sans memoire : l'editeur.
+    void setStretchKeepMargins(bool on);
+    [[nodiscard]] bool stretchKeepMargins() const;
     bool previewStretch(std::optional<hmi::stretch::Request> request);   // l'apercu (nullopt : aucun) ; faux : rien a montrer
     void syncStretchPreview();   // l'apercu suit l'entree survolee du menu ouvert (a chaque dessin)
     void openStretchMenu();      // Etirer v : le menu sous le bouton de la barre d'outils
@@ -385,7 +387,7 @@ private:
     hmi::Id                   menuLayer_{hmi::kNoId};     // ... le calque vise
     hmi::Kind                 menuPaletteKind_{hmi::Kind::Text};
     std::optional<hmi::imagelib::Image> menuImage_;       // 1.14.1 (lot N6) : la vignette du clic droit
-    bool                      stretchMargins_{true};      // 1.50.0 : Etirer > Garder les marges (cochee d'office)
+    bool                      stretchMargins_{true};      // 1.50.0 : Etirer > Garder les marges (cochee d'office ; sans memoire du projet)
     int                       stretchHover_{-1};          // ... l'entree survolee dont l'apercu est montre
     [[nodiscard]] ui::PopupMenu::Item stretchEntry() const;   // ... l'entree Etirer > du clic droit
     bool stretchMenuChosen(int id);                       // ... faux : pas une entree d'Etirer

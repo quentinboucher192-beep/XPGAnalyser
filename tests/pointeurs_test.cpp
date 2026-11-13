@@ -288,12 +288,15 @@ void laGrille() {
 
 } // namespace
 
+#include "pointeurs_dimensions.inl"   // 1.50.1 : Tableau a N dimensions, + Dimension
+
 int main() {
     std::printf("POINTER TO : un vrai pointeur ; le selecteur de types (Acces)\n");
     leMoteur();
     lesFormes();
     leSelecteur();
     laGrille();
+    leSelecteurDimensions();
     std::printf("%d controles, %d echecs\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

@@ -3163,21 +3163,44 @@ begin
   if EnTeteIcone <> nil then EnTeteIcone.Bitmap.LoadFromFile(ImageUi('icone-' + Morceau(EtapesIcones, Courante)));
 end;
 
+// 1.50.1 : la hauteur d'un texte de N lignes dans la police d'une etiquette (mesuree par Windows, a la resolution
+// de l'ecran) ; l'etiquette garde son texte.
+function HauteurLignes(E: TNewStaticText; N: Integer): Integer;
+var S, Essai: String;
+    I: Integer;
+begin
+  S := E.Caption;
+  Essai := 'Ég';
+  for I := 2 to N do Essai := Essai + #13#10 + 'Ég';
+  E.Caption := Essai;
+  E.AdjustHeight;
+  Result := E.Height;
+  E.Caption := S;
+end;
+
 // L'en-tête des pages : le titre, la description, l'icône de l'étape, un trait en dégradé (1.12.28 :
 // dans un cadre dont la largeur s'anime - le trait se dessine à chaque page).
 procedure HabillerEnTete;
-var T: Integer;
+var T, Plus, Un, Deux: Integer;
 begin
   WizardForm.MainPanel.ParentBackground := False;
   WizardForm.MainPanel.Color := clWhite;
-  // plus haut de 14 points : la description tient sur deux lignes ; les pages descendent d'autant
-  WizardForm.MainPanel.Height := WizardForm.MainPanel.Height + ScaleY(14);
-  WizardForm.InnerNotebook.Top := WizardForm.InnerNotebook.Top + ScaleY(14);
-  WizardForm.InnerNotebook.Height := WizardForm.InnerNotebook.Height - ScaleY(14);
   Ecrire(WizardForm.PageNameLabel.Font, 'SemiBold', 13, CouleurTitre);
-  WizardForm.PageNameLabel.Height := ScaleY(24);
   Ecrire(WizardForm.PageDescriptionLabel.Font, '', 10, CouleurTexte);
-  WizardForm.PageDescriptionLabel.Top := WizardForm.PageNameLabel.Top + ScaleY(24);
+  // plus haut de 14 points : la description tient sur deux lignes ; les pages descendent d'autant.
+  // 1.50.1 : a 125 et 150 %, Barlow grandit plus que ScaleY (ScaleY suit la police de l'assistant, arrondie) : la
+  // deuxieme ligne d'une description (<< Reprendre tes anciennes donnees >>) touchait le trait. Le titre (une ligne)
+  // et la description (deux lignes) sont mesures dans leur police ; l'en-tete grandit s'il le faut (a 96 ppp : les
+  // 14 points d'avant, rien ne change).
+  Un := Maxi(ScaleY(24), HauteurLignes(WizardForm.PageNameLabel, 1));
+  Deux := HauteurLignes(WizardForm.PageDescriptionLabel, 2);
+  Plus := Maxi(ScaleY(14), WizardForm.PageNameLabel.Top + Un + Deux + ScaleY(3) - WizardForm.MainPanel.Height);
+  Log(Format('Habillage : en-tête %d + %d (titre %d, description sur deux lignes %d)', [WizardForm.MainPanel.Height, Plus, Un, Deux]));
+  WizardForm.MainPanel.Height := WizardForm.MainPanel.Height + Plus;
+  WizardForm.InnerNotebook.Top := WizardForm.InnerNotebook.Top + Plus;
+  WizardForm.InnerNotebook.Height := WizardForm.InnerNotebook.Height - Plus;
+  WizardForm.PageNameLabel.Height := Un;
+  WizardForm.PageDescriptionLabel.Top := WizardForm.PageNameLabel.Top + Un;
   WizardForm.PageDescriptionLabel.Height := WizardForm.MainPanel.Height - WizardForm.PageDescriptionLabel.Top - ScaleY(2);
   WizardForm.WizardSmallBitmapImage.Visible := False;
   T := ScaleY(44);
@@ -3438,7 +3461,11 @@ begin
   Y := Y + ScaleY(40);
   WizardForm.FinishedLabel.SetBounds(M, Y, L, ScaleY(66));
   Ecrire(WizardForm.FinishedLabel.Font, '', 10, CouleurTexte);
-  Y := Y + ScaleY(72);
+  // 1.50.1 : le texte mesure dans sa police (a 125 et 150 %, Barlow grandit plus que ScaleY) : une quatrieme ligne
+  // n'est plus coupee, la liste << Lancer >> descend d'autant (sur trois lignes ou moins : rien ne change)
+  WizardForm.FinishedLabel.AdjustHeight;
+  if WizardForm.FinishedLabel.Height < ScaleY(66) then WizardForm.FinishedLabel.Height := ScaleY(66);
+  Y := Y + Maxi(ScaleY(72), WizardForm.FinishedLabel.Height + ScaleY(6));
   WizardForm.RunList.SetBounds(M, Y, L, PH - Y - ScaleY(6));
   Ecrire(WizardForm.RunList.Font, '', 10, CouleurTitre);
 end;
@@ -4676,7 +4703,7 @@ end;
 
 // Quatre choix, chacun son titre et ce qu'il installe ; la note dessous.
 procedure CreerPageProfil;
-var I, Y: Integer;
+var I, Y, H: Integer;
     R: TNewRadioButton;
     T: TNewStaticText;
 begin
@@ -4701,7 +4728,15 @@ begin
     T.Caption := ProfilTexte(I);
     T.Tag := I;
     T.OnClick := @ProfilTexteClick;
-    Y := Y + ScaleY(68);
+    // 1.50.1 : a 125 %, une description passe sur deux lignes (Barlow grandit plus que ScaleY) : sa hauteur fixe
+    // coupait le bas de la deuxieme, et le choix suivant la touchait presque. Sa hauteur mesuree, le choix suivant
+    // dessous avec le meme ecart (sur une ligne : le pas d'avant, 68 points) ; la note, sous le dernier, au plus pres
+    // comme avant (a 96 ppp, rien ne change).
+    T.AdjustHeight;
+    H := T.Height;
+    if T.Height < ScaleY(36) then T.Height := ScaleY(36);
+    if I < 3 then Y := Maxi(Y + ScaleY(68), T.Top + H + ScaleY(24))
+    else Y := Maxi(Y + ScaleY(68), T.Top + H + ScaleY(7));
   end;
   NoteProfil := TNewStaticText.Create(PageProfil);
   NoteProfil.Parent := PageProfil.Surface;
@@ -5130,6 +5165,11 @@ begin
     WizardForm.ClientWidth := WizardForm.ClientWidth * 130 div 100;
     WizardForm.ClientHeight := WizardForm.ClientHeight * 140 div 100;
   end;
+  // 1.50.1 : le récapitulatif retourne ses longues lignes à sa largeur (comme ceux des deux Admin en 1.50.0) : à 125
+  // et 150 %, Barlow grandit plus que le cadre, et un long chemin (le dossier d'un compte, une ancienne version, le
+  // projet du poste) passait sous le bord droit, à lire avec une barre de défilement horizontale.
+  WizardForm.ReadyMemo.WordWrap := True;
+  WizardForm.ReadyMemo.ScrollBars := ssVertical;
   // ---- 1.14.0 : que veux-tu installer ? le poste d'exploitation ; les composants du profil ----
   CreerPageProfil;
   CreerPagePoste;

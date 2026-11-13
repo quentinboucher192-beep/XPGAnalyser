@@ -7,6 +7,8 @@
 
 #include "HmiCalc.hpp"       // hmi::closest : le nom connu le plus proche (veux-tu dire ?)
 #include "HmiDecl.hpp"       // 1.11.18 : les declarations du modele, reconstruites (decl::codeOf)
+#include "HmiDeclEdit.hpp"   // 1.50.1 : renommer un parametre d'une redefinition (la machinerie des declarations)
+#include "HmiFunctionTests.hpp"   // 1.50.1 : les cas d'une redefinition suivent ses parametres
 #include "HmiEnums.hpp"      // typeKindLabel, renameEnumType
 #include "HmiEquipmentLink.hpp" // 1.13.0 : eqlink::renameType (un type renomme : sa liaison Equipement)
 #include "HmiMarkers.hpp"    // 1.11.1 : le corps sans les $ des reperes
@@ -118,6 +120,29 @@ std::string displayType(std::string_view t) { return trimmed(t); }
 // ------------------------------------------------------------ noms et texte ---
 std::string methodFunctionName(std::string_view typeName, const HmiFunction& m) {
     return "METHODE_" + sanitize(upperOf(typeName)) + "_" + sanitize(upperOf(m.name));
+}
+
+namespace {
+// 1.50.1 : le suffixe d'une surcharge - une autre methode du meme nom dans le type, apres la premiere : "__<id>" ; la
+// premiere (et une methode seule de son nom) : rien.
+std::string overloadSuffix(const HmiType& owner, const HmiFunction& m) {
+    bool first = true;
+    for (const auto& x : owner.methods) {
+        if (!sameName(x.name, m.name)) continue;
+        if (x.id == m.id) return first ? std::string{} : "__" + std::to_string(m.id);
+        first = false;
+    }
+    return {};
+}
+// Le nom interne de `m` portee par le type de nom `ownerType` (une surcharge : son suffixe) ; type inconnu : le nom d'avant.
+std::string internalNameOf(const Project& p, std::string_view ownerType, const HmiFunction& m) {
+    const HmiType* t = p.hmiTypeByName(trimmed(ownerType));
+    return methodFunctionName(ownerType, m) + (t ? overloadSuffix(*t, m) : std::string{});
+}
+} // namespace
+
+std::string methodFunctionName(const HmiType& owner, const HmiFunction& m) {
+    return methodFunctionName(fullName(owner), m) + overloadSuffix(owner, m);
 }
 
 std::string methodSignature(std::string_view typeName, const HmiFunction& m) {
@@ -275,8 +300,15 @@ static std::string rewriteBody(const Project& p, std::string_view ownerType, con
                     const std::string mname = body.substr(n0, n1 - n0);
                     const HmiType* owner = nullptr;
                     const HmiFunction* pm = effectiveMethod(p, parentName, mname, &owner);
+                    // 1.50.1 : une methode du parent SURCHARGEE (jamais virtuelle : un sous-type ne la redefinit pas) -
+                    // SELF.M(...) : le moteur choisit la surcharge par ses arguments, et c'est bien celle du parent.
+                    if (pm && owner && ownMethods(*owner, mname).size() > 1) {
+                        out += "SELF." + mname + "(";
+                        i = paren + 1;
+                        continue;
+                    }
                     if (pm && owner) {
-                        out += methodFunctionName(fullName(*owner), *pm) + "(SELF";   // 1.13.0 (lot J8) : Gaz.T_Pompe
+                        out += methodFunctionName(*owner, *pm) + "(SELF";   // 1.13.0 (lot J8) : Gaz.T_Pompe ; 1.50.1 : son nom interne
                         std::size_t after = paren + 1;
                         while (after < body.size() && (body[after] == ' ' || body[after] == '\t')) ++after;
                         out += (after < body.size() && body[after] == ')') ? "" : ", ";
@@ -318,7 +350,7 @@ static std::string rewriteBody(const Project& p, std::string_view ownerType, con
 }
 
 std::string methodFunctionText(const Project& p, std::string_view ownerType, const HmiFunction& m) {
-    const std::string internal = methodFunctionName(ownerType, m);
+    const std::string internal = internalNameOf(p, ownerType, m);
     HmiFunction m2 = m;
     m2.body = rewriteBody(p, ownerType, m, internal);
     std::string head = "FUNCTION " + internal + (m.returnType.empty() ? std::string{} : " : " + displayType(m.returnType));
@@ -336,7 +368,7 @@ std::string methodFunctionText(const Project& p, std::string_view ownerType, con
 std::string methodInternalText(const Project& p, std::string_view ownerType, const HmiFunction& m, std::string_view text) {
     HmiFunction copy = m;
     copy.body = std::string(text);
-    return rewriteBody(p, ownerType, copy, methodFunctionName(ownerType, m));
+    return rewriteBody(p, ownerType, copy, internalNameOf(p, ownerType, m));
 }
 
 std::vector<std::pair<std::size_t, std::size_t>> methodSelfWords(const Project& p, std::string_view ownerType, const HmiFunction& m,
@@ -344,7 +376,7 @@ std::vector<std::pair<std::size_t, std::size_t>> methodSelfWords(const Project& 
     HmiFunction copy = m;
     copy.body = std::string(body);
     std::vector<std::pair<std::size_t, std::size_t>> bound;
-    (void)rewriteBody(p, ownerType, copy, methodFunctionName(ownerType, m), &bound);
+    (void)rewriteBody(p, ownerType, copy, internalNameOf(p, ownerType, m), &bound);
     // rewriteBody lit le corps sans les $ des reperes : ses positions ramenees au texte tel qu'il est ecrit.
     const auto kept = markers::stripKeep(body);
     if (kept.removed.empty()) return bound;
@@ -399,11 +431,32 @@ std::vector<OwnedMethod> allMethods(const Project& p, std::string_view typeName)
     std::vector<OwnedMethod> out;
     for (const HmiType* t : order)
         for (const auto& m : t->methods) {
-            bool replaced = false;
+            // 1.50.1 : les surcharges d'un meme type restent cote a cote ; une methode d'un sous-type remplace celle du
+            // parent de meme nom ET de meme signature (une redefinition) - a defaut (une faute que Generer dit), la
+            // premiere de ce nom, comme avant.
+            OwnedMethod* target = nullptr;
             for (auto& o : out)
-                if (sameName(o.method->name, m.name)) { o = {t, &m}; replaced = true; break; }
-            if (!replaced) out.push_back({t, &m});
+                if (o.owner != t && sameName(o.method->name, m.name) && sameMethodSignature(*o.method, m)) { target = &o; break; }
+            if (!target)
+                for (auto& o : out)
+                    if (o.owner != t && sameName(o.method->name, m.name)) { target = &o; break; }
+            if (target) *target = {t, &m};
+            else out.push_back({t, &m});
         }
+    return out;
+}
+
+std::vector<const HmiFunction*> ownMethods(const HmiType& t, std::string_view name) {
+    std::vector<const HmiFunction*> out;
+    for (const auto& m : t.methods)
+        if (sameName(m.name, name)) out.push_back(&m);
+    return out;
+}
+
+std::vector<OwnedMethod> effectiveMethods(const Project& p, std::string_view typeName, std::string_view name) {
+    std::vector<OwnedMethod> out;
+    for (const auto& o : allMethods(p, typeName))
+        if (sameName(o.method->name, name)) out.push_back(o);
     return out;
 }
 
@@ -471,6 +524,12 @@ std::vector<std::string> interfaceMisses(const Project& p, const HmiType& type) 
         }
         for (const auto& sig : iface->methods) {
             const HmiFunction* mine = effectiveMethod(p, fullName(type), sig.name);   // 1.13.0 : nom complet
+            // 1.50.1 : des surcharges - celle qui a la signature de l'interface (s'il y en a une).
+            for (const auto& om : effectiveMethods(p, fullName(type), sig.name))
+                if (sameMethodSignature(*om.method, sig)) {
+                    mine = om.method;
+                    break;
+                }
             if (!mine)
                 out.push_back(type.name + " d\xC3\xA9" "clare " + iname + " mais n'a pas " + methodSignature(iname, sig).substr(iname.size() + 1));
             else if (!sameMethodSignature(*mine, sig))
@@ -496,10 +555,90 @@ const HmiFunction* methodById(const Project& p, Id id, const HmiType** owner) {
     return nullptr;
 }
 
+// ---------------------------------------------- 1.50.1 : les surcharges -------
+namespace {
+// `type` nomme-t-il (un mot entier, sans casse) un de ces generiques (T, LIST OF T, T_Mesure<T>) ?
+bool mentionsGenericName(std::string_view type, const std::vector<GenericParam>& generics) {
+    if (generics.empty()) return false;
+    for (std::size_t i = 0; i < type.size();) {
+        if (!identStart(type[i])) { ++i; continue; }
+        std::size_t j = i;
+        while (j < type.size() && identPart(type[j])) ++j;
+        const std::string_view w = type.substr(i, j - i);
+        for (const auto& g : generics)
+            if (sameName(g.name, w)) return true;
+        i = j;
+    }
+    return false;
+}
+} // namespace
+
+overload::Signature methodOverloadSignature(const HmiType& owner, const HmiFunction& m) {
+    overload::Signature sig = overload::signatureOf(m);     // ses generiques : pas de type compare
+    sig.name = owner.name + "." + m.name;
+    // Les generiques du type (T_Mesure<T>) : un type T se voit a l'appel, pas ici.
+    for (auto& prm : sig.params)
+        if (mentionsGenericName(prm.type, owner.generics)) prm.type.clear();
+    if (mentionsGenericName(sig.result, owner.generics)) sig.result.clear();
+    return sig;
+}
+
+bool chooseMethod(const Project& p, std::string_view typeName, std::string_view name, const std::vector<overload::Arg>& args,
+                  OwnedMethod& chosen, std::string& why, bool* uncertain) {
+    if (uncertain) *uncertain = false;
+    const auto ms = effectiveMethods(p, typeName, name);
+    if (ms.empty()) {
+        why = std::string(name) + " n'est pas une m\xC3\xA9thode de " + std::string(typeName);
+        return false;
+    }
+    std::vector<overload::Signature> sigs;
+    sigs.reserve(ms.size());
+    for (const auto& om : ms) sigs.push_back(methodOverloadSignature(*om.owner, *om.method));
+    const auto c = overload::choose(sigs, args);
+    if (c.chosen >= 0) {
+        chosen = ms[static_cast<std::size_t>(c.chosen)];
+        return true;
+    }
+    if (uncertain) *uncertain = c.uncertain;
+    why = c.why;
+    return false;
+}
+
+std::string methodOverloadProblem(const HmiType& owner, const HmiFunction& m) {
+    const auto same = ownMethods(owner, m.name);
+    if (same.size() < 2) return {};
+    const std::string here = owner.name + "." + m.name;
+    if (owner.kind == HmiTypeKind::Interface)
+        return here + " : une interface n'a qu'une signature par nom (pas de surcharge) - renomme l'une des deux";
+    if (m.isVirtual)
+        return here + " est virtuelle et surcharg\xC3\xA9" "e : une m\xC3\xA9thode virtuelle ne se surcharge pas (ses red\xC3\xA9" "finitions la "
+               "d\xC3\xA9signent par son nom) - d\xC3\xA9" "coche Virtuelle, ou renomme la surcharge";
+    const auto mine = methodOverloadSignature(owner, m);
+    for (const HmiFunction* o : same) {
+        if (o->id == m.id) continue;
+        const auto other = methodOverloadSignature(owner, *o);
+        if (overload::sameShape(mine, other))
+            return here + " : deux surcharges ont la m\xC3\xAAme forme " + m.name + mine.shape().substr(mine.name.size())
+                   + " - un appel ne saurait laquelle prendre ; change les param\xC3\xA8tres de l'une (le retour seul ne les distingue pas)";
+    }
+    return {};
+}
+
 // -------------------------------------------- l'interface avec l'interpreteur ---
 bool resolveMethod(const Project& p, std::string_view selfType, std::string_view method, MethodCall& out) {
     const HmiType* owner = nullptr;
-    const HmiFunction* m = effectiveMethod(p, selfType, method, &owner);
+    const HmiFunction* m = nullptr;
+    // 1.50.1 : "Regler#615" - la surcharge choisie (chooseMethod), par son identifiant.
+    if (const auto hash = method.find('#'); hash != std::string_view::npos) {
+        const std::string id(method.substr(hash + 1));
+        for (const auto& om : effectiveMethods(p, selfType, method.substr(0, hash)))
+            if (std::to_string(om.method->id) == id) {
+                m = om.method;
+                owner = om.owner;
+            }
+    } else {
+        m = effectiveMethod(p, selfType, method, &owner);
+    }
     if (!m || !owner) return false;
     // SELF a le type qui DEFINIT la methode (owner) ; l'objet reel (un sous-type) passe la ou owner est
     // attendu (montee du VAR_IN_OUT). Une seule fonction par (owner, methode) : un SUPER la retrouve.
@@ -512,7 +651,7 @@ bool resolveMethod(const Project& p, std::string_view selfType, std::string_view
     out.function = methodFunctionText(p, ownerName, *m);
     if (!owner->ns.empty() || names::mentionsUsing(m->body)) out.function = names::qualify(p, out.function, owner->ns, {"SELF"}, true);
     out.owner = "type " + ownerName + ", m\xC3\xA9thode " + m->name;
-    out.key = "methode|" + upperOf(ownerName) + "|" + upperOf(m->name) + "|"
+    out.key = "methode|" + upperOf(ownerName) + "|" + upperOf(m->name) + "|" + std::to_string(m->id) + "|"
             + std::to_string(std::hash<std::string>{}(out.function));
     // 1.13.0 : une methode privee - le moteur ne l'appelle que d'une methode de son type (le message de Generer).
     out.privateWhy = m->visibility == Visibility::Private
@@ -526,14 +665,14 @@ bool resolveMethodInternal(const Project& p, std::string_view internalName, Meth
     const auto tryType = [&](const HmiType& t) {
         const std::string tn = fullName(t);
         for (const auto& m : t.methods)
-            if (methodFunctionName(tn, m) == internalName) {
+            if (methodFunctionName(t, m) == internalName) {             // 1.50.1 : une surcharge, son suffixe
                 out.selfType = tn;
                 out.isVirtual = m.isVirtual;
                 out.method = m.id;                                    // 1.13.0 : ses points d'arret (le debogueur)
                 out.function = methodFunctionText(p, tn, m);
                 if (!t.ns.empty() || names::mentionsUsing(m.body)) out.function = names::qualify(p, out.function, t.ns, {"SELF"}, true);
                 out.owner = "type " + tn + ", m\xC3\xA9thode " + m.name;
-                out.key = "methode|" + upperOf(tn) + "|" + upperOf(m.name) + "|"
+                out.key = "methode|" + upperOf(tn) + "|" + upperOf(m.name) + "|" + std::to_string(m.id) + "|"
                         + std::to_string(std::hash<std::string>{}(out.function));
                 return true;
             }
@@ -655,6 +794,8 @@ std::string methodProblem(const Project& p, const HmiType& owner, const HmiFunct
             break;
         }
     (void)overridesParent; (void)def;
+    // 1.50.1 : les surcharges - la meme forme qu'une autre de son nom, une virtuelle surchargee, une interface.
+    if (std::string w = methodOverloadProblem(owner, m); !w.empty()) return w;
     return {};
 }
 
@@ -918,7 +1059,8 @@ std::size_t renameMethodEverywhere(Project& p, Id method, std::string_view rawNa
         if (!family.count(t.id)) continue;
         for (auto& m : t.methods) {
             // La methode elle-meme et ses redefinitions : le nom, et dans le corps le nom nu (le retour, un appel).
-            const bool self = m.id == method || (t.id != ownerId && sameName(m.name, old));
+            // 1.50.1 : ses surcharges (le meme nom dans son type) avec elle - un appel X(...) les vise toutes.
+            const bool self = m.id == method || sameName(m.name, old);
             if (self) {
                 m.name = name;
                 ++changed;
@@ -931,6 +1073,292 @@ std::size_t renameMethodEverywhere(Project& p, Id method, std::string_view rawNa
         }
     }
     return changed;
+}
+
+// ---------------------------- 1.50.1 : la signature d'une virtuelle, suivie ---
+std::vector<OwnedMethod> overridesOf(const Project& p, Id method) {
+    std::vector<OwnedMethod> out;
+    const HmiType* owner = nullptr;
+    const HmiFunction* m = methodById(p, method, &owner);
+    if (!m || !owner) return out;
+    for (const auto& t : p.programs.types) {
+        if (t.id == owner->id) continue;
+        bool below = false;
+        for (const HmiType* b : baseChain(p, fullName(t)))
+            if (b->id == owner->id) {
+                below = true;
+                break;
+            }
+        if (!below) continue;
+        for (const auto& x : t.methods)
+            if (sameName(x.name, m->name)) {
+                out.push_back({&t, &x});
+                break;
+            }
+    }
+    return out;
+}
+
+namespace {
+std::vector<const Declaration*> paramsOf(const HmiFunction& f) {
+    std::vector<const Declaration*> out;
+    for (const auto& d : f.decls)
+        if (d.kind == DeclKind::Parameter) out.push_back(&d);
+    return out;
+}
+
+// Les arguments d'un appel, de `open` (la parenthese ouvrante) a sa fermante : [debut, fin) de chacun dans `body`,
+// coupes aux virgules de premier niveau (ni dans une chaine, ni dans un commentaire, ni entre () ou []). `close` : la
+// fermante. Faux : pas de fermante.
+bool callArguments(const std::string& body, const std::string& kinds, std::size_t open, std::vector<std::pair<std::size_t, std::size_t>>& args,
+                   std::size_t& close) {
+    int depth = 0;
+    std::size_t start = open + 1;
+    for (std::size_t k = open + 1; k < body.size(); ++k) {
+        if (kinds[k] != 0) continue;
+        const char c = body[k];
+        if (c == '(' || c == '[') ++depth;
+        else if ((c == ')' || c == ']') && depth > 0) --depth;
+        else if (c == ')' && depth == 0) {
+            if (body.find_first_not_of(" \t\r\n", start) < k || !args.empty()) args.emplace_back(start, k);
+            close = k;
+            return true;
+        } else if (c == ',' && depth == 0) {
+            args.emplace_back(start, k);
+            start = k + 1;
+        }
+    }
+    return false;
+}
+
+// SUPER.M(...) dans le corps d'une redefinition : ses arguments suivent la nouvelle signature de M. Par position (autant
+// d'arguments que de parametres d'avant) : chacun suit son parametre, un parametre ajoute passe par son nom (la
+// redefinition l'a aussi), un retire s'en va. Par nom (a := x) : le nom suit, un retire s'en va, un ajoute s'ajoute.
+// `oldP`, `newP` : les parametres d'avant et d'apres de M ; `from[j]` : l'indice dans oldP du parametre j de newP (-1 :
+// ajoute). Rend vrai si le corps change.
+bool followSuperCalls(std::string& body, std::string_view name, const std::vector<Declaration>& oldP, const std::vector<Declaration>& newP,
+                      const std::vector<int>& from) {
+    bool changed = false;
+    for (std::size_t at = 0;;) {
+        const std::string kinds = kindsOf(body);
+        // le prochain SUPER (un mot entier, dans le code)
+        std::size_t i = at;
+        bool found = false;
+        std::size_t open = 0;
+        for (; i + 5 <= body.size(); ++i) {
+            if (kinds[i] != 0 || !identStart(body[i]) || (i > 0 && (identPart(body[i - 1]) || body[i - 1] == '.'))) continue;
+            std::size_t j = i;
+            while (j < body.size() && identPart(body[j])) ++j;
+            if (!sameName(std::string_view(body).substr(i, j - i), "SUPER")) { i = j; continue; }
+            std::size_t d = j;
+            while (d < body.size() && (body[d] == ' ' || body[d] == '\t')) ++d;
+            if (d >= body.size() || body[d] != '.') { i = j; continue; }
+            std::size_t n0 = d + 1;
+            while (n0 < body.size() && (body[n0] == ' ' || body[n0] == '\t')) ++n0;
+            std::size_t n1 = n0;
+            while (n1 < body.size() && identPart(body[n1])) ++n1;
+            std::size_t paren = n1;
+            while (paren < body.size() && (body[paren] == ' ' || body[paren] == '\t')) ++paren;
+            if (n1 > n0 && paren < body.size() && body[paren] == '(' && sameName(std::string_view(body).substr(n0, n1 - n0), name)) {
+                found = true;
+                open = paren;
+                break;
+            }
+            i = j;
+        }
+        if (!found) break;
+        std::vector<std::pair<std::size_t, std::size_t>> args;
+        std::size_t close = 0;
+        if (!callArguments(body, kinds, open, args, close)) break;
+        std::vector<std::string> texts;
+        for (const auto& [a, b] : args) texts.push_back(trimmed(std::string_view(body).substr(a, b - a)));
+        // un argument nomme : "Nom := x" ou "Nom => y"
+        const auto namedOf = [](const std::string& t, std::string& n, std::string& rest) {
+            std::size_t k = 0;
+            while (k < t.size() && identPart(t[k])) ++k;
+            if (k == 0 || !identStart(t[0])) return false;
+            std::size_t q = k;
+            while (q < t.size() && (t[q] == ' ' || t[q] == '\t')) ++q;
+            if (q + 1 < t.size() && ((t[q] == ':' && t[q + 1] == '=') || (t[q] == '=' && t[q + 1] == '>'))) {
+                n = t.substr(0, k);
+                rest = t.substr(k);
+                return true;
+            }
+            return false;
+        };
+        bool anyNamed = false, allNamed = !texts.empty();
+        for (const auto& t : texts) {
+            std::string n, r;
+            const bool named = namedOf(t, n, r);
+            anyNamed = anyNamed || named;
+            allNamed = allNamed && named;
+        }
+        std::vector<std::string> next;
+        bool rewrite = false;
+        if (!anyNamed && texts.size() == oldP.size()) {
+            for (std::size_t j = 0; j < newP.size(); ++j)
+                next.push_back(from[j] >= 0 ? texts[static_cast<std::size_t>(from[j])] : newP[j].name);
+            rewrite = true;
+        } else if (allNamed) {
+            for (const auto& t : texts) {
+                std::string n, r;
+                (void)namedOf(t, n, r);
+                int k = -1;
+                for (std::size_t q = 0; q < oldP.size(); ++q)
+                    if (sameName(oldP[q].name, n)) k = static_cast<int>(q);
+                if (k < 0) {                                   // un nom inconnu : tel quel
+                    next.push_back(t);
+                    continue;
+                }
+                int j = -1;
+                for (std::size_t q = 0; q < from.size(); ++q)
+                    if (from[q] == k) j = static_cast<int>(q);
+                if (j >= 0) next.push_back(newP[static_cast<std::size_t>(j)].name + r);   // retire (j < 0) : s'en va
+            }
+            for (std::size_t j = 0; j < newP.size(); ++j)
+                if (from[j] < 0) next.push_back(newP[j].name + (newP[j].mode == PassMode::Out ? " => " : " := ") + newP[j].name);
+            rewrite = true;
+        }
+        if (!rewrite) {
+            at = close + 1;
+            continue;
+        }
+        std::string inside;
+        for (const auto& t : next) inside += (inside.empty() ? "" : ", ") + t;
+        const std::string before = body.substr(open + 1, close - open - 1);
+        if (trimmed(before) != inside) {
+            body.replace(open + 1, close - open - 1, inside);
+            changed = true;
+        }
+        at = open + 1 + inside.size() + 1;
+    }
+    return changed;
+}
+} // namespace
+
+bool sameMethodHead(const HmiFunction& a, const HmiFunction& b) {
+    if (a.returnType != b.returnType || a.returnUnit != b.returnUnit) return false;
+    const auto pa = paramsOf(a), pb = paramsOf(b);
+    if (pa.size() != pb.size()) return false;
+    for (std::size_t k = 0; k < pa.size(); ++k) {
+        const Declaration& x = *pa[k];
+        const Declaration& y = *pb[k];
+        if (x.name != y.name || x.type != y.type || x.mode != y.mode || x.value != y.value || x.unit != y.unit) return false;
+    }
+    return true;
+}
+
+bool followOverrides(Project& p, Id method, const HmiFunction& before, std::vector<std::string>* touched, std::string* why) {
+    const auto fail = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    const HmiType* ownerC = nullptr;
+    const HmiFunction* baseC = methodById(p, method, &ownerC);
+    if (!baseC || !ownerC) return fail("m\xC3\xA9thode introuvable");
+    const HmiFunction now = *baseC;
+    std::vector<Declaration> oldP, newP;
+    for (const auto* d : paramsOf(before)) oldP.push_back(*d);
+    for (const auto* d : paramsOf(now)) newP.push_back(*d);
+    // Chaque parametre d'apres : son indice d'avant (par son identifiant ; a defaut son nom) ; -1 : ajoute.
+    std::vector<int> from(newP.size(), -1);
+    for (std::size_t j = 0; j < newP.size(); ++j)
+        for (std::size_t k = 0; k < oldP.size(); ++k)
+            if ((newP[j].id != kNoId && oldP[k].id == newP[j].id) || (newP[j].id == kNoId && sameName(oldP[k].name, newP[j].name))) {
+                from[j] = static_cast<int>(k);
+                break;
+            }
+    std::vector<std::pair<Id, Id>> targets;               // (type, redefinition)
+    for (const auto& om : overridesOf(p, method)) targets.emplace_back(om.owner->id, om.method->id);
+    namespace de = decledit;
+    for (const auto& [typeId, overId] : targets) {
+        HmiType* t = p.hmiType(typeId);
+        if (!t) continue;
+        const auto findOver = [&]() -> HmiFunction* {
+            for (auto& x : t->methods)
+                if (x.id == overId) return &x;
+            return nullptr;
+        };
+        HmiFunction* o = findOver();
+        if (!o) continue;
+        const std::string label = t->name + "." + o->name;
+        de::Place at;
+        at.kind = de::Place::Kind::TypeMethod;
+        at.type = typeId;
+        at.id = overId;
+        // Ses parametres d'avant, un pour un avec ceux de la virtuelle (la meme signature) : par position.
+        std::vector<Id> mine;
+        for (const auto* d : paramsOf(*o)) mine.push_back(d->id);
+        const auto rowOf = [&](Id declId) -> std::size_t {
+            HmiFunction* f = findOver();
+            if (!f) return static_cast<std::size_t>(-1);
+            const auto rows = de::rowsOf(f->decls, de::Tab::Parameters);
+            for (std::size_t r = 0; r < rows.size(); ++r)
+                if (f->decls[rows[r]].id == declId) return r;
+            return static_cast<std::size_t>(-1);
+        };
+        // (1) Les renommes : un parametre de meme nom que celui de la virtuelle prend son nouveau nom - par la
+        // machinerie des declarations (son corps suit) ; en deux temps (un nom de passage), un echange de noms passe.
+        std::vector<std::pair<Id, std::string>> renames;
+        for (std::size_t j = 0; j < newP.size(); ++j) {
+            const int k = from[j];
+            if (k < 0 || static_cast<std::size_t>(k) >= mine.size()) continue;
+            const Declaration* d = nullptr;
+            for (const auto& x : findOver()->decls)
+                if (x.id == mine[static_cast<std::size_t>(k)]) d = &x;
+            if (d && sameName(d->name, oldP[static_cast<std::size_t>(k)].name) && d->name != newP[j].name)
+                renames.emplace_back(d->id, newP[j].name);
+        }
+        for (int phase = 0; phase < 2; ++phase)
+            for (const auto& [declId, target] : renames) {
+                std::string w;
+                const std::string text = phase == 0 ? "Suivi_" + std::to_string(declId) : target;
+                if (!de::set(p, at, de::Tab::Parameters, rowOf(declId), de::Column::Name, text, &w, nullptr))
+                    return fail(label + " : le param\xC3\xA8tre " + target + " - " + w);
+            }
+        o = findOver();
+        if (!o) continue;
+        const auto namesBefore = testParameterNames(*o);   // apres les renommages : ses cas suivent par leur nom
+        // (2) La liste d'apres : un parametre garde (son identifiant, sa documentation) prend le type, le mode, le
+        // defaut et l'unite de la virtuelle ; un ajoute est une copie (un identifiant neuf) ; un retire s'en va.
+        std::vector<Declaration> next;
+        for (std::size_t j = 0; j < newP.size(); ++j) {
+            const int k = from[j];
+            Declaration d;
+            bool kept = false;
+            if (k >= 0 && static_cast<std::size_t>(k) < mine.size())
+                for (const auto& x : o->decls)
+                    if (x.id == mine[static_cast<std::size_t>(k)]) {
+                        d = x;
+                        kept = true;
+                    }
+            if (!kept) {
+                d = newP[j];
+                d.id = p.allocate();
+                // le nom ajoute ne doit rien cacher dans la redefinition (une locale, une constante, SELF...)
+                const de::Code c = de::locate(p, at);
+                std::string w;
+                if (c.valid() && !de::nameAllowed(c, d.name, static_cast<std::size_t>(-1), &w))
+                    return fail(label + " : le param\xC3\xA8tre ajout\xC3\xA9 " + d.name + " - " + w);
+            } else {
+                d.type = newP[j].type;
+                d.mode = newP[j].mode;
+                d.value = newP[j].value;
+                d.unit = newP[j].unit;
+            }
+            d.kind = DeclKind::Parameter;
+            next.push_back(std::move(d));
+        }
+        for (const auto& x : o->decls)
+            if (x.kind != DeclKind::Parameter) next.push_back(x);
+        o->decls = std::move(next);
+        o->returnType = now.returnType;
+        o->returnUnit = now.returnUnit;
+        (void)followSuperCalls(o->body, now.name, oldP, newP, from);
+        (void)remapTestArguments(*o, namesBefore, testParameterNames(*o));
+        if (touched) touched->push_back(label);
+    }
+    return true;
 }
 
 std::vector<std::string> implementersOf(const Project& p, const HmiType& iface) {

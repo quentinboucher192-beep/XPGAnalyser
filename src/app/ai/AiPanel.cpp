@@ -2,6 +2,7 @@
 //  app/ai/AiPanel.cpp - voir AiPanel.hpp
 // =============================================================================
 #include "AiPanel.hpp"
+#include "AiChatReply.hpp"   // 1.50.1 : repondre, reduire, copier
 #include "AiDelete.hpp"   // 1.21.0 : la confirmation des suppressions
 
 #include "AiLoop.hpp"   // 1.22.4 : ne pas tourner en rond (loop::choiceLabel)
@@ -632,6 +633,7 @@ ui::EventResult AiPromptEdit::onEvent(const ui::InputEvent& ev) {
             setText(undoText_);
             return ui::EventResult::Consumed;
         case ui::Key::Escape:
+            if (onEscape && onEscape()) return ui::EventResult::Consumed;   // 1.50.1 : la reponse annulee, le clavier reste
             releaseFocus();
             return ui::EventResult::Consumed;
         default: break;
@@ -685,6 +687,21 @@ AiPanel::AiPanel(std::string id, Assistant::Host core, UiHost uiHost)
         ctxPane_ = &static_cast<AiContextPane&>(addChild(std::make_unique<AiContextPane>(base + ".contexte", std::move(cb))));
     }
     prompt_ = &static_cast<AiPromptEdit&>(addChild(std::make_unique<AiPromptEdit>(base + ".saisie")));
+    // 1.50.1 : << En reponse a ... >> au-dessus de la saisie (la barre de la discussion des sessions) ; sa croix l'annule.
+    replyBar_ = &static_cast<sessionui::ReplyBar&>(addChild(std::make_unique<sessionui::ReplyBar>(base + ".reponse")));
+    replyBar_->setVisibility(ui::Visibility::Collapsed);
+    prompt_->onEscape = [this] {   // Echap dans la saisie : la reponse d'abord
+        if (!assistant_->replyTo()) return false;
+        cancelReply();
+        say("R\xC3\xA9ponse annul\xC3\xA9" "e : la demande ne cite plus de message.");
+        return true;
+    };
+    replyBar_->onCancel = [this] {
+        assistant_->clearReply();
+        syncReply();
+        prompt_->takeFocus();
+        say("R\xC3\xA9ponse annul\xC3\xA9" "e : la demande ne cite plus de message.");
+    };
     prompt_->setTooltip("Ta demande. Entr\xC3\xA9" "e : envoyer ; Maj+Entr\xC3\xA9" "e : \xC3\xA0 la ligne ; un fichier l\xC3\xA2" "ch\xC3\xA9 ici se joint.");
     attachBtn_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Joindre\xE2\x80\xA6", base + ".joindre")));
     attachBtn_->setIcon(ui::Icon::Link);
@@ -753,6 +770,46 @@ void AiPanel::say(const std::string& text) {
     if (text.empty()) return;
     lastStatus_ = text;
     if (ui_.status) ui_.status(text);
+}
+
+// ---- 1.50.1 : repondre a un message (AiChatReply.hpp) ----------------------------------------------------------------------
+bool AiPanel::replyTo(int message) {
+    std::string why;
+    if (!assistant_->setReplyTo(message, &why)) {
+        say(why);
+        return false;
+    }
+    syncReply();
+    prompt_->takeFocus();
+    if (const auto* q = assistant_->replyTo())
+        say("Tu r\xC3\xA9ponds \xC3\xA0 " + (q->who == "Moi" ? std::string("ta demande") : q->who == "Assistant" ? std::string("l'Assistant") : q->who)
+            + " : ta demande citera ce message (\xC3\x89" "chap : annuler).");
+    return true;
+}
+
+void AiPanel::cancelReply() {
+    assistant_->clearReply();
+    syncReply();
+}
+
+void AiPanel::syncReply() {
+    const chatreply::Quote* q = assistant_->replyTo();
+    const bool shown = replyBar_->active();
+    if (!q) {
+        if (shown) {
+            replyBar_->clear();
+            invalidateLayout();
+        }
+        return;
+    }
+    if (shown && replyBar_->replyId() == q->id) return;
+    sessionui::Row row;
+    row.id = q->id;
+    row.who = q->who;
+    row.text = q->excerpt;
+    replyBar_->set(row);
+    invalidateLayout();
+    invalidate();
 }
 
 void AiPanel::refreshButtons() {
@@ -978,6 +1035,7 @@ void AiPanel::sync() {
         refreshButtons();
         chat_->rebuild();
         syncAdvice();   // 1.22.6 : le conseil de la derniere reponse (passer en mission IA ?)
+        syncReply();    // 1.50.1 : la citation envoyee, ou une autre conversation ouverte : la barre se retire
         invalidateLayout();
         invalidate();
     }
@@ -2458,6 +2516,7 @@ void AiPanel::onLayout() {
         // 1.22.6 : Envoyer en mission - avec une IA connectee seulement (une mission travaille avec elle)
         missionSendBtn_->setVisibility(other || !assistant_->live() ? ui::Visibility::Collapsed : ui::Visibility::Visible);
         if (other) {
+            replyBar_->setVisibility(ui::Visibility::Collapsed);   // 1.50.1
             strip_->setVisibility(ui::Visibility::Collapsed);
             if (ctxPane_) ctxPane_->setVisibility(ui::Visibility::Collapsed);
             missionStrip_->setVisibility(ui::Visibility::Collapsed);
@@ -2530,8 +2589,17 @@ void AiPanel::onLayout() {
     const float ph = prompt_->heightFor(w - 2 * kPad);
     promptArea_ = {x + kPad, (outgoing_.h > 0.f ? outgoing_.y : bottomBar_.y) - ph - 2.f, w - 2 * kPad, ph};
     prompt_->setBounds(promptArea_);
+    // 1.50.1 : << En reponse a ... >> juste au-dessus de la saisie (la demande citera ce message).
+    float aboveY = promptArea_.y;
+    if (assistant_->replyTo()) {
+        replyBar_->setBounds({x + kPad, promptArea_.y - sessionui::ReplyBar::kHeight - 4.f, w - 2 * kPad, sessionui::ReplyBar::kHeight});
+        replyBar_->setVisibility(ui::Visibility::Visible);
+        aboveY = replyBar_->bounds().y;
+    } else {
+        replyBar_->setVisibility(ui::Visibility::Collapsed);
+    }
     const float pendH = static_cast<float>(assistant_->pending().size()) * kPendingH;
-    pendingArea_ = {x + kPad, promptArea_.y - pendH - (pendH > 0 ? 6.f : 0.f), w - 2 * kPad, pendH};
+    pendingArea_ = {x + kPad, aboveY - pendH - (pendH > 0 ? 6.f : 0.f), w - 2 * kPad, pendH};
     // 1.22.0 : << Creer une mission IA ? >> - au-dessus des pieces en attente et de la saisie (rien n'est encore parti).
     askH_ = 0.f;
     if (!askText_.empty()) {
@@ -2917,6 +2985,11 @@ ui::EventResult AiPanel::onEvent(const ui::InputEvent& ev) {
             prompt_->takeFocus();
             return ui::EventResult::Consumed;
         }
+        if (k->key == ui::Key::Escape && assistant_->replyTo() && !notifsShown_ && !missionsShown_) {   // 1.50.1 : la reponse
+            cancelReply();
+            prompt_->takeFocus();
+            return ui::EventResult::Consumed;
+        }
         // La liste a le clavier (le panneau lui-meme) : F2, Suppr, les fleches. 1.21.2 : pas sous l'onglet Notifications.
         if (focused() && !notifsShown_ && !missionsShown_) {
             const int cur = assistant_->currentIndex();
@@ -2935,7 +3008,9 @@ ui::EventResult AiPanel::onEvent(const ui::InputEvent& ev) {
 // =============================================================================
 //  La discussion
 // =============================================================================
-AiChatView::AiChatView(std::string id, AiPanel& panel) : ui::Widget(std::move(id)), panel_(panel) {}
+AiChatView::AiChatView(std::string id, AiPanel& panel) : ui::Widget(std::move(id)), panel_(panel) {
+    setFocusPolicy(true);   // 1.50.1 : un message choisi (un clic) se copie par Ctrl+C
+}
 
 float AiChatView::viewHeight() const noexcept { return bounds().h; }
 bool AiChatView::atBottom() const noexcept { return offset_ >= std::max(0.f, content_ - viewHeight()) - 2.f; }
@@ -3417,6 +3492,22 @@ void AiChatView::measure() {
             b.h += static_cast<float>(b.billLines.size()) * kNoteH + 2.f;
         }
     };
+    // 1.50.1 : REDUIRE - le dernier echange (la derniere demande et ce qui la suit) reste deballe tant qu'on ne le reduit pas.
+    std::size_t lastAsk = 0;
+    if (conv)
+        for (std::size_t i = 0; i < conv->messages.size(); ++i)
+            if (conv->messages[i].role == "utilisateur" && !(conv->messages[i].extra.isObject() && conv->messages[i].extra.has("logiciel"))) lastAsk = i;
+    const float toggleH = ui::lineHeight(kMeta) + 6.f;
+    const auto fold = [&](Block& b, const Message& m, bool live) {
+        const std::size_t cut = collapseCut(b.lines);
+        b.key = conv->id + "|" + m.id;
+        b.collapsible = cut < b.lines.size() && !live;
+        bool open = static_cast<std::size_t>(b.message) >= lastAsk;
+        if (const auto it = fold_.find(b.key); it != fold_.end()) open = it->second;
+        b.collapsed = b.collapsible && !open;
+        b.shown = b.collapsed ? cut : b.lines.size();
+        b.toggle = !b.collapsible ? std::string{} : b.collapsed ? std::string("\xE2\x80\xA6 voir tout") : std::string("R\xC3\xA9" "duire");
+    };
     if (conv) {
         for (std::size_t i = 0; i < conv->messages.size(); ++i) {
             const auto& m = conv->messages[i];
@@ -3428,26 +3519,48 @@ void AiChatView::measure() {
             b.y = y;
             const bool live = static_cast<int>(i) == generating;
             const std::string text = live ? a.shownText() : m.text;
+            b.headW = ui::measureWidth((b.user ? std::string("Moi \xC2\xB7 ") : std::string("Assistant \xC2\xB7 ")) + shortDate(m.date, true), kMeta);
             if (b.user) {
                 const float maxW = inner * 0.86f - 20.f;
                 b.lines = layoutText(text, maxW);
+                fold(b, m, live);   // 1.50.1
                 float tw = 0.f;
                 for (const auto& l : b.lines)
                     for (const auto& r : l.runs) tw = std::max(tw, r.x + r.w);
                 for (const auto& at : m.attachments) tw = std::max(tw, std::min(maxW, ui::measureWidth(at.name, kMeta) + 110.f));
+                // 1.50.1 : l'extrait cite au-dessus du texte (une demande qui repond a un message), << ... voir tout >> dessous.
+                std::string quoted;
+                if (const auto q = chatreply::readQuote(m)) {
+                    quoted = (q->who.empty() ? std::string{} : q->who + " : ") + "\xC2\xAB " + q->excerpt + " \xC2\xBB";
+                    tw = std::max(tw, std::min(maxW, ui::measureWidth(quoted, kMeta) + 10.f));
+                }
+                if (!b.toggle.empty()) tw = std::max(tw, std::min(maxW, ui::measureWidth(b.toggle, kMeta)));
                 b.textW = tw;
                 float th = 0.f;
-                for (const auto& l : b.lines) th += l.h + l.gapBefore;
+                for (std::size_t k = 0; k < b.shown && k < b.lines.size(); ++k) th += b.lines[k].h + b.lines[k].gapBefore;
                 if (text.empty()) th = 0.f;
                 b.attachH = static_cast<float>(m.attachments.size()) * 24.f;
-                const float bw = tw + 20.f, bh = th + b.attachH + 14.f;
+                const float quoteH = quoted.empty() ? 0.f : toggleH;
+                const float bw = tw + 20.f, bh = quoteH + th + (b.toggle.empty() ? 0.f : toggleH) + b.attachH + 14.f;
                 b.bubble = {w - kPad - 6.f - bw, meta, bw, bh};
+                b.textX = b.bubble.x + 10.f;
+                if (!quoted.empty()) {
+                    b.quote = sessionui::elide(quoted, kMeta, std::max(0.f, tw - 10.f));
+                    b.quoteY = meta + 7.f;
+                }
+                b.toggleY = meta + 7.f + quoteH + th;
                 b.h = meta + bh;
             } else {
                 b.lines = layoutText(text, inner - 8.f);
+                fold(b, m, live);   // 1.50.1
                 float th = 0.f;
-                for (const auto& l : b.lines) th += l.h + l.gapBefore;
+                for (std::size_t k = 0; k < b.shown && k < b.lines.size(); ++k) th += b.lines[k].h + b.lines[k].gapBefore;
                 b.h = meta + th + 4.f;
+                b.textX = kPad + 4.f;
+                if (!b.toggle.empty()) {   // 1.50.1 : << ... voir tout >> / << Reduire >> sous le texte
+                    b.toggleY = b.h;
+                    b.h += toggleH;
+                }
                 if (live) {   // l'indicateur, et ce qu'il dit en plus (une nouvelle tentative)
                     b.h += 26.f;
                     // 1.22.6 : la ligne d'activite dit deja la lecture, l'outil, la longueur : l'etat en plus reste pour la cause
@@ -4540,11 +4653,19 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
     ctx.r.pushClip(bb);
     const float meta = ctx.r.lineHeight(kMeta);
     const int generating = a.generatingMessage();
+    codeSpots_.clear();   // 1.50.1
+    const float metaStep = ui::lineHeight(kMeta) + 6.f;
     for (const auto& b : blocks_) {
         const float top = bb.y + b.y - offset_;
         if (top > bb.bottom() || top + b.h < bb.y) continue;
         const auto& m = conv->messages[static_cast<std::size_t>(b.message)];
         const bool live = b.message == generating;
+        // 1.50.1 : le message choisi (un clic, ou celui qu'une citation montre).
+        if (!selected_.empty() && b.key == selected_) {
+            const float right = bb.right() - (content_ > viewHeight() ? 12.f : 2.f);
+            ctx.r.fillRect({bb.x + 2.f, top - 4.f, std::max(0.f, right - bb.x - 2.f), b.h + 8.f}, c.selectionBg.withAlpha(70));
+            ctx.r.fillRect({bb.x + 2.f, top - 4.f, 3.f, b.h + 8.f}, c.accent);
+        }
         // L'en-tete : qui, quand.
         const std::string when = shortDate(m.date, true);
         if (b.user) {
@@ -4555,12 +4676,23 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
             ctx.r.fillRoundedRect(bub, alpha(c.accent, 34), 6.f);
             ctx.r.strokeRect(bub, alpha(c.accent, 80), 1.f);
             float ly = bub.y + 7.f;
+            // 1.50.1 : l'extrait cite (un filet a la couleur d'accent, le texte discret) au-dessus du texte.
+            if (!b.quote.empty()) {
+                ctx.r.fillRect({bub.x + 10.f, ly + 2.f, 2.f, std::max(0.f, metaStep - 6.f)}, c.accent);
+                ctx.r.drawText({bub.x + 18.f, ly + 1.f}, b.quote, kMeta, c.textMuted);
+                ly += metaStep;
+            }
             if (!m.text.empty())
-                for (const auto& l : b.lines) {
+                for (std::size_t li = 0; li < b.shown && li < b.lines.size(); ++li) {
+                    const auto& l = b.lines[li];
                     ly += l.gapBefore;
                     for (const auto& r : l.runs) ctx.r.drawText({bub.x + 10.f + r.x, ly}, r.text, kBody, c.text);
                     ly += l.h;
                 }
+            if (!b.toggle.empty()) {   // 1.50.1
+                ctx.r.drawText({bub.x + 10.f, top + b.toggleY + 2.f}, b.toggle, kMeta, c.accent);
+                ly = top + b.toggleY + metaStep;
+            }
             for (const auto& at : m.attachments) {
                 const auto look = lookOf(ctx.theme, at.name);
                 ui::drawIcon(ctx.r, look.icon, {bub.x + 10.f, ly + 3.f, 16.f, 16.f}, look.tint);
@@ -4580,21 +4712,26 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
         float ly = top + meta + 4.f;
         const float tx = bb.x + kPad + 4.f;
         const float textW = std::max(80.f, bb.w - 2 * kPad - 12.f) - 8.f;
-        for (std::size_t li = 0; li < b.lines.size(); ++li) {
+        for (std::size_t li = 0; li < b.shown && li < b.lines.size(); ++li) {   // 1.50.1 : reduit, les lignes montrees
             const auto& l = b.lines[li];
             ly += l.gapBefore;
             // 1.20.2 : un bloc de code - son fond (tout le bloc), sa langue, Copier.
             if (l.codeHead) {
                 float blockH = l.h;
-                for (std::size_t k = li + 1; k < b.lines.size() && b.lines[k].code == l.code && !b.lines[k].codeHead; ++k)
-                    blockH += b.lines[k].gapBefore + b.lines[k].h;
+                std::size_t codeRows = 0;
+                for (std::size_t k = li + 1; k < b.lines.size() && b.lines[k].code == l.code && !b.lines[k].codeHead; ++k) {
+                    if (k < b.shown) blockH += b.lines[k].gapBefore + b.lines[k].h;
+                    if (!b.lines[k].runs.empty()) ++codeRows;
+                }
                 const gfx::Rect box{tx - 2.f, ly, textW + 4.f, blockH};
+                codeSpots_.push_back({box, {b.message, l.code}});   // 1.50.1 : le clic droit << Copier le code >>
                 const gfx::Color bg = ctx.theme.brand.codeBg.a ? ctx.theme.brand.codeBg : c.inputBg;
                 ctx.r.fillRoundedRect(box, bg, 6.f);
                 ctx.r.strokeRect(box, alpha(c.border, 160), 1.f);
                 ctx.r.fillRect({box.x + 1.f, box.y + l.h - 1.f, box.w - 2.f, 1.f}, alpha(c.border, 140));
                 const float capY = ly + (l.h - meta) / 2.f;
-                const std::string lang = l.codeLang + (l.codeOpen ? std::string("  \xC2\xB7  en cours\xE2\x80\xA6") : std::string());
+                std::string lang = l.codeLang + (l.codeOpen ? std::string("  \xC2\xB7  en cours\xE2\x80\xA6") : std::string());
+                if (li + 1 >= b.shown && codeRows > 0) lang += "  \xC2\xB7  " + std::to_string(codeRows) + (codeRows > 1 ? " lignes" : " ligne");   // 1.50.1 : reduit
                 ctx.r.drawText({box.x + 10.f, capY}, lang, kMeta, c.textMuted);
                 if (!copied_.empty() && copiedAt_ < 0.0) copiedAt_ = ctx.time;
                 if (!copied_.empty() && ctx.time - copiedAt_ > 2.0) {
@@ -4636,6 +4773,7 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
             }
             ly += l.h;
         }
+        if (!b.toggle.empty()) ctx.r.drawText({tx, top + b.toggleY + 2.f}, b.toggle, kMeta, c.accent);   // 1.50.1
         if (live) {
             // Le curseur d'ecriture au bout du texte, puis l'indicateur.
             // 1.15.0 : un vrai fournisseur passe a l'ecriture avant le premier morceau de texte (le bloc
@@ -4674,6 +4812,16 @@ void AiChatView::onPaint(const ui::PaintContext& ctx) {
         }
         if (b.card.h > 0.f) paintCard(ctx, b, {bb.x + b.card.x, top + b.card.y, b.card.w, b.card.h});
     }
+    // 1.50.1 : Repondre et Copier sur le message survole (sur sa ligne d'en-tete, sur un fond).
+    if (hover_ >= 0 && hovered())
+        for (int k = 0; k < 2; ++k) {
+            const gfx::Rect hb = hoverButton(hover_, k);
+            if (hb.w <= 0.f) continue;
+            ctx.r.fillRoundedRect(hb, c.panelBg, 4.f);
+            ctx.r.strokeRect(hb, c.border, 1.f);
+            ui::drawIcon(ctx.r, k == 0 ? ui::Icon::Undo : ui::Icon::Copy, hb.inset(4.f, 2.f), c.text);
+            tips_.emplace_back(hb, k == 0 ? std::string("R\xC3\xA9pondre \xC3\xA0 ce message (ta demande le citera)") : std::string("Copier le message (Ctrl+C)"));
+        }
     // L'accueil et les suggestions.
     const bool empty = !conv || conv->messages.empty();
     if (!suggestionRects_.empty()) {
@@ -4788,45 +4936,285 @@ gfx::Rect AiChatView::messageRect(int message) const {
     return {};
 }
 
-bool AiChatView::openMessageMenuAt(int message, gfx::Point at) {
+// 1.50.1 : LE CLIC DROIT SUR UN MESSAGE (une demande, une reponse) - Repondre, Copier, Copier avec l'auteur et l'heure, Copier le
+// code, Deballer / Reduire, Tout reduire ; sur une demande envoyee, Creer une mission avec ce message (1.22.6).
+bool AiChatView::openMessageMenuAt(int message, gfx::Point at, int codeBlock) {
     const auto* conv = panel_.assistant().current();
     if (!conv || message < 0 || message >= static_cast<int>(conv->messages.size())) return false;
     const auto& m = conv->messages[static_cast<std::size_t>(message)];
-    if (m.role != "utilisateur" || (m.extra.isObject() && m.extra.has("logiciel"))) return false;
     if (!msgMenu_) {
         msgMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".message")));
-        links_ += msgMenu_->itemChosen->connect([this](int item) {
-            const int msg = std::exchange(msgMenuMessage_, -1);
-            if (item == 1 && msg >= 0) (void)panel_.createMissionFromMessage(msg);
-        });
+        links_ += msgMenu_->itemChosen->connect([this](int item) { runMessageMenu(item); });
     }
-    std::vector<ui::PopupMenu::Item> items;
-    ui::PopupMenu::Item create;
-    create.label = "Cr\xC3\xA9" "er une mission avec ce message";
-    create.icon = ui::Icon::Task;
-    create.id = 1;
     const auto& a = panel_.assistant();
-    if (m.extra.isObject() && m.extra.has("mission")) {
-        create.enabled = false;
-        create.disabledReason = "Ce message fait d\xC3\xA9j\xC3\xA0 partie d'une mission.";
-    } else if (!a.live()) {
-        create.enabled = false;
-        create.disabledReason = "Une mission travaille avec une IA connect\xC3\xA9" "e (Param\xC3\xA8tres de l'Assistant IA).";
-    } else if (a.generating()) {
-        create.enabled = false;
-        create.disabledReason = "Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture.";
+    const bool live = message == a.generatingMessage();
+    const auto item = [](std::string label, int id, ui::Icon icon, bool enabled, std::string why, std::string key = {}) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.id = id;
+        it.icon = icon;
+        it.enabled = enabled;
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        it.shortcut = std::move(key);
+        return it;
+    };
+    const std::string writing = "La r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture.";
+    std::vector<ui::PopupMenu::Item> items;
+    const bool quotable = !chatreply::excerptOf(m.text).empty();
+    items.push_back(item("R\xC3\xA9pondre", 11, ui::Icon::Undo, !live && quotable, live ? writing : std::string("Ce message n'a pas de texte \xC3\xA0 citer.")));
+    items.push_back(item("Copier", 12, ui::Icon::Copy, !live, writing, "Ctrl+C"));
+    items.push_back(item("Copier avec l'auteur et l'heure", 13, ui::Icon::None, !live, writing));
+    std::size_t blocks = 0;
+    if (markdown::hasCode(m.text))
+        for (const auto& seg : markdown::split(m.text)) blocks += seg.kind == markdown::Segment::Kind::Code ? 1 : 0;
+    if (blocks > 0 && codeBlock < 0 && blocks == 1) codeBlock = 0;
+    if (blocks > 0)
+        items.push_back(item("Copier le code", 14, ui::Icon::Copy, codeBlock >= 0 && !live,
+                             live ? writing : "Ce message a " + std::to_string(blocks) + " blocs de code : fais le clic droit sur celui \xC3\xA0 copier."));
+    ui::PopupMenu::Item sep;
+    sep.separator = true;
+    items.push_back(sep);
+    const bool coll = collapsible(message);
+    items.push_back(item(coll && !collapsed(message) ? std::string("R\xC3\xA9" "duire") : std::string("D\xC3\xA9" "baller"), 15, ui::Icon::None, coll,
+                         "Le message se lit en entier."));
+    bool anyOpen = false;
+    for (const auto& b : blocks_) anyOpen = anyOpen || (b.collapsible && !b.collapsed);
+    items.push_back(item("Tout r\xC3\xA9" "duire", 16, ui::Icon::Collapse, anyOpen, "Aucun message d\xC3\xA9" "ball\xC3\xA9."));
+    // 1.22.6 : une demande envoyee - << Creer une mission avec ce message >>.
+    if (m.role == "utilisateur" && !(m.extra.isObject() && m.extra.has("logiciel"))) {
+        items.push_back(sep);
+        ui::PopupMenu::Item create;
+        create.label = "Cr\xC3\xA9" "er une mission avec ce message";
+        create.icon = ui::Icon::Task;
+        create.id = 1;
+        if (m.extra.isObject() && m.extra.has("mission")) {
+            create.enabled = false;
+            create.disabledReason = "Ce message fait d\xC3\xA9j\xC3\xA0 partie d'une mission.";
+        } else if (!a.live()) {
+            create.enabled = false;
+            create.disabledReason = "Une mission travaille avec une IA connect\xC3\xA9" "e (Param\xC3\xA8tres de l'Assistant IA).";
+        } else if (a.generating()) {
+            create.enabled = false;
+            create.disabledReason = "Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture.";
+        }
+        items.push_back(std::move(create));
     }
-    items.push_back(std::move(create));
     msgMenu_->setItems(std::move(items));
     msgMenuMessage_ = message;
+    msgMenuCode_ = codeBlock;
     msgMenu_->setBounds(bounds());
     msgMenu_->openAtSurface(toSurface(at));
     return true;
 }
 
+void AiChatView::runMessageMenu(int item) {
+    const int msg = std::exchange(msgMenuMessage_, -1);
+    const int code = std::exchange(msgMenuCode_, -1);
+    if (msg < 0) return;
+    switch (item) {
+        case 1: (void)panel_.createMissionFromMessage(msg); break;
+        case 11: (void)panel_.replyTo(msg); break;
+        case 12: (void)copyMessage(msg, false); break;
+        case 13: (void)copyMessage(msg, true); break;
+        case 14: (void)copyCodeOf(msg, code); break;
+        case 15: setExpanded(msg, collapsed(msg)); break;
+        case 16: collapseAll(); break;
+        default: break;
+    }
+}
+
 bool AiChatView::openMessageMenu(int message) {
     const gfx::Rect r = bubbleRect(message);
     return openMessageMenuAt(message, r.h > 0.f ? gfx::Point{r.x + r.w / 2.f, r.y + r.h / 2.f} : gfx::Point{bounds().x + bounds().w / 2.f, bounds().y + 40.f});
+}
+
+bool AiChatView::openMessageMenu(int message, int codeBlock) {
+    const gfx::Rect r = messageRect(message);
+    const gfx::Point at = r.h > 0.f ? gfx::Point{r.x + r.w / 2.f, std::clamp(r.y + 20.f, bounds().y, bounds().bottom())} : gfx::Point{bounds().x + bounds().w / 2.f, bounds().y + 40.f};
+    return openMessageMenuAt(message, at, codeBlock);
+}
+
+// ---- 1.50.1 : repondre, reduire / deballer, copier ---------------------------------------------------------------------------
+std::size_t AiChatView::collapseCut(const std::vector<Line>& lines) {
+    // Une rangee : une ligne de texte, l'en-tete d'un bloc de code, une ligne de code (pas la marge du bas d'un bloc).
+    const auto counts = [](const Line& l) { return !(l.code >= 0 && !l.codeHead && l.runs.empty()); };
+    std::size_t rows = 0;
+    for (const auto& l : lines) rows += counts(l) ? 1 : 0;
+    if (rows <= sessionui::kCollapseLines + 1) return lines.size();
+    std::size_t cut = 0, seen = 0;
+    while (cut < lines.size() && seen < sessionui::kCollapseLines) seen += counts(lines[cut++]) ? 1 : 0;
+    while (cut < lines.size() && !counts(lines[cut])) ++cut;   // la marge du bas d'un bloc montre en entier
+    // Jamais au milieu d'un bloc de code : la coupe passe avant lui ; un message qui commence par un bloc garde son en-tete.
+    if (cut < lines.size() && lines[cut].code >= 0 && !lines[cut].codeHead) {
+        std::size_t head = cut;
+        while (head > 0 && !(lines[head].codeHead && lines[head].code == lines[cut].code)) --head;
+        cut = head > 0 ? head : 1;
+    }
+    return std::min(cut, lines.size());
+}
+
+std::string AiChatView::keyOf(int message) const {
+    const auto* conv = panel_.assistant().current();
+    if (!conv || message < 0 || message >= static_cast<int>(conv->messages.size())) return {};
+    return conv->id + "|" + conv->messages[static_cast<std::size_t>(message)].id;
+}
+
+int AiChatView::selectedMessage() const {
+    if (selected_.empty()) return -1;
+    for (const auto& b : blocks_)
+        if (b.key == selected_) return b.message;
+    return -1;
+}
+
+void AiChatView::selectMessage(int message) {
+    const std::string k = keyOf(message);
+    if (k == selected_) return;
+    selected_ = k;
+    invalidate();
+}
+
+bool AiChatView::collapsible(int message) const {
+    for (const auto& b : blocks_)
+        if (b.message == message) return b.collapsible;
+    return false;
+}
+
+bool AiChatView::collapsed(int message) const {
+    for (const auto& b : blocks_)
+        if (b.message == message) return b.collapsed;
+    return false;
+}
+
+void AiChatView::refold() {
+    stick_ = false;
+    anchor_ = false;
+    anchored_ = false;
+    measure();
+    offset_ = std::clamp(offset_, 0.f, std::max(0.f, content_ - viewHeight()));
+    placeCards();
+    invalidateLayout();
+    invalidate();
+}
+
+void AiChatView::setExpanded(int message, bool expanded) {
+    const std::string k = keyOf(message);
+    if (k.empty()) return;
+    fold_[k] = expanded;
+    refold();
+    panel_.say(expanded ? "Message d\xC3\xA9" "ball\xC3\xA9 : il se lit en entier." : "Message r\xC3\xA9" "duit : \xC2\xAB \xE2\x80\xA6 voir tout \xC2\xBB le d\xC3\xA9" "balle.");
+}
+
+void AiChatView::collapseAll() {
+    std::size_t n = 0;
+    for (const auto& b : blocks_)
+        if (b.collapsible) {
+            n += b.collapsed ? 0 : 1;
+            fold_[b.key] = false;
+        }
+    refold();
+    panel_.say(n == 0 ? std::string("Aucun message d\xC3\xA9" "ball\xC3\xA9.") : n == 1 ? std::string("Un message r\xC3\xA9" "duit.") : std::to_string(n) + " messages r\xC3\xA9" "duits.");
+}
+
+bool AiChatView::copyMessage(int message, bool withAuthor) {
+    const auto& a = panel_.assistant();
+    const auto* conv = a.current();
+    if (!conv || message < 0 || message >= static_cast<int>(conv->messages.size())) return false;
+    if (message == a.generatingMessage()) {
+        panel_.say("La r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture : copie-la quand elle est finie.");
+        return false;
+    }
+    ui::setClipboardText(chatreply::copyText(conv->messages[static_cast<std::size_t>(message)], withAuthor));
+    panel_.say(withAuthor ? "Message copi\xC3\xA9 avec l'auteur et l'heure." : "Message copi\xC3\xA9.");
+    return true;
+}
+
+bool AiChatView::copyCodeOf(int message, int block) {
+    const auto* conv = panel_.assistant().current();
+    if (!conv || message < 0 || message >= static_cast<int>(conv->messages.size()) || block < 0) return false;
+    int k = 0;
+    for (const auto& seg : markdown::split(conv->messages[static_cast<std::size_t>(message)].text))
+        if (seg.kind == markdown::Segment::Kind::Code && k++ == block) return copyCode(seg.text);
+    return false;
+}
+
+bool AiChatView::goToQuoted(int message) {
+    const auto* conv = panel_.assistant().current();
+    if (!conv || message < 0 || message >= static_cast<int>(conv->messages.size())) return false;
+    const auto q = chatreply::readQuote(conv->messages[static_cast<std::size_t>(message)]);
+    if (!q) return false;
+    for (std::size_t i = 0; i < conv->messages.size(); ++i)
+        if (conv->messages[i].id == q->id && static_cast<int>(i) != message) {
+            revealMessage(static_cast<int>(i), false);
+            selectMessage(static_cast<int>(i));
+            panel_.say("Le message cit\xC3\xA9 (" + q->who + ").");
+            return true;
+        }
+    panel_.say("Le message cit\xC3\xA9 n'est plus dans la conversation.");
+    return false;
+}
+
+std::string AiChatView::quoteText(int message) const {
+    for (const auto& b : blocks_)
+        if (b.message == message) return b.quote;
+    return {};
+}
+
+std::string AiChatView::toggleText(int message) const {
+    for (const auto& b : blocks_)
+        if (b.message == message) return b.toggle;
+    return {};
+}
+
+std::size_t AiChatView::shownLineCount(int message) const {
+    for (const auto& b : blocks_)
+        if (b.message == message) return b.shown;
+    return 0;
+}
+
+gfx::Rect AiChatView::quoteRect(int message) const {
+    for (const auto& b : blocks_)
+        if (b.message == message && !b.quote.empty())
+            return {bounds().x + b.textX, bounds().y + b.y - offset_ + b.quoteY, ui::measureWidth(b.quote, kMeta) + 8.f, ui::lineHeight(kMeta) + 6.f};
+    return {};
+}
+
+gfx::Rect AiChatView::toggleRect(int message) const {
+    for (const auto& b : blocks_)
+        if (b.message == message && !b.toggle.empty())
+            return {bounds().x + b.textX, bounds().y + b.y - offset_ + b.toggleY, ui::measureWidth(b.toggle, kMeta) + 4.f, ui::lineHeight(kMeta) + 6.f};
+    return {};
+}
+
+gfx::Rect AiChatView::hoverButton(int message, int which) const {
+    if (message < 0 || message != hover_ || which < 0 || which > 1) return {};
+    const auto& a = panel_.assistant();
+    if (message == a.generatingMessage()) return {};
+    const auto* conv = a.current();
+    if (!conv || message >= static_cast<int>(conv->messages.size())) return {};
+    if (which == 0 && chatreply::excerptOf(conv->messages[static_cast<std::size_t>(message)].text).empty()) return {};
+    constexpr float kW = 24.f, kH = 18.f, kGap = 2.f;
+    const auto bb = bounds();
+    for (const auto& b : blocks_) {
+        if (b.message != message) continue;
+        const float top = bb.y + b.y - offset_;
+        const float right = b.user ? bb.right() - kPad - 6.f - b.headW - 8.f : bb.right() - kPad - 6.f - (content_ > viewHeight() ? 8.f : 0.f);
+        const float x = which == 1 ? right - kW : right - 2.f * kW - kGap;
+        const float minX = b.user ? bb.x + kPad : bb.x + kPad + 22.f + b.headW + 6.f;
+        const float y = std::max(top - 1.f, bb.y);   // le haut du message passe sous le bord : les pictogrammes restent dans la vue
+        if (x < minX || y + kH > std::min(bb.bottom(), top + b.h)) return {};   // trop etroit, hors de la vue : le clic droit reste
+        return {x, y, kW, kH};
+    }
+    return {};
+}
+
+int AiChatView::messageAt(gfx::Point p) const {
+    const auto bb = bounds();
+    if (!bb.contains(p)) return -1;
+    for (const auto& b : blocks_) {
+        const float top = bb.y + b.y - offset_;
+        if (p.y >= top - 4.f && p.y < top + b.h + 4.f) return b.message;
+    }
+    return -1;
 }
 
 std::vector<std::string> AiChatView::messageMenuItems() const {
@@ -4915,7 +5303,42 @@ ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
             hoverSuggestion_ = h;
             invalidate();
         }
+        // 1.50.1 : le message survole (ses pictogrammes Repondre, Copier).
+        if (const int mh = messageAt(m->pos); mh != hover_) {
+            hover_ = mh;
+            invalidate();
+        }
         return ui::EventResult::Ignored;
+    }
+    // ---- 1.50.1 : le clavier sur le message choisi - Ctrl+C le copie, la touche Menu (Maj+F10) ouvre son clic droit, Haut et
+    // Bas en choisissent un autre, Echap rend le clavier a la saisie ; une lettre tapee va dans la saisie. ----
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && focused()) {
+        const int sel = selectedMessage();
+        if (k->key == ui::Key::C && k->mods.ctrl && !k->mods.shift && !k->mods.alt && sel >= 0) {
+            (void)copyMessage(sel, false);
+            return ui::EventResult::Consumed;
+        }
+        if (ui::isContextMenuKey(*k) && sel >= 0) {
+            (void)openMessageMenu(sel, -1);
+            return ui::EventResult::Consumed;
+        }
+        if ((k->key == ui::Key::Up || k->key == ui::Key::Down) && k->mods.none() && !blocks_.empty()) {
+            const int n = static_cast<int>(blocks_.size());
+            const int next = sel < 0 ? n - 1 : std::clamp(sel + (k->key == ui::Key::Up ? -1 : 1), 0, n - 1);
+            revealMessage(next, false);
+            selectMessage(next);
+            return ui::EventResult::Consumed;
+        }
+        if (k->key == ui::Key::Escape && sel >= 0) {
+            selectMessage(-1);
+            panel_.prompt().takeFocus();
+            return ui::EventResult::Consumed;
+        }
+    }
+    if (const auto* t = std::get_if<ui::TextInput>(&ev); t && focused() && !t->utf8.empty()) {
+        panel_.prompt().takeFocus();
+        panel_.prompt().insertText(t->utf8);
+        return ui::EventResult::Consumed;
     }
     // 1.22.1 : LE CLIC DROIT sur une erreur (ou un avertissement) d'une carte : le menu des corrections.
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right)
@@ -4924,10 +5347,17 @@ ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
                 (void)openNoteMenuAt(spot.message, spot.note, d->pos);
                 return ui::EventResult::Consumed;
             }
-    // 1.22.6 : LE CLIC DROIT sur un message envoye : << Creer une mission avec ce message >>.
+    // 1.22.6 : LE CLIC DROIT sur un message envoye : << Creer une mission avec ce message >>. 1.50.1 : sur tout message (une
+    // demande, une reponse) - Repondre, Copier, Copier le code (sur un bloc), Deballer / Reduire, Tout reduire.
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right)
-        for (const auto& b : blocks_)
-            if (b.user && bubbleRect(b.message).contains(d->pos) && openMessageMenuAt(b.message, d->pos)) return ui::EventResult::Consumed;
+        if (const int at = messageAt(d->pos); at >= 0) {
+            int code = -1;
+            for (const auto& [box, which] : codeSpots_)
+                if (which.first == at && box.contains(d->pos)) code = which.second;
+            grabFocus();
+            selectMessage(at);
+            if (openMessageMenuAt(at, d->pos, code)) return ui::EventResult::Consumed;
+        }
     // 1.22.6 : << Mission << X >> creee - Ouvrir >> : un clic ouvre son tableau de bord.
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left)
         if (const auto* conv = panel_.assistant().current())
@@ -4952,6 +5382,27 @@ ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
                 (void)copyCode(code);
                 return ui::EventResult::Consumed;
             }
+        // 1.50.1 : les pictogrammes du survol (Repondre, Copier), l'extrait cite (le message cite), << ... voir tout >> / << Reduire >>.
+        for (const auto& b : blocks_) {
+            if (hoverButton(b.message, 0).contains(d->pos)) {
+                (void)panel_.replyTo(b.message);
+                return ui::EventResult::Consumed;
+            }
+            if (hoverButton(b.message, 1).contains(d->pos)) {
+                selectMessage(b.message);
+                (void)copyMessage(b.message, false);
+                return ui::EventResult::Consumed;
+            }
+            if (quoteRect(b.message).contains(d->pos)) {
+                if (!goToQuoted(b.message)) selectMessage(b.message);
+                return ui::EventResult::Consumed;
+            }
+            if (toggleRect(b.message).contains(d->pos)) {
+                const int msg = b.message;   // setExpanded refait blocks_
+                setExpanded(msg, collapsed(msg));
+                return ui::EventResult::Consumed;
+            }
+        }
         // 1.22.6 : le << + >> d'un bilan (le detail par action) ; l'icone de l'activite (les etapes passees).
         for (const auto& [at, message] : billSpots_)
             if (at.contains(d->pos)) {
@@ -5019,6 +5470,12 @@ ui::EventResult AiChatView::onEvent(const ui::InputEvent& ev) {
                 panel_.openPreview(b.message);
                 return ui::EventResult::Consumed;
             }
+        // 1.50.1 : un clic sur un message (hors de sa carte) le choisit : Ctrl+C le copie, le clic droit le reprend.
+        if (const int at = messageAt(d->pos); at >= 0 && !cardRect(at).contains(d->pos)) {
+            grabFocus();
+            selectMessage(at);
+            return ui::EventResult::Consumed;
+        }
     }
     return ui::EventResult::Ignored;
 }

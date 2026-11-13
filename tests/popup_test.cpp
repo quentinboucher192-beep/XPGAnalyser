@@ -336,6 +336,25 @@ int main() {
         for (const auto& d : r.draws)
             assert(d.at.x >= 0.f && d.at.y >= 0.f && d.at.x < 800.f && d.at.y < 600.f
                 && "nothing may be drawn off the surface");
+
+        // 1.50.1 : UNE PASTILLE (<< nouveau >>) - dessinee apres le libelle, en capitales, la colonne elargie pour elle.
+        const float without = menu->popupRect().w;
+        PopupMenu::Item fresh{ "Publish", "", "", Icon::Export, true, false, 2 };
+        fresh.badge = "nouveau";
+        menu->setItems({ {"Open", "", "", Icon::Open, true, false, 1}, fresh });
+        menu->openAt({ 100.f, 100.f }, { 800.f, 600.f });
+        renderFrame();
+        assert(r.countVisible("NOUVEAU") == 1 && "the badge is drawn once, upper-case");
+        assert(menu->popupRect().w >= without + tagPillWidth("nouveau") && "the column makes room for the badge");
+        float labelX = -1.f, badgeX = -1.f;
+        for (const auto& d : r.draws) {
+            if (d.text == "Publish") labelX = d.at.x;
+            if (d.text == "NOUVEAU") badgeX = d.at.x;
+        }
+        assert(badgeX > labelX + 7.f * 8.f && "after the label");
+        assert(tagPillText("nouveau") == "NOUVEAU" && tagPillWidth("") == 0.f);
+        const auto bc = tagPillColors(theme, Tone::New);
+        assert(!(bc.ink.r == bc.fill.r && bc.ink.g == bc.fill.g && bc.ink.b == bc.fill.b) && "ink and fill differ");
     }
 
     // ===================== 1.12.18 : le menu lui-meme ======================

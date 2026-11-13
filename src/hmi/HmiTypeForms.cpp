@@ -131,7 +131,7 @@ std::string_view label(Form f) noexcept {
     switch (f) {
         case Form::Simple: return "Simple";
         case Form::Array: return "Tableau";
-        case Form::Array2D: return "Tableau 2D";
+        case Form::Array2D: return "Tableau \xC3\xA0 N dimensions";      // 1.50.1 : avant, Tableau 2D (deux au plus)
         case Form::List: return "Liste";
         case Form::Vector: return "Vecteur";
         case Form::Map: return "Dictionnaire (MAP)";
@@ -165,9 +165,41 @@ std::optional<Form> fromText(std::string_view text) noexcept {
     if (sameText(t, "LIST")) return Form::List;
     if (sameText(t, "VECTOR")) return Form::Vector;
     if (sameText(t, "ARRAY")) return Form::Array;
+    // 1.50.1 : l'ancien libelle (Tableau 2D) et les ecritures courtes du nouveau.
+    if (sameText(t, "Tableau 2D") || sameText(t, "tableaund") || sameText(t, "Tableau a N dimensions") || sameText(t, "Tableau N dimensions")
+        || sameText(t, "Tableau 3D"))
+        return Form::Array2D;
     if (sameText(t, "SET") || sameText(t, "Ensemble")) return Form::Set;      // 1.12.7
     if (sameText(t, "RING") || sameText(t, "Tampon")) return Form::Ring;
     return std::nullopt;
+}
+
+std::size_t dimensionsOf(std::string_view bounds) {
+    std::size_t n = 0;
+    for (const auto& part : splitTop(bounds))
+        if (!trimmed(part).empty()) ++n;
+    return n;
+}
+
+std::string withDimension(std::string_view bounds) {
+    std::vector<std::string> parts;
+    for (const auto& part : splitTop(bounds))
+        if (!trimmed(part).empty()) parts.push_back(trimmed(part));
+    if (parts.empty()) return "0..9";
+    parts.push_back(parts.back());                      // la derniere recopiee : 0..3, 0..9 -> 0..3, 0..9, 0..9
+    std::string out;
+    for (const auto& part : parts) out += (out.empty() ? "" : ", ") + part;
+    return out;
+}
+
+std::string withoutDimension(std::string_view bounds) {
+    std::vector<std::string> parts;
+    for (const auto& part : splitTop(bounds))
+        if (!trimmed(part).empty()) parts.push_back(trimmed(part));
+    if (parts.size() > 1) parts.pop_back();
+    std::string out;
+    for (const auto& part : parts) out += (out.empty() ? "" : ", ") + part;
+    return out.empty() ? std::string("0..9") : out;
 }
 
 std::string_view parameterLabel(Form f) noexcept {
@@ -184,7 +216,7 @@ std::string_view parameterLabel(Form f) noexcept {
 std::string_view parameterHint(Form f) noexcept {
     switch (f) {
         case Form::Array: return "0..9 : 10 cases ; 1..4 ; -5..5";
-        case Form::Array2D: return "0..3, 0..9 : 4 lignes de 10 colonnes";
+        case Form::Array2D: return "0..3, 0..9 : 4 lignes de 10 colonnes ; 0..1, 0..3, 0..9 : trois dimensions (+ Dimension en ajoute une)";
         case Form::Map: return "le type des cl\xC3\xA9s : STRING, un entier (DINT) ou une \xC3\xA9num\xC3\xA9ration";
         case Form::Tuple: return "les types qui suivent le premier : STRING, BOOL";
         case Form::Ring: return "100 : les 100 derni\xC3\xA8res valeurs (1 \xC3\xA0 100000)";
@@ -207,7 +239,7 @@ std::string_view summary(Form f) noexcept {
     switch (f) {
         case Form::Simple: return "Une seule valeur.";
         case Form::Array: return "Un tableau de taille fixe : T[i], T.Length ; li\xC3\xA9, ses cases suivent son adresse.";
-        case Form::Array2D: return "Un tableau \xC3\xA0 deux dimensions : M[i, j], M.Rows, M.Columns.";
+        case Form::Array2D: return "Un tableau \xC3\xA0 plusieurs dimensions : M[i, j], C[i, j, k] (ou C[i][j][k]), C[i] : une couche ; M.Rows, M.Dimensions.";
         case Form::List:
             return "Une liste de taille variable : L[0], L.Count, LIST_ADD, LIST_REMOVE, FOR EACH x IN L - dans la m\xC3\xA9moire de l'IHM.";
         case Form::Vector:
@@ -227,8 +259,8 @@ std::string_view summary(Form f) noexcept {
 std::string_view valueHint(Form f) noexcept {
     switch (f) {
         case Form::Simple: return "0, TRUE, 2.5, 'texte', T#5s";
-        case Form::Array:
-        case Form::Array2D: return "0 (toutes les cases), 1, 2, 3 ou [1, 2, 3]";
+        case Form::Array: return "0 (toutes les cases), 1, 2, 3 ou [1, 2, 3]";
+        case Form::Array2D: return "0 (toutes les cases) ou une liste par ligne : [[1, 2], [3, 4]]";
         case Form::List:
         case Form::Vector: return "[1, 2, 3] (vide : vide)";
         case Form::Map: return "['a' := 1, 'b' := 2] (vide : vide)";

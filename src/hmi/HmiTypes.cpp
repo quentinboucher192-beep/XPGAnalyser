@@ -127,9 +127,31 @@ bool rangeOf(std::string_view s, long long& lo, long long& hi, std::string* why)
     return true;
 }
 
-// Le chemin d'une case : "Consignes[3]", "Matrice[2,7]".
+// Le chemin d'une case : "Consignes[3]", "Matrice[2,7]" ; 1.50.1 : "Cube[1,2,3]" (autant d'indices que de dimensions).
 std::string indexText(long long i) { return "[" + std::to_string(i) + "]"; }
-std::string indexText(long long i, long long j) { return "[" + std::to_string(i) + "," + std::to_string(j) + "]"; }
+std::string indexText(const std::vector<long long>& at) {
+    std::string out = "[";
+    for (std::size_t d = 0; d < at.size(); ++d) out += (d ? "," : "") + std::to_string(at[d]);
+    return out + "]";
+}
+// 1.50.1 : un nombre lisible, par milliers : "10 000 000".
+std::string groupedNumber(long long n) {
+    std::string digits = std::to_string(n < 0 ? -n : n), out;
+    for (std::size_t i = 0; i < digits.size(); ++i) {
+        if (i && (digits.size() - i) % 3 == 0) out += ' ';
+        out += digits[i];
+    }
+    return (n < 0 ? "-" : "") + out;
+}
+// 1.50.1 : la case suivante, la derniere dimension la plus vite (faux : apres la derniere case).
+bool nextCell(const Spec& s, std::vector<long long>& at) {
+    for (int d = s.dims - 1; d >= 0; --d) {
+        const auto k = static_cast<std::size_t>(d);
+        if (++at[k] <= s.high[k]) return true;
+        at[k] = s.low[k];
+    }
+    return false;
+}
 
 // Une liste "1.5, 2, 'a,b', 3" -> ses valeurs (les virgules entre guillemets ou
 // entre parentheses ne coupent pas). Une seule valeur : une liste d'un.
@@ -171,12 +193,15 @@ std::vector<std::string> arrayInitials(std::string_view initial, bool& bracketed
         if (whole) {
             bracketed = true;
             std::vector<std::string> out;
-            for (auto& item : splitList(std::string_view(t).substr(1, t.size() - 2))) {
-                if (item.size() >= 2 && item.front() == '[' && item.back() == ']')
-                    for (auto& x : splitList(std::string_view(item).substr(1, item.size() - 2))) out.push_back(std::move(x));
-                else if (!item.empty())
+            // 1.50.1 : a toute profondeur - [[[1, 2], [3, 4]], [[5, 6], [7, 8]]] pour trois dimensions, couche par couche.
+            const std::function<void(std::string)> add = [&](std::string item) {
+                if (item.size() >= 2 && item.front() == '[' && item.back() == ']') {
+                    for (auto& x : splitList(std::string_view(item).substr(1, item.size() - 2))) add(std::move(x));
+                } else if (!item.empty()) {
                     out.push_back(std::move(item));
-            }
+                }
+            };
+            for (auto& item : splitList(std::string_view(t).substr(1, t.size() - 2))) add(std::move(item));
             return out;
         }
     }
@@ -300,7 +325,10 @@ struct Walker {
         }
         if (s.array()) {
             if (s.length() > kMaxElements || static_cast<long long>(out.leaves.size()) + s.length() > kMaxElements) {
-                out.error = path + " : plus de " + std::to_string(kMaxElements) + " cases";
+                // 1.50.1 : un tableau plus grand vit entier dans la memoire de l'IHM (isBigArray) ; ici, des cases a deplier
+                // une par une (chacune sa place Modbus) : un tableau de structures, une structure qui en porte trop.
+                out.error = path + " : plus de " + groupedNumber(kMaxElements) + " cases \xC3\xA0 d\xC3\xA9plier une par une (chacune sa place Modbus) "
+                            "- un tableau de valeurs simples plus grand vit entier dans la m\xC3\xA9moire de l'IHM, sans \xC3\xA9quipement";
                 return;
             }
             cur.close();
@@ -329,13 +357,11 @@ struct Walker {
                 if (!perElement) return trimmed(initial);
                 return k < static_cast<long long>(list.size()) ? list[static_cast<std::size_t>(k)] : std::string{};
             };
-            if (s.dims == 1) {
-                for (long long i = s.low[0]; i <= s.high[0] && out.error.empty(); ++i, ++k)
-                    walk(path + indexText(i), rel + indexText(i), s.element, elementInit(), description);
-            } else {
-                for (long long i = s.low[0]; i <= s.high[0] && out.error.empty(); ++i)
-                    for (long long j = s.low[1]; j <= s.high[1] && out.error.empty(); ++j, ++k)
-                        walk(path + indexText(i, j), rel + indexText(i, j), s.element, elementInit(), description);
+            // 1.50.1 : autant de dimensions qu'on veut - Cube[0,0,0], Cube[0,0,1]... la derniere varie le plus vite.
+            std::vector<long long> at(s.low);
+            for (bool more = s.length() > 0; more && out.error.empty(); more = nextCell(s, at), ++k) {
+                const std::string cell = s.dims == 1 ? indexText(at[0]) : indexText(at);
+                walk(path + cell, rel + cell, s.element, elementInit(), description);
             }
             cur.close();
             a.weight.words = cur.word - start;
@@ -557,7 +583,8 @@ bool genericUse(const Project& p, std::string_view name, std::string* why) {
 }
 } // namespace
 
-bool parseSpec(std::string_view text, Spec& out, std::string* why) {
+// La forme d'un type (ses bornes lues), sans la garde de la memoire (parseSpec la fait, une fois, en tete).
+bool parseSpecShape(std::string_view text, Spec& out, std::string* why) {
     out = Spec{};
     const std::string t = trimmed(text);
     if (t.empty()) return fail(why, "type vide");
@@ -583,34 +610,104 @@ bool parseSpec(std::string_view text, Spec& out, std::string* why) {
     Spec inner;
     if (nested) {
         std::string innerWhy;
-        if (!parseSpec(element, inner, &innerWhy)) return fail(why, "tableau \xC2\xAB " + t + " \xC2\xBB : ses cases : " + innerWhy);
+        if (!parseSpecShape(element, inner, &innerWhy)) return fail(why, "tableau \xC2\xAB " + t + " \xC2\xBB : ses cases : " + innerWhy);
     } else if (!typeWord(element)) {
         return fail(why, "tableau \xC2\xAB " + t + " \xC2\xBB : type des cases illisible");
     }
+    // 1.50.1 : AUTANT DE DIMENSIONS QU'ON VEUT (ARRAY[0..3, 0..7, 0..15] OF BOOL), comme l'IEC 61131-3 ; avant : deux au plus.
     const auto parts = splitList(inside);
-    if (parts.size() > 2)
-        return fail(why, "un tableau a une ou deux dimensions (ARRAY[0..3, 0..9] OF INT) ; plus : un tableau de tableaux "
-                         "(ARRAY[0..1] OF ARRAY[0..3, 0..9] OF INT)");
+    out.low.assign(parts.size(), 0);
+    out.high.assign(parts.size(), -1);
     for (std::size_t d = 0; d < parts.size(); ++d)
-        if (!rangeOf(parts[d], out.low[d], out.high[d], why)) return false;
+        if (!rangeOf(parts[d], out.low[d], out.high[d], why)) {
+            out = Spec{};
+            return false;
+        }
     out.dims = static_cast<int>(parts.size());
     out.element = nested ? specText(inner) : isElementary(element) ? upperOf(element) : genericText(element);
-    long long cells = out.length();
-    for (Spec level = inner; nested && level.array();) {        // les cases de tous les niveaux
-        cells *= level.length();
-        const std::string next = level.element;
-        if (cells > kMaxElements || !parseSpec(next, level)) break;
+    return true;
+}
+
+bool parseSpec(std::string_view text, Spec& out, std::string* why) {
+    if (!parseSpecShape(text, out, why)) return false;
+    if (!out.array()) return true;
+    const std::string t = trimmed(text);
+    // 1.50.1 : LA SEULE LIMITE, LA MEMOIRE - plus de << 100 000 cases au plus >> : un grand tableau vit entier dans la memoire
+    // de l'IHM, ses valeurs simples rangees serrees (un BOOL : 1 bit). Refuse seulement ce qui n'y tiendrait pas (1 Go).
+    const long long bytes = memoryOf(t);
+    if (bytes > kMaxArrayBytes) {
+        const long long cells = totalCells(t);
+        out = Spec{};
+        return fail(why, "tableau trop grand : " + groupedNumber(cells) + " case" + (cells > 1 ? "s" : "") + " "
+                             + leafElement(t) + ", environ " + memoryText(bytes) + " en m\xC3\xA9moire ("
+                             + memoryText(kMaxArrayBytes) + " au plus par variable)");
     }
-    if (out.length() > kMaxElements || cells > kMaxElements)
-        return fail(why, "tableau de " + std::to_string(cells) + " cases : " + std::to_string(kMaxElements) + " au plus");
     return true;
 }
 
 std::string specText(const Spec& s) {
     if (!s.array()) return s.element;
-    std::string out = "ARRAY[" + std::to_string(s.low[0]) + ".." + std::to_string(s.high[0]);
-    if (s.dims == 2) out += ", " + std::to_string(s.low[1]) + ".." + std::to_string(s.high[1]);
+    std::string out = "ARRAY[";
+    for (int d = 0; d < s.dims; ++d) {
+        const auto k = static_cast<std::size_t>(d);
+        out += (d ? ", " : "") + std::to_string(s.low[k]) + ".." + std::to_string(s.high[k]);
+    }
     return out + "] OF " + s.element;
+}
+
+long long totalCells(std::string_view type) {
+    Spec s;
+    if (!parseSpecShape(type, s)) return 1;
+    long long n = 1;
+    for (int guard = 0; s.array() && guard < 64; ++guard) {
+        const long long c = s.length();
+        n = c > 0 && n > Spec::kMaxCellsGuard / c ? Spec::kMaxCellsGuard : n * c;
+        const std::string next = s.element;
+        if (!isArrayText(next) || !parseSpecShape(next, s)) break;
+    }
+    return n;
+}
+
+std::string leafElement(std::string_view type) {
+    Spec s;
+    if (!parseSpecShape(type, s)) return trimmed(type);
+    for (int guard = 0; s.array() && isArrayText(s.element) && guard < 64; ++guard) {
+        const std::string next = s.element;
+        if (!parseSpecShape(next, s)) break;
+    }
+    return s.element;
+}
+
+bool isBigArray(std::string_view type) {
+    if (!isArrayText(trimmed(type))) return false;
+    return totalCells(type) > kMaxElements;
+}
+
+long long memoryOf(std::string_view type) {
+    const long long cells = totalCells(type);
+    if (cells <= 1 && !isArrayText(trimmed(type))) return sim::objectBytes();
+    const std::string leaf = upperOf(leafElement(type));
+    const sim::Type st = isElementary(leaf) ? sim::typeFromName(leaf) : sim::Type::Unknown;
+    // Une case simple d'un grand tableau : rangee serree (sim::cellBytes) ; sinon un objet par case (une structure : au
+    // moins un, ses membres en plus - le moteur les compte en entier quand il la cree).
+    const bool packed = st != sim::Type::Unknown && cells >= sim::packFrom();
+    const long double per = packed ? sim::cellBytes(st) : static_cast<long double>(sim::objectBytes());
+    const long double total = per * static_cast<long double>(cells) + static_cast<long double>(sim::objectBytes());
+    return total > static_cast<long double>(Spec::kMaxCellsGuard) ? Spec::kMaxCellsGuard : static_cast<long long>(total);
+}
+
+std::string memoryText(long long bytes) { return sim::memoryText(bytes); }
+
+std::string cellText(const Spec& s, long long flat) {
+    if (!s.array() || flat < 0 || flat >= s.length()) return {};
+    std::vector<long long> at(static_cast<std::size_t>(s.dims));
+    for (int d = s.dims - 1; d >= 0; --d) {
+        const auto k = static_cast<std::size_t>(d);
+        const long long n = s.count(d);
+        at[k] = s.low[k] + (n > 0 ? flat % n : 0);
+        flat = n > 0 ? flat / n : 0;
+    }
+    return indexText(at);
 }
 
 std::string normalized(std::string_view type) {
@@ -624,6 +721,10 @@ std::string normalized(std::string_view type) {
 }
 
 bool validType(const Project& p, std::string_view type, std::string* why) {
+    if (isBigArray(type)) {                                   // 1.50.1 : un grand tableau - la garde de la memoire d'abord
+        Spec big;
+        if (!parseSpec(type, big, why)) return false;
+    }
     if (isRich(type)) {                                       // 1.12.2
         const auto r = typereg::Registry::build(p)->resolve(type, typereg::UseVariable);
         if (!r.ok) return fail(why, r.why.empty() ? "type illisible \xC2\xAB " + trimmed(type) + " \xC2\xBB" : r.why);
@@ -698,6 +799,9 @@ std::string interfaceAsData(const Project& p, std::string_view type, bool declar
 bool isRich(std::string_view type) {
     const std::string t = trimmed(type);
     if (t.empty() || typeWord(t)) return false;                // un nom : elementaire ou type IHM (1.12.20 : T_Mesure<REAL>)
+    // 1.50.1 : un GRAND TABLEAU (plus de kMaxElements cases) vit entier dans la memoire de l'IHM, comme une liste : un
+    // objet du moteur, ses valeurs rangees serrees - il ne se deplie pas en cases, n'a ni equipement ni adresse.
+    if (isBigArray(t)) return true;
     const std::string u = upperOf(t);
     // Les mots qui ouvrent un type objet (ailleurs que dans les bornes d'un ARRAY).
     if (u.find("LIST") == std::string::npos && u.find("VECTOR") == std::string::npos && u.find("MAP") == std::string::npos
@@ -730,6 +834,11 @@ bool isDynamic(std::string_view type) {
 std::string unbindableReason(std::string_view type) {
     if (!isRich(type)) return {};
     const std::string t = normalized(type);
+    if (isBigArray(t) && !isDynamic(t))                      // 1.50.1 : un grand tableau
+        return "un tableau de " + groupedNumber(totalCells(t)) + " cases (plus de " + groupedNumber(kMaxElements)
+               + ") vit entier dans la m\xC3\xA9moire de l'IHM (ses valeurs rang\xC3\xA9" "es serr\xC3\xA9" "es, environ "
+               + memoryText(memoryOf(t)) + ") : ni \xC3\xA9quipement, ni adresse - pour le lier, d\xC3\xA9" "coupe-le en tableaux de "
+               + groupedNumber(kMaxElements) + " cases au plus";
     if (upperOf(t).rfind("CALLBACK", 0) == 0)                 // 1.12.19 : un rappel
         return "un rappel (" + t + ") vise une fonction : il vit dans la m\xC3\xA9moire de l'IHM (ni \xC3\xA9quipement, ni adresse)";
     if (isDynamic(type))
@@ -1060,14 +1169,20 @@ struct IntFormula {
                 }
                 return fault(std::string(s.substr(from, p - from)) + " inconnu : " + list + " seulement");
             }
-            if (name == "I" || name == "J") {
-                const std::size_t k = name == "I" ? 0 : 1;
-                if (k >= idx.size())
-                    return fault(name == "I" ? std::string("i : pas d'indice [*] ici") : std::string("j : une seule dimension (i seulement)"));
+            // 1.50.1 : i, j, k, l - les indices des [*] dans l'ordre (un tableau a trois ou quatre dimensions).
+            if (name == "I" || name == "J" || name == "K" || name == "L") {
+                const std::size_t k = static_cast<std::size_t>(name[0] - 'I');
+                if (k >= idx.size()) {
+                    if (k == 0) return fault(std::string("i : pas d'indice [*] ici"));
+                    if (k == 1) return fault(std::string("j : une seule dimension (i seulement)"));
+                    static const char* const kHave[] = {"i", "i et j", "i, j et k"};
+                    return fault(std::string(1, static_cast<char>(std::tolower(static_cast<unsigned char>(name[0])))) + " inconnu : "
+                                 + std::to_string(idx.size()) + " dimension" + (idx.size() > 1 ? "s" : "") + " (" + kHave[idx.size() - 1] + " seulement)");
+                }
                 v = idx[k];
                 return true;
             }
-            return fault(std::string(s.substr(from, p - from)) + " inconnu : i et j seulement");
+            return fault(std::string(s.substr(from, p - from)) + " inconnu : i, j, k et l seulement");
         }
         return fault(std::string("\xC2\xAB ") + c + " \xC2\xBB : + - * / MOD ( ) seulement");
     }
@@ -1485,16 +1600,16 @@ std::string spanTextOf(const std::vector<Variable>& leaves, std::string_view sta
 // -------------------------------------------------- les proprietes ----------
 const std::vector<PropertyInfo>& properties() {
     static const std::vector<PropertyInfo> all = {
-        {"Length", "DINT", "le nombre de cases (toutes, pour deux dimensions : Rows \xC3\x97 Columns)", true, false},
+        {"Length", "DINT", "le nombre de cases (toutes : pour deux dimensions, Rows \xC3\x97 Columns ; pour trois, leur produit)", true, false},
         {"Size", "DINT", "le m\xC3\xAAme que Length, sous son autre nom", true, false},
         {"MaxSize", "DINT", "la capacit\xC3\xA9 d\xC3\xA9" "clar\xC3\xA9" "e ; un tableau a une taille fixe : \xC3\xA9gale \xC3\xA0 Length", true, false},
         {"Low", "DINT", "la borne basse (de la premi\xC3\xA8re dimension)", true, false},
         {"High", "DINT", "la borne haute (de la premi\xC3\xA8re dimension)", true, false},
-        {"Low2", "DINT", "la borne basse de la deuxi\xC3\xA8me dimension", true, true},
-        {"High2", "DINT", "la borne haute de la deuxi\xC3\xA8me dimension", true, true},
+        {"Low2", "DINT", "la borne basse de la deuxi\xC3\xA8me dimension (LOWER_BOUND(t, 3) pour la troisi\xC3\xA8me)", true, true},
+        {"High2", "DINT", "la borne haute de la deuxi\xC3\xA8me dimension (UPPER_BOUND(t, 3) pour la troisi\xC3\xA8me)", true, true},
         {"Rows", "DINT", "le nombre de lignes (la premi\xC3\xA8re dimension)", true, false},
         {"Columns", "DINT", "le nombre de colonnes (la deuxi\xC3\xA8me dimension ; 1 pour un tableau \xC3\xA0 une dimension)", true, false},
-        {"Dimensions", "INT", "1 ou 2", true, false},
+        {"Dimensions", "INT", "le nombre de dimensions (1, 2, 3...)", true, false},
         {"Bytes", "DINT", "le poids en octets (la place Modbus : 2 octets par mot)", false, false},
         {"Words", "DINT", "le poids en mots Modbus de 16 bits", false, false},
         {"ElementBytes", "DINT", "le poids d'une case, en octets (un BOOL : 1)", true, false},
@@ -1521,12 +1636,13 @@ bool propertyValue(const Aggregate& a, std::string_view name, sim::Value& out) {
     if (n == "WORDS") return dint(a.weight.words);
     const Spec& s = a.spec;
     if (n == "LENGTH" || n == "SIZE" || n == "MAXSIZE") return dint(s.length());
+    if (!s.array()) return false;
     if (n == "LOW") return dint(s.low[0]);
     if (n == "HIGH") return dint(s.high[0]);
-    if (n == "LOW2") return dint(s.dims == 2 ? s.low[1] : 0);
-    if (n == "HIGH2") return dint(s.dims == 2 ? s.high[1] : 0);
+    if (n == "LOW2") return dint(s.dims >= 2 ? s.low[1] : 0);          // 1.50.1 : deux dimensions ou plus
+    if (n == "HIGH2") return dint(s.dims >= 2 ? s.high[1] : 0);
     if (n == "ROWS") return dint(s.count(0));
-    if (n == "COLUMNS") return dint(s.dims == 2 ? s.count(1) : 1);
+    if (n == "COLUMNS") return dint(s.dims >= 2 ? s.count(1) : 1);
     if (n == "DIMENSIONS") {
         out = sim::Value::integer(sim::Type::Int, s.dims);
         return true;
@@ -1730,7 +1846,13 @@ std::string typeOfPath(const Project& p, std::string_view path) {
             }
             continue;
         }
-        if (pending > 0) return {};                             // une case pas complete (a[1] sur deux dimensions)
+        // 1.50.1 : une case pas complete (a[1] sur deux dimensions, a[1, 2] sur trois) : le SOUS-TABLEAU, ses dimensions
+        // restantes (a[1] : ARRAY[0..15] OF BOOL) - lu comme un tableau (a[1].Length), passe en entier.
+        if (pending > 0) {
+            type = subArrayType(type, pending);
+            if (type.empty()) return {};
+            pending = 0;
+        }
         if (c == '.') {
             std::size_t j = i + 1;
             while (j < path.size() && (std::isalnum(static_cast<unsigned char>(path[j])) || path[j] == '_')) ++j;
@@ -1742,7 +1864,17 @@ std::string typeOfPath(const Project& p, std::string_view path) {
         }
         return {};
     }
-    return pending > 0 ? std::string{} : type;
+    return pending > 0 ? subArrayType(type, pending) : type;
+}
+
+std::string subArrayType(std::string_view type, std::size_t taken) {
+    Spec s;
+    if (!parseSpecShape(type, s) || !s.array() || taken >= static_cast<std::size_t>(s.dims)) return {};
+    Spec rest = s;
+    rest.low.erase(rest.low.begin(), rest.low.begin() + static_cast<std::ptrdiff_t>(taken));
+    rest.high.erase(rest.high.begin(), rest.high.begin() + static_cast<std::ptrdiff_t>(taken));
+    rest.dims = s.dims - static_cast<int>(taken);
+    return specText(rest);
 }
 
 const HmiType* typeFrom(const Project& p, std::string_view nsIn, std::string_view nameIn, const HmiType* self) {
@@ -1825,8 +1957,10 @@ Whole wholeOf(const Project* project, std::string_view type, std::string_view sh
         case typeform::Form::Array2D: {
             Spec spec;
             std::string first = shape.form == typeform::Form::Array2D ? "0, 0" : "0";
-            if (parseSpec(t, spec) && spec.array())
-                first = std::to_string(spec.low[0]) + (spec.dims > 1 ? ", " + std::to_string(spec.low[1]) : std::string{});
+            if (parseSpecShape(t, spec) && spec.array()) {            // 1.50.1 : autant d'indices que de dimensions
+                first.clear();
+                for (int d = 0; d < spec.dims; ++d) first += (d ? ", " : "") + std::to_string(spec.low[static_cast<std::size_t>(d)]);
+            }
             set("un tableau", "un tableau entier", "un \xC3\xA9l\xC3\xA9ment : " + s + "[" + first + "]");
             break;
         }
@@ -1850,8 +1984,13 @@ std::string summary(const Project& p, std::string_view type, bool packBools) {
     const Weight w = weightOf(p, type, packBools);
     const std::string words = std::to_string(w.words) + " mot" + (w.words > 1 ? "s" : "");
     if (s.array()) {
-        std::string dims = std::to_string(s.low[0]) + ".." + std::to_string(s.high[0]);
-        if (s.dims == 2) dims += ", " + std::to_string(s.low[1]) + ".." + std::to_string(s.high[1]);
+        std::string dims;
+        for (int d = 0; d < s.dims; ++d)
+            dims += (d ? ", " : "") + std::to_string(s.low[static_cast<std::size_t>(d)]) + ".." + std::to_string(s.high[static_cast<std::size_t>(d)]);
+        // 1.50.1 : un grand tableau n'a pas de place Modbus - sa memoire dans l'IHM.
+        if (isBigArray(type))
+            return "tableau de " + groupedNumber(totalCells(type)) + " " + leafElement(type) + " (" + dims + "), dans la m\xC3\xA9moire de l'IHM ("
+                   + memoryText(memoryOf(type)) + ")";
         return "tableau de " + std::to_string(s.length()) + " " + s.element + " (" + dims + "), " + words;
     }
     if (isElementary(s.element)) return s.element + ", " + words;
@@ -1944,8 +2083,8 @@ std::vector<PathProblem> pathProblems(const Project& p, std::string_view source)
         while (true) {
             // 1.12.14 : un objet (une LIST, une MAP, un tuple, a toute profondeur) : ses indices et ses
             // membres (L[0], M['cle'][2].Niveau, T.Item1, L.Count) se verifient ici aussi - ils
-            // passaient en marche seulement.
-            if (isRich(type)) {
+            // passaient en marche seulement. 1.50.1 : un grand tableau se verifie comme un tableau (ses bornes, ses indices).
+            if (isRich(type) && !isBigArray(type)) {
                 std::size_t k = i;
                 while (k < n && (code[k] == ' ' || code[k] == '\t')) ++k;
                 if (k < n && code[k] == '[') {
@@ -2014,12 +2153,23 @@ std::vector<PathProblem> pathProblems(const Project& p, std::string_view source)
                 }
                 // 1.50.0 : les indices se prennent niveau par niveau, groupes ou non - M[i][j] sur deux dimensions (le
                 // groupe colle suivant complete), T[i, j] sur un tableau de tableaux (un indice par niveau).
+                const std::size_t given = splitList(inside).size();
+                const std::string before = path;             // 1.50.1 : le tableau des indices de trop (le message)
+                const std::string beforeType = type;
                 for (auto& part : splitList(inside)) pending.push_back(std::move(part));
                 i = e + 1;
                 bool stop = false;
                 while (!pending.empty() && !stop) {
                     if (!parseSpec(type, s) || !s.array()) {
-                        out.push_back({at, path + " n'est pas un tableau : pas d'indice entre crochets"});
+                        // 1.50.1 : trop d'indices dans un meme groupe - Cube[1, 2, 3, 4] sur trois dimensions : dit en entier.
+                        Spec whole;
+                        if (parseSpecShape(beforeType, whole) && whole.array() && given > static_cast<std::size_t>(whole.dims)
+                            && !isArrayText(whole.element))
+                            out.push_back({at, before + " a " + std::to_string(whole.dims) + " dimension" + (whole.dims > 1 ? "s" : "") + " : "
+                                                   + std::to_string(whole.dims) + " indice" + (whole.dims > 1 ? "s" : "") + " entre crochets ("
+                                                   + specText(whole) + "), pas " + std::to_string(given)});
+                        else
+                            out.push_back({at, path + " n'est pas un tableau : pas d'indice entre crochets"});
                         stop = true;
                         break;
                     }
@@ -2027,10 +2177,22 @@ std::vector<PathProblem> pathProblems(const Project& p, std::string_view source)
                         std::size_t q = i;
                         while (q < n && (code[q] == ' ' || code[q] == '\t')) ++q;
                         if (q < n && code[q] == '[') break;            // le groupe suivant complete la case
-                        out.push_back({at, path + " a " + std::to_string(s.dims) + " dimension" + (s.dims > 1 ? "s" : "") + " : " + std::to_string(s.dims)
-                                               + " indice" + (s.dims > 1 ? "s" : "") + " entre crochets (" + specText(s) + ") - "
-                                               + path + "[i, j] ou " + path + "[i][j]"});
-                        stop = true;
+                        // 1.50.1 : UNE CASE PAS COMPLETE est le sous-tableau de ses dimensions restantes - M[1] sur deux
+                        // dimensions : la ligne 1 ; Cube[1, 2] sur trois : une ligne de la couche 1. Ses indices se
+                        // verifient ; la suite (M[1].Length, M[1] passe en entier) se lit sur ce sous-tableau.
+                        std::string cell;
+                        for (std::size_t d = 0; d < pending.size(); ++d) {
+                            const std::string& part = pending[d];
+                            cell += (d ? ", " : "") + part;
+                            long long x = 0;
+                            if (!integerOf(part, x)) continue;
+                            if (x < s.low[d] || x > s.high[d])
+                                out.push_back({at, path + "[" + inside + "] : l'indice " + std::to_string(x) + " est hors des bornes du tableau ("
+                                                       + std::to_string(s.low[d]) + ".." + std::to_string(s.high[d]) + ")"});
+                        }
+                        path += "[" + cell + "]";
+                        type = subArrayType(type, pending.size());
+                        pending.clear();
                         break;
                     }
                     std::string cell;
@@ -2065,7 +2227,7 @@ std::vector<PathProblem> pathProblems(const Project& p, std::string_view source)
                 if (s.array()) {
                     const PropertyInfo* pi = property(member);
                     if (!pi) out.push_back({at, path + " est un tableau : ." + member + " n'existe pas (Length, Low, High... ou [i] pour une case)"});
-                    else if (pi->twoD && s.dims != 2) out.push_back({at, path + "." + member + " : pour un tableau \xC3\xA0 deux dimensions"});
+                    else if (pi->twoD && s.dims < 2) out.push_back({at, path + "." + member + " : pour un tableau \xC3\xA0 deux dimensions ou plus"});
                     else if (written()) out.push_back({at, path + "." + member + " : une propri\xC3\xA9t\xC3\xA9 se lit seulement"});
                     break;
                 }

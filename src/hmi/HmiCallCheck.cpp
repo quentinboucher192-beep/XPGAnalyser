@@ -5,6 +5,7 @@
 #include "HmiCallCheck.hpp"
 
 #include "HmiEnums.hpp"
+#include "HmiMethods.hpp"   // 1.50.1 : les methodes d'un type IHM et leurs surcharges (chemin.M(...))
 #include "HmiModel.hpp"
 #include "HmiNames.hpp"     // 1.13.0 (lot J8) : les types ecrits en noms complets (T_Vanne = Gaz.T_Vanne)
 #include "HmiOverload.hpp"
@@ -197,15 +198,35 @@ void locate(std::string_view code, const sim::CallSite& site, Problem& p) {
     }
 }
 
+// 1.50.1 : un appel chemin.M(...) dont l'objet est d'un type IHM (une structure) qui a des methodes M : leurs signatures
+// (ses surcharges ; sans SELF). Vide : pas un tel appel.
+std::vector<overload::Signature> methodSignatures(const Context& c, const sim::CallSite& site) {
+    if (!c.project || site.receiver.empty()) return {};
+    std::string type = site.receiver;
+    for (const char* head : {"REF_TO ", "POINTER TO "})                // une reference : le type vise
+        if (type.size() > std::string_view(head).size() && same(std::string_view(type).substr(0, std::string_view(head).size()), head))
+            type = type.substr(std::string_view(head).size());
+    const HmiType* t = c.project->hmiTypeByName(type);
+    if (!t || t->kind != HmiTypeKind::Structure) return {};
+    const auto segs = segments(site.callee);
+    std::vector<overload::Signature> out;
+    for (const auto& om : effectiveMethods(*c.project, fullName(*t), segs.back())) out.push_back(methodOverloadSignature(*om.owner, *om.method));
+    return out;
+}
+
 std::vector<Problem> judge(const Context& c, std::string_view code, const std::vector<sim::CallSite>& sites,
                            const std::vector<std::shared_ptr<const sim::Function>>& inner, const sim::Function* self) {
     std::vector<Problem> out;
     for (const auto& site : sites) {
         std::vector<overload::Signature> sigs;
+        // 1.50.1 : chemin.M(...) sur un objet d'un type IHM - ses methodes de ce nom (ses surcharges), la regle des fonctions.
+        if (const auto methods = methodSignatures(c, site); !methods.empty()) sigs = methods;
+        else if (c.methodsOnly || (!site.receiver.empty() && site.callee.find('.') == std::string::npos)) continue;   // a[i].X() : pas une fonction
         // Une fonction interne du script d'abord (pas la fonction controlee elle-meme : son nom
         // designe ses surcharges du projet ou du symbole).
-        for (const auto& f : inner)
-            if (f.get() != self && same(sim::functionName(*f), site.callee)) sigs.push_back(overload::signatureOf(*f));
+        if (sigs.empty())
+            for (const auto& f : inner)
+                if (f.get() != self && same(sim::functionName(*f), site.callee)) sigs.push_back(overload::signatureOf(*f));
         if (sigs.empty())
             for (const auto* f : candidates(c, site.callee)) sigs.push_back(canonicalSignature(c.project, *f));   // 1.13.0 (lot J8)
         if (sigs.empty()) continue;

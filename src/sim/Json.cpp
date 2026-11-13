@@ -322,12 +322,14 @@ struct Writer {
                 return true;
             case TypeDesc::Kind::List:
             case TypeDesc::Kind::Array: {
-                if (o.items.empty()) { out += "[]"; return true; }
+                const std::size_t n = cellCount(o);               // 1.50.1 : un grand tableau range serre aussi
+                if (n == 0) { out += "[]"; return true; }
                 out += '[';
-                for (std::size_t k = 0; k < o.items.size(); ++k) {
+                for (std::size_t k = 0; k < n; ++k) {
                     if (k) out += ',';
                     newline(level + 1);
-                    if (!o.items[k] || !write(*o.items[k], level + 1)) return false;
+                    const ObjRef cell = cellAt(o, k);
+                    if (!cell || !write(*cell, level + 1)) return false;
                 }
                 newline(level);
                 out += ']';

@@ -417,10 +417,8 @@ private:
         if (!accept(']')) return fail("ARRAY : ] attendu apr\xC3\xA8s les bornes");
         if (!atWord("OF")) return fail("ARRAY : OF attendu apr\xC3\xA8s les bornes");
         (void)word();
-        // Un tableau d'une variable IHM ou d'un parametre de popup : 1 ou 2 dimensions.
-        if (dims.size() > 2 && (use & (UseVariable | UseParameter)) && !(use & UseDeclaration))
-            return fail("ARRAY : deux dimensions au plus pour " + useText(use & (UseVariable | UseParameter))
-                        + " ; plus : un tableau de tableaux (ARRAY[0..1] OF ARRAY[0..1, 0..1] OF INT)");   // 1.50.0
+        // 1.50.1 : autant de dimensions qu'on veut, pour tous les usages (une variable IHM, un parametre de popup aussi :
+        // ARRAY[0..3, 0..7, 0..15] OF BOOL) ; avant : deux au plus, sauf dans une declaration.
         // L'element : les memes usages (un retour de fonction se lit comme une declaration).
         unsigned elementUse = use & (UseVariable | UseDeclaration | UseParameter);
         if (use & UseReturn) elementUse |= UseDeclaration;

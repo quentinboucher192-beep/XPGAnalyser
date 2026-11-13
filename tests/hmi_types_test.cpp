@@ -338,7 +338,8 @@ void lecture() {
         {"TUPLE()", tr::UseDeclaration, "TUPLE : au moins un type", false},
         {"LIST OF T_Inconnu", tr::UseVariable, "type \xC2\xAB T_Inconnu \xC2\xBB inconnu", true},
         {"MAP[REAL] OF INT", tr::UseDeclaration, "MAP : une cl\xC3\xA9 est un STRING, un entier ou une \xC3\xA9num\xC3\xA9ration", false},
-        {"ARRAY[0..1, 0..1, 0..1] OF INT", tr::UseVariable, "ARRAY : deux dimensions au plus", false},
+        // 1.50.1 : trois dimensions et plus sont permises a une variable IHM (tableaux_test) ; une borne illisible, non.
+        {"ARRAY[0..1, 0..x, 0..1] OF INT", tr::UseVariable, "ARRAY : une borne enti\xC3\xA8re est attendue", false},
         {"ARRAY[9..0] OF INT", tr::UseVariable, "ARRAY : la borne haute est sous la borne basse", false},
         {"ARRAY[0..9] REAL", tr::UseVariable, "ARRAY : OF attendu", false},
         {"REAL REAL", tr::UseDeclaration, "\xC2\xAB REAL \xC2\xBB en trop", false},

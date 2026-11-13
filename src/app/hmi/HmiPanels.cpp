@@ -195,6 +195,27 @@ std::string HmiToolStrip::labelOf(int action) const {
         if (!it.separator && it.action == action) return it.shown();
     return {};
 }
+// 1.50.1 : la pastille d'un bouton (<< nv >>).
+void HmiToolStrip::setBadge(int action, std::string badge, ui::Tone tone) {
+    for (auto& it : items_)
+        if (it.action == action && !it.separator) {
+            it.badge = badge;
+            it.badgeTone = tone;
+        }
+    invalidateLayout();
+    invalidate();
+}
+std::string HmiToolStrip::badgeOf(int action) const {
+    for (const auto& it : items_)
+        if (!it.separator && it.action == action) return it.badge;
+    return {};
+}
+gfx::Rect HmiToolStrip::badgeRectOf(int action) const {
+    layoutItems(1);
+    for (const auto& it : items_)
+        if (!it.separator && it.action == action) return it.badgeRect;
+    return {};
+}
 
 // ---- 1.24.0 : plusieurs d'un coup ----------------------------------------------------
 namespace several {
@@ -320,6 +341,7 @@ void HmiToolStrip::layoutItems(float) const {
     const auto widthOf = [&](const Item& it) {
         float w = 30;
         if (const auto l = it.shown(); !l.empty() && !it.compact) w += ui::measureWidth(l, gfx::FontId{13}) + 8;
+        if (!it.badge.empty() && !it.compact) w += ui::tagPillWidth(it.badge) + 6;   // 1.50.1 : << NV >>
         return w;
     };
     const auto total = [&] {
@@ -330,7 +352,7 @@ void HmiToolStrip::layoutItems(float) const {
     };
     if (b.w > 0.f)
         for (std::size_t i = items_.size(); i-- > 0 && total() > b.w;)
-            if (on[i] && !items_[i].separator && !items_[i].shown().empty()) items_[i].compact = true;
+            if (on[i] && !items_[i].separator && (!items_[i].shown().empty() || !items_[i].badge.empty())) items_[i].compact = true;
     float x = b.x + 6;
     for (std::size_t i = 0; i < items_.size(); ++i) {
         auto& it = items_[i];
@@ -362,6 +384,15 @@ void HmiToolStrip::layoutItems(float) const {
             break;
         }
         if (!overflow_.empty()) moreRect_ = {b.right() - kMore - 2.f, b.y + 3.f, kMore, b.h - 6.f};
+    }
+    // 1.50.1 : la pastille, apres le libelle (rien quand le bouton est reduit a son icone).
+    for (auto& it : items_) {
+        it.badgeRect = {};
+        if (it.separator || it.badge.empty() || it.compact || it.rect.w <= 0) continue;
+        const auto l = it.shown();
+        const float lw = l.empty() ? 0.f : ui::measureWidth(l, gfx::FontId{13}) + 8;
+        constexpr float kBadgeH = 15.f;
+        it.badgeRect = {it.rect.x + 30 + lw, it.rect.y + (it.rect.h - kBadgeH) / 2, ui::tagPillWidth(it.badge), kBadgeH};
     }
 }
 
@@ -416,6 +447,8 @@ void HmiToolStrip::openMore() {
         m.id = it.action;
         m.enabled = !it.enabled || it.enabled();
         m.disabledReason = "pas maintenant";
+        m.badge = it.badge;            // 1.50.1 : la pastille suit le bouton dans le menu
+        m.badgeTone = it.badgeTone;
         if (it.checked) {
             m.checkable = true;
             m.checked = it.checked();
@@ -532,10 +565,20 @@ void HmiToolStrip::onPaint(const ui::PaintContext& ctx) {
         if (checked) ctx.r.fillRoundedRect(it.rect, ctx.theme.color.accent.withAlpha(60), 4);
         else if (hot) ctx.r.fillRoundedRect(it.rect, ctx.theme.color.text.withAlpha(24), 4);
         if (static_cast<int>(i) == pressed_ && enabled) ctx.r.fillRoundedRect(it.rect, ctx.theme.color.accent.withAlpha(90), 4);
-        const gfx::Color col = !enabled ? ctx.theme.color.textDisabled : checked ? ctx.theme.color.accent : ctx.theme.color.text;
-        drawHmiGlyph(ctx.r, it.glyph, {it.rect.x + 5, it.rect.y + (it.rect.h - 20) / 2, 20, 20}, col);
+        // 1.50.1 : un bouton a pastille (<< Etirer v NV >>) : l'icone sur un fond de sa teinte, le libelle de sa teinte.
+        const bool badged = !it.badge.empty();
+        const auto bc = badged ? ui::tagPillColors(ctx.theme, it.badgeTone) : ui::TagPillColors{};
+        const gfx::Color col = !enabled ? ctx.theme.color.textDisabled : checked ? ctx.theme.color.accent
+                             : badged ? bc.ink : ctx.theme.color.text;
+        const gfx::Rect glyph{it.rect.x + 5, it.rect.y + (it.rect.h - 20) / 2, 20, 20};
+        if (badged && enabled && !checked) ctx.r.fillRoundedRect({glyph.x - 2, glyph.y - 2, glyph.w + 4, glyph.h + 4}, bc.fill, 4);
+        drawHmiGlyph(ctx.r, it.glyph, glyph, col);
         if (const auto l = it.shown(); !l.empty() && !it.compact)
-            textCentred(ctx, {it.rect.x + 29, it.rect.y, it.rect.w - 30, it.rect.h}, l, gfx::FontId{13}, col);
+            textCentred(ctx, {it.rect.x + 29, it.rect.y, ui::measureWidth(l, gfx::FontId{13}) + 8, it.rect.h}, l, gfx::FontId{13}, col);
+        if (badged && it.badgeRect.w > 0)
+            (void)ui::drawTagPill(ctx, it.badgeRect.x, it.badgeRect.y + it.badgeRect.h / 2, it.badge, it.badgeTone);
+        else if (badged && it.compact)   // reduit a son icone : un point de la teinte
+            ctx.r.fillRoundedRect({glyph.right() - 3, glyph.y - 2, 6, 6}, bc.ink, 3);
     }
     // 1.12.30 : le bouton des outils qui ne tiennent pas.
     if (moreRect_.w > 0.f) {
@@ -4462,6 +4505,28 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         addG("Guides cach\xC3\xA9s", view.grid.guidesHidden ? "TRUE" : "FALSE", PG::ValueType::Boolean, "guides_caches");
         addG("Guides verrouill\xC3\xA9s", view.grid.guidesLocked ? "TRUE" : "FALSE", PG::ValueType::Boolean, "guides_verrous");
         out.push_back(std::move(g));
+        // 1.50.1 : LES MARGES DE LA VUE - ce que garde << Etirer > Garder les marges >>, en tirets dans l'editeur.
+        {
+            PG::Category mg;
+            mg.name = "Marges de la vue";
+            const std::string help = " de la vue, en pixels : \xC2\xAB \xC3\x89tirer \xE2\x80\xBA Garder les marges \xC2\xBB s'arr\xC3\xAA" "te l\xC3\xA0 "
+                                     "(un trait en tirets dans l'\xC3\xA9" "diteur ; en marche, rien). 0 partout : la vue n'a pas de marges \xC3\xA0 "
+                                     "elle (la marge de la grille de colonnes montr\xC3\xA9" "e, sinon le pas d'aimantation).";
+            const auto addMg = [&](std::string name, double value, std::string field, std::string what) {
+                PG::Property p;
+                p.name = std::move(name);
+                p.value = hmi::formatNumber(value);
+                p.type = PG::ValueType::Real;
+                p.description = what + help;
+                p.commit = [commit, field](std::string_view s) { return commit.view && commit.view(field, std::string(s)); };
+                mg.properties.push_back(std::move(p));
+            };
+            addMg("En haut", view.margins.top, "marge_haut", "La marge du haut");
+            addMg("En bas", view.margins.bottom, "marge_bas", "La marge du bas");
+            addMg("\xC3\x80 gauche", view.margins.left, "marge_gauche", "La marge de gauche");
+            addMg("\xC3\x80 droite", view.margins.right, "marge_droite", "La marge de droite");
+            out.push_back(std::move(mg));
+        }
         // 1.12.30 : LA GRILLE DE COLONNES - N colonnes egales entre deux marges, une gouttiere entre elles.
         PG::Category cg;
         cg.name = "Grille de colonnes";
@@ -4948,8 +5013,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                     hmi::types::Spec spec;
                     if (!hmi::types::parseSpec(var.type, spec)) continue;
                     if (hmi::eqlink::membersOf(*project, spec.element).empty()) continue;
-                    p.enumValues.push_back(spec.array() ? var.name + "[" + std::to_string(spec.low[0]) + (spec.dims > 1 ? ", " + std::to_string(spec.low[1]) : std::string{}) + "]"
-                                                        : var.name);
+                    p.enumValues.push_back(spec.array() ? var.name + hmi::types::cellText(spec, 0) : var.name);   // 1.50.1 : N dimensions
                 }
             } else if (prop.key == "gasColor" && o->kind == hmi::Kind::GasBottle && prop.expr.empty()) {
                 // 1.12.11 (lot G) : le gaz, choisi par son nom, ecrit sa couleur EN 1089-3 ; une couleur se tape aussi.

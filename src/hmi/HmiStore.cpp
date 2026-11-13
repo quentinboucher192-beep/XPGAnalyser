@@ -497,6 +497,11 @@ std::string serializeView(const View& v) {
     if (v.zoomable) s += fieldBool("zoom", v.zoomable);
     // 1.11.10 : une popup d'un symbole - le symbole qui la porte (une version plus ancienne l'ignore).
     if (v.ownerSymbol != kNoId) s += fieldInt("symbole", v.ownerSymbol);
+    // 1.50.1 : les marges de la vue, seulement si elle en a (un projet d'avant s'ecrit a l'identique ; une version
+    // d'avant ignore ces champs : la vue s'y relit sans marges, Etirer y garde la grille de colonnes ou le pas).
+    if (v.margins.any())
+        s += fieldBare("marge_haut", formatNumber(v.margins.top)) + fieldBare("marge_bas", formatNumber(v.margins.bottom))
+           + fieldBare("marge_gauche", formatNumber(v.margins.left)) + fieldBare("marge_droite", formatNumber(v.margins.right));
     // Lot 8 (format 7) : les reglages de popup, quand ils different du defaut.
     const PopupSettings defaults;
     if (v.popup != defaults) {
@@ -691,6 +696,13 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             v.upView = static_cast<Id>(toInt(r.get("vue_parente"), 0));      // lot 12
             v.zoomable = toBool(r.get("zoom"), false);
             v.ownerSymbol = static_cast<Id>(toInt(r.get("symbole"), 0));   // 1.11.10 : une popup d'un symbole
+            // 1.50.1 : ses marges (absentes : 0, la vue n'en a pas - un fichier d'avant).
+            const std::pair<const char*, double*> sides[] = {{"marge_haut", &v.margins.top}, {"marge_bas", &v.margins.bottom},
+                                                             {"marge_gauche", &v.margins.left}, {"marge_droite", &v.margins.right}};
+            for (const auto& [key, slot] : sides) {
+                double n = 0;
+                if (const auto* x = r.get(key); x && parseNumber(*x, n)) *slot = std::clamp(n, 0.0, 10000.0);
+            }
             // Lot 8
             auto& pp = v.popup;
             pp.titleBar = toBool(r.get("popup_titre"), pp.titleBar);

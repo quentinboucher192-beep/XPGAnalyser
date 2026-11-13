@@ -21,6 +21,7 @@
 //   - le texte dans son cadre (l'approche de la 1.47 : un renderer qui mesure avec la vraie police et note chaque
 //     texte) a plusieurs tailles de fenetre, petites comprises ;
 //   - Dupliquer en UNE commande : un Ctrl+Z retire les 31 x 16 objets.
+//  1.50.1 (hmi_dupliquer_1501.inl) : la liste sur plusieurs niveaux, plusieurs regles dans un groupe, Echap dans le tableau.
 // =============================================================================
 #include "../src/app/hmi/HmiDuplicateDialog.hpp"
 #include "../src/core/Command.hpp"
@@ -681,7 +682,10 @@ void ecran(TextRecorder& r) {
 
 } // namespace
 
+#include "hmi_dupliquer_1501.inl"   // 1.50.1 : plusieurs niveaux, plusieurs regles par groupe, Echap dans le tableau
+
 int main(int argc, char** argv) {
+    std::setvbuf(stdout, nullptr, _IONBF, 0);   // 1.50.1 : un arret brutal garde ce qui a ete ecrit
     const std::string root = argc > 1 ? argv[1] : ".";
     gfx::setInterfaceFontFolder(root + "/resources/fonts");
     TextRecorder r;
@@ -693,8 +697,14 @@ int main(int argc, char** argv) {
     formules();
     nonRegression();
     cinqCents();
-    if (r.fontsReady()) ecran(r);
-    else std::printf("SAUTE (l'ecran) : pas de police (%s/resources/fonts)\n", root.c_str());
+    niveaux();          // 1.50.1
+    reglesParTexte();   // 1.50.1
+    exempleCaptures();  // 1.50.1
+    if (r.fontsReady()) {
+        ecran(r);
+        reglesDansLaListe(r);   // 1.50.1
+        echapTableau(r);        // 1.50.1
+    } else std::printf("SAUTE (l'ecran) : pas de police (%s/resources/fonts)\n", root.c_str());
     std::printf("%d verification(s), %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

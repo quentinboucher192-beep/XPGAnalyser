@@ -10,6 +10,7 @@
 #include "../../hmi/HmiEdit.hpp"
 #include "../../hmi/HmiPopupParams.hpp"   // 1.11.2 (SYM) : typeMembers
 #include "../../hmi/HmiSymbols.hpp"       // 1.11.2 (SYM) : isSymbolView
+#include "../../hmi/HmiTypes.hpp"         // 1.50.1 : les bornes d'un tableau dans un type IHM (typeOfPath)
 #include "../../menu/MenuManager.hpp"
 #include "../../project/MemberTree.hpp"
 #include "../../ui/widgets/Containers.hpp"
@@ -22,6 +23,7 @@
 #include <cstdlib>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -68,12 +70,20 @@ dup::BoundsFn boundsOf(const hmi::DocumentPtr& doc, const hmi::View* view) {
     auto memo = std::make_shared<std::map<std::string, std::optional<dup::Bounds>>>();
     dup::BoundsFn inner = [doc, hmiBounds = std::move(hmiBounds), plcOf = std::move(plcOf), memo](std::string_view path) -> std::optional<dup::Bounds> {
         if (auto b = hmiBounds(path)) return b;
-        if (!plcOf || !hmi::apivars::isApiPath(path)) return std::nullopt;
+        const bool api = plcOf && hmi::apivars::isApiPath(path);
+        // 1.50.1 : un tableau DANS un type IHM (Armoires[0].Departs : ARRAY[0..7] OF T_Depart ; ...Voies : ARRAY[0..31]
+        // OF T_Voie) - ses bornes aussi (avant : inconnues, et Departs[8] passait).
+        const bool nested = !api && path.find_first_of(".[") != std::string_view::npos;
+        if (!api && !nested) return std::nullopt;
         std::string key(path);
         for (auto& ch : key) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
         if (const auto it = memo->find(key); it != memo->end()) return it->second;
         std::optional<dup::Bounds> out;
-        if (const auto plc = plcOf()) {
+        if (nested) {
+            hmi::types::Spec spec;
+            const std::string type = hmi::types::typeOfPath(doc->project, path);
+            if (!type.empty() && hmi::types::parseSpec(type, spec) && spec.dims == 1) out = dup::Bounds{spec.low[0], spec.high[0]};
+        } else if (const auto plc = plcOf()) {
             const auto d = assist::describe(doc->project, plc.get(), path);
             const auto shape = project::members::parseArray(d.type);
             if (d.found && shape.dims.size() == 1) out = dup::Bounds{shape.dims[0].first, shape.dims[0].second};
@@ -213,6 +223,12 @@ constexpr float kRow = 30.f;      // une ligne d'outils
 // Le libelle d'un bouton et sa largeur (le texte, ses marges).
 float buttonWidth(const ui::Button* b) { return std::max(40.f, ui::measureWidth(b->text(), gfx::FontId{16}) + 24.f); }
 
+// "Profondeur \xE2\x80\xBA Objet" -> "profondeur \xE2\x80\xBA objet" (les mots du libelle, en minuscules ASCII).
+std::string lowerAscii(std::string s) {
+    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
 // Le dernier morceau d'un libelle de profondeur sans son crochet : "Departs[.]" -> "Departs".
 std::string bare(const std::string& tail) {
     const auto b = tail.find('[');
@@ -334,6 +350,10 @@ public:
         std::string t = g.label + " : " + ruleText(g, d_.rules_.rule(g));
         for (const auto& e : d_.ruleErrors_)
             if (e.where == g.label) t += "\n" + e.why;
+        // 1.50.1 : ses reperes qui ont leur regle (la liste) - la regle du groupe vaut pour les autres.
+        if (const std::size_t own = d_.markerRules(g.key); own > 0)
+            t += "\n" + plural(own, "rep\xC3\xA8re a sa r\xC3\xA8gle", "rep\xC3\xA8res ont leur r\xC3\xA8gle")
+               + " (la liste) ; celle-ci vaut pour les autres.";
         return t + "\nLes formules, comme les adresses : i, j, k les compteurs, n le rang, o l'original ; + - * / MOD ( ). "
                    "Un texte : {i+1}, {j:02}.";
     }
@@ -452,12 +472,14 @@ public:
         if (row >= d_.listRows_.size()) return st;
         const auto& r = d_.listRows_[row];
         if (c == 0) {
+            // 1.50.1 : le retrait suit le niveau (l'arbre des profondeurs, puis les objets).
             if (r.group) {
-                st.bold = true;
+                st.bold = r.level == 0;
+                st.indent = kStep * static_cast<float>(r.level);
                 st.expander = r.expanded ? 1 : 0;
                 st.badge = std::to_string(r.count);
             } else {
-                st.indent = d_.grouping_ == Grouping::None ? 0.f : 22.f;
+                st.indent = r.level == 0 ? 0.f : kStep * static_cast<float>(r.level - 1) + 22.f;
                 st.monospace = true;
                 if (r.own) {
                     st.lead = "\xC3\xA0 part";
@@ -465,7 +487,12 @@ public:
                 }
             }
         }
-        if (c == 2 && !r.group && !r.own) st.fgTone = ui::Tone::Muted;
+        if (c == 2) {
+            if (r.rule2) {   // 1.50.1 : sa regle, dans son groupe
+                st.monospace = true;
+                st.fgTone = ui::Tone::Accent;
+            } else if (!r.group && !r.own) st.fgTone = ui::Tone::Muted;
+        }
         if (c == 3) {
             st.monospace = true;
             if (r.conflict == 2) st.fgTone = ui::Tone::Error;
@@ -474,15 +501,55 @@ public:
         return st;
     }
     [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
+    // 1.50.1 : la case Regle s'ecrit dans la liste (double-clic, F2) - celle d'un repere (la sienne : il reste dans son
+    // groupe), celle d'un groupe qui est une profondeur, les adresses, les textes, les variables.
+    [[nodiscard]] bool editable(ui::RowIndex row, std::size_t c) const override {
+        if (c != 2 || row >= d_.listRows_.size()) return false;
+        const auto& r = d_.listRows_[row];
+        return r.group ? !r.groupKey.empty() : true;
+    }
+    bool setCellText(ui::RowIndex row, std::size_t c, std::string_view text) override {
+        if (c != 2 || row >= d_.listRows_.size()) return false;
+        const auto r = d_.listRows_[row];   // la liste se refait pendant l'appel
+        std::string t = trimmed(text);
+        if (!r.group) return d_.setMarkerRule(markerLabel(d_.scan_.markers[r.marker].name), std::move(t));
+        if (r.groupKey.empty()) return false;
+        const auto* g = d_.model_.group(r.groupKey);
+        if (!g) return false;
+        static const std::string kVaries = "varie : ";
+        if (t.rfind(kVaries, 0) == 0) t = trimmed(t.substr(kVaries.size()));
+        if (t == "fixe" || t == "garder" || t == "libre") return d_.setGroupRule(g->key, {dup::RuleKind::Fixed, {}});
+        if (t == "\xC3\xA0 remplir") return d_.setGroupRule(g->key, {dup::RuleKind::Empty, {}});
+        if (t == "varie") return d_.setVaries(g->key, true);
+        if (t.empty()) {
+            const auto kind = g->kind == dup::GroupKind::Text || g->kind == dup::GroupKind::Variable ? dup::RuleKind::Empty : dup::RuleKind::Fixed;
+            return d_.setGroupRule(g->key, {kind, {}});
+        }
+        return d_.setGroupRule(g->key, {dup::RuleKind::Formula, std::move(t)});
+    }
     [[nodiscard]] std::string rowTooltip(ui::RowIndex row) const override {
         if (row >= d_.listRows_.size()) return {};
         const auto& r = d_.listRows_[row];
         std::string t = r.text + "\n" + (r.group ? r.where : whereOf(r.marker)) + "\n" + r.rule;
         if (!r.last.empty()) t += "\n" + r.last;
+        if (!r.group) {
+            const auto& mm = d_.model_.markers[r.marker];
+            t += "\nSa r\xC3\xA8gle : double-clic (ou F2) sur la case R\xC3\xA8gle - une formule";
+            if (mm.kind == dup::GroupKind::Index) t += " pour " + d_.model_.groups[mm.group].tail;
+            t += ", \xC2\xAB garder \xC2\xBB ; vide : comme son groupe. Il reste dans son groupe.";
+        } else if (!r.groupKey.empty())
+            t += "\nLa r\xC3\xA8gle du groupe : double-clic (ou F2) sur sa case ; ses rep\xC3\xA8res qui ont la leur la gardent.";
         return t + "\nClic droit : Comme sa profondeur, Formule\xE2\x80\xA6, S\xC3\xA9rie (V1{n}), Tableau\xE2\x80\xA6, Coller (Excel), Garder, Vider.";
     }
 
 private:
+    static constexpr float kStep = 18.f;   // 1.50.1 : le retrait d'un niveau
+    static std::string trimmed(std::string_view s) {
+        std::size_t a = 0, b = s.size();
+        while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
+        while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) --b;
+        return std::string(s.substr(a, b - a));
+    }
     // Ou est le repere : son premier endroit, nomme comme l'inspecteur - demande par les lignes DESSINEES seulement
     // (les libelles d'un objet se relevent une fois, a la premiere ligne qui le montre).
     std::string whereOf(std::size_t mi) const {
@@ -780,8 +847,8 @@ protected:
                           gfx::FontId{12}, 1});
         ly += 22.f;
         head(lx, ly, leftW, "LES REP\xC3\x88RES  " + std::to_string(d_.scan_.markers.size()),
-             d_.grouping_ == Grouping::Depth ? "group\xC3\xA9s par profondeur ; la liste d\xC3\xA9" "file (rien n'est coup\xC3\xA9)"
-                                            : "la liste d\xC3\xA9" "file (rien n'est coup\xC3\xA9)");
+             d_.grouping_ == Grouping::None ? std::string("la liste d\xC3\xA9" "file (rien n'est coup\xC3\xA9)")
+                                            : "group\xC3\xA9s par " + lowerAscii(groupingLabel(d_.grouping_)) + " ; la liste d\xC3\xA9" "file (rien n'est coup\xC3\xA9)");
         ly += 22.f;
         // La barre de la liste : la recherche, les filtres, Grouper par, Tout deplier / replier (a la ligne s'il le faut).
         {
@@ -799,13 +866,19 @@ protected:
             if (d_.searchField_) put(d_.searchField_, std::clamp(leftW * 0.34f, 150.f, 300.f));
             for (auto* f : d_.filterButtons_) put(f, buttonWidth(f));
             const float gw = ui::measureWidth("Grouper par", gfx::FontId{13}) + 4.f;
-            if (x > lx && x + gw > right) {
+            // 1.50.1 : « Grouper par » - une liste (Profondeur, Profondeur > Objet, Objet, Objet > Profondeur, Rien) ; le
+            // libelle et la liste vont ensemble a la ligne.
+            float listW = 0.f;
+            for (const auto g : {Grouping::Depth, Grouping::DepthObject, Grouping::Object, Grouping::ObjectDepth, Grouping::None})
+                listW = std::max(listW, ui::measureWidth(groupingLabel(g), gfx::FontId{16}) + 44.f);
+            listW = std::min(listW, leftW - gw - 6.f);
+            if (x > lx && x + gw + 6.f + listW > right) {
                 x = lx;
                 ly += kRow + 4.f;
             }
             texts_.push_back({{x, ly, gw, kRow - 2.f}, "Grouper par", gfx::FontId{13}, 1});
             x += gw + 6.f;
-            for (auto* g : d_.groupButtons_) put(g, buttonWidth(g));
+            if (d_.groupBy_) put(d_.groupBy_, listW);
             for (auto* f : d_.foldButtons_) put(f, buttonWidth(f));
             ly += kRow + 4.f;
         }
@@ -951,6 +1024,24 @@ private:
 // repere. VIRTUELLE : seules les cases visibles se dessinent (512 colonnes x 32 lignes : quelques dizaines de cases
 // a l'ecran) ; # et le nom restent figes a gauche quand on defile ; un clic ouvre la case (un seul champ, pose dessus,
 // avec l'aide a la saisie) ; Entree valide et descend, Echap annule ; Ctrl+V colle une colonne d'Excel depuis la case.
+// 1.50.1 : un champ dont le proprietaire voit Entree et Echap AVANT lui - la case du tableau (Excel), la regle a part.
+// Un champ rend le clavier sur Echap, et sa perte du clavier VALIDAIT : Echap ecrivait ce qui etait tape. Une liste
+// d'aide ouverte les garde (Echap la ferme d'abord).
+namespace {
+class KeyField final : public ui::InputText {
+public:
+    using ui::InputText::InputText;
+    std::function<bool(const ui::KeyDown&)> keys;
+    void drop() { releaseFocus(); }   // le clavier rendu (le champ se cache)
+protected:
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && focused() && !suggestionsOpen() && keys && keys(*k))
+            return ui::EventResult::Consumed;
+        return ui::InputText::onEvent(ev);
+    }
+};
+} // namespace
+
 class HmiDuplicateDialog::Sheet final : public ui::Widget {
 public:
     explicit Sheet(HmiDuplicateDialog& d) : ui::Widget("dialog.hmiDuplicate.sheet"), d_(d), vbar_(false), hbar_(true) { setFocusPolicy(true); }
@@ -986,11 +1077,45 @@ public:
             d_.setCell(r, d_.columns()[static_cast<std::size_t>(c)], text);
         invalidate();
     }
+    // 1.50.1 : Echap annule la case - la valeur d'avant reste (rien n'est ecrit), le clavier revient au tableau ; la
+    // fenetre reste ouverte (Echap encore la ferme, comme dans les autres fenetres). Avant, le champ rendait le clavier
+    // en premier, et la perte du clavier VALIDAIT ce qui etait tape.
     void cancel() {
         if (!editor) return;
-        editRow_ = editCol_ = -1;
+        editRow_ = editCol_ = -1;   // d'abord : la perte du clavier qui suit n'ecrit rien (commit le voit)
         editor->setVisibility(ui::Visibility::Collapsed);
+        takeFocus();
         invalidate();
+    }
+    [[nodiscard]] bool editing() const noexcept { return editRow_ >= 0; }
+    [[nodiscard]] gfx::Rect cellOnScreen(int row, int col) {
+        measure();
+        if (row < 0 || row >= static_cast<int>(d_.plan_.rows.size()) || col < 0 || col >= static_cast<int>(d_.columns().size())) return {};
+        gfx::Rect r;
+        (void)cellRect(row, col, r);
+        const gfx::Rect area = body();
+        const float frozenRight = area.x + kNumW + width(0);
+        const float left = col == 0 ? r.x : std::max(r.x, frozenRight);
+        const float right = std::min(r.right(), area.right());
+        if (r.y < area.y - 1.f || r.bottom() > area.bottom() + 1.f || right - left < 8.f) return {};
+        return {left, r.y, right - left, r.h};
+    }
+    // 1.50.1 : les touches de la case ouverte, AVANT son champ (Entree, Echap) ; vrai : prises.
+    bool editorKey(const ui::KeyDown& k) {
+        if (editRow_ < 0) return false;
+        if (k.key == ui::Key::Escape && k.mods.none()) {
+            cancel();
+            return true;
+        }
+        if (k.key == ui::Key::Return && !k.mods.ctrl && !k.mods.alt) {   // Entree valide et descend (Maj+Entree : monte)
+            const int r = editRow_, c = editCol_;
+            commit();
+            const int next = k.mods.shift ? r - 1 : r + 1;
+            if (next >= 0 && next < static_cast<int>(d_.plan_.rows.size())) open(next, c);
+            else takeFocus();
+            return true;
+        }
+        return false;
     }
 protected:
     void onLayout() override { place(); }
@@ -1088,16 +1213,7 @@ protected:
         }
         if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
             const bool editing = editRow_ >= 0;
-            if (editing && k->key == ui::Key::Return && !k->mods.ctrl) {
-                const int r = editRow_, c = editCol_;
-                commit();
-                if (r + 1 < static_cast<int>(d_.plan_.rows.size())) open(r + 1, c);
-                return ui::EventResult::Consumed;
-            }
-            if (editing && k->key == ui::Key::Escape) {
-                cancel();
-                return ui::EventResult::Consumed;
-            }
+            if (editorKey(*k)) return ui::EventResult::Consumed;   // le champ cache (ou sans le clavier) : la case quand meme
             if (!editing && k->key == ui::Key::V && k->mods.ctrl && selCol_ >= 0) {
                 const auto values = dup::pastedList(ui::clipboardText());
                 if (values.empty()) return ui::EventResult::Consumed;
@@ -1795,6 +1911,10 @@ std::string HmiDuplicateDialog::ruleText(std::size_t mi) const {
     if (mi >= scan_.markers.size()) return {};
     const auto own = rules_.ownOf(dup::markerKey(scan_.markers[mi].name));
     const auto& mm = model_.markers[mi];
+    if (own.inList) {   // 1.50.1 : sa regle, dans son groupe - la formule seule (la case s'ecrit depuis elle)
+        if (own.kind == dup::OwnKind::Formula) return own.formula;
+        if (own.kind == dup::OwnKind::Keep) return "garder";
+    }
     switch (own.kind) {
     case dup::OwnKind::Formula: {
         std::string t = "\xC3\xA0 part : ";
@@ -1823,17 +1943,207 @@ std::size_t HmiDuplicateDialog::listCount(ListFilter f) const {
         case ListFilter::Indices: n += mm.kind == dup::GroupKind::Index ? 1 : 0; break;
         case ListFilter::Addresses: n += mm.kind == dup::GroupKind::Address ? 1 : 0; break;
         case ListFilter::Texts: n += mm.kind == dup::GroupKind::Text || mm.kind == dup::GroupKind::Variable ? 1 : 0; break;
-        case ListFilter::Own: n += rules_.ownOf(key).kind != dup::OwnKind::Group ? 1 : 0; break;
+        case ListFilter::Own: {
+            const auto own = rules_.ownOf(key);
+            n += own.kind != dup::OwnKind::Group && !own.inList ? 1 : 0;   // 1.50.1 : sa regle dans la liste n'est pas « a part »
+            break;
+        }
         case ListFilter::Conflicts: n += markerLevel_.count(key) ? 1 : 0; break;
         }
     }
     return n;
 }
 
-// La liste des reperes : groupee (par profondeur, par objet) ou a plat, filtree, cherchee ; un groupe replie ne
-// garde que sa ligne. La table ne dessine que les lignes visibles : 500 ou 5 000 reperes, pareil.
+// ---- 1.50.1 : l'arbre de la liste (plusieurs niveaux) ----
+//  Profondeur : chaque repere a indices descend sa chaine de profondeurs (Armoires[.] > Departs[.] > Voies[.]) et se
+//  range sous la plus grande ; un groupe compte tout son sous-arbre (Armoires[.] : 468, comme la colonne Reperes des
+//  profondeurs) ; les adresses, les textes, les variables : un groupe chacun. Objet : un groupe par objet. Le niveau
+//  suivant (Profondeur > Objet, Objet > Profondeur) range les reperes laisses a un groupe.
+namespace {
+
+constexpr std::size_t kNoNode = static_cast<std::size_t>(-1);
+
+struct TreeNode {
+    std::string              key, title, groupKey;
+    int                      level{0};
+    std::size_t              parent{kNoNode};
+    std::vector<std::size_t> kids, members, direct;
+    std::size_t              spots{0};
+    bool                     keepEmpty{false};   // une profondeur hors repere (sans repere : montree quand meme)
+};
+struct Tree {
+    std::vector<TreeNode>    nodes;
+    std::vector<std::size_t> roots;
+    std::vector<std::size_t> flat;   // Rien : les reperes a plat
+};
+
+enum class Level : std::uint8_t { Depth, Object };
+
+std::vector<Level> levelsOf(HmiDuplicateDialog::Grouping g) {
+    using G = HmiDuplicateDialog::Grouping;
+    switch (g) {
+    case G::Depth: return {Level::Depth};
+    case G::Object: return {Level::Object};
+    case G::DepthObject: return {Level::Depth, Level::Object};
+    case G::ObjectDepth: return {Level::Object, Level::Depth};
+    default: return {};
+    }
+}
+
+// Le libelle d'une profondeur sous sa mere : "Armoires[.].Departs[.]" sous "Armoires[.]" -> ".Departs[.]".
+std::string relativeLabel(const std::string& label, const std::string& parent) {
+    if (!parent.empty() && label.size() > parent.size() && label.compare(0, parent.size(), parent) == 0) return label.substr(parent.size());
+    return label;
+}
+
+class TreeBuilder {
+public:
+    TreeBuilder(const HmiDuplicateDialog& d, Tree& t, std::vector<Level> levels, bool hors) : d_(d), t_(t), levels_(std::move(levels)), hors_(hors) {}
+
+    void level(std::size_t li, const std::vector<std::size_t>& ms, std::size_t parent, const std::string& prefix, int lvl) {
+        if (li >= levels_.size()) {
+            if (parent == kNoNode) t_.flat = ms;
+            else t_.nodes[parent].direct = ms;
+            return;
+        }
+        if (levels_[li] == Level::Object) objects(li, ms, parent, prefix, lvl);
+        else depths(li, ms, parent, prefix, lvl);
+    }
+
+private:
+    std::size_t attach(TreeNode n, std::size_t parent) {
+        const std::size_t at = t_.nodes.size();
+        n.parent = parent;
+        t_.nodes.push_back(std::move(n));
+        if (parent == kNoNode) t_.roots.push_back(at);
+        else t_.nodes[parent].kids.push_back(at);
+        return at;
+    }
+    std::size_t spotsOf(std::size_t mi) const { return d_.scanned().markers[mi].spots.size(); }
+
+    void objects(std::size_t li, const std::vector<std::size_t>& ms, std::size_t parent, const std::string& prefix, int lvl) {
+        std::vector<std::string> order;
+        std::map<std::string, std::vector<std::size_t>> by;
+        for (const std::size_t mi : ms) {
+            const auto& m = d_.scanned().markers[mi];
+            const std::string obj = m.spots.empty() ? std::string("?") : m.spots.front().objectName;
+            auto& list = by[obj];
+            if (list.empty()) order.push_back(obj);
+            list.push_back(mi);
+        }
+        for (const auto& obj : order) {
+            TreeNode n;
+            n.key = prefix + "O:" + obj;
+            n.title = obj;
+            n.level = lvl;
+            n.members = by[obj];
+            for (const std::size_t mi : n.members) n.spots += spotsOf(mi);
+            const std::size_t at = attach(std::move(n), parent);
+            level(li + 1, by[obj], at, t_.nodes[at].key + "/", lvl + 1);
+        }
+    }
+
+    void depths(std::size_t li, const std::vector<std::size_t>& ms, std::size_t parent, const std::string& prefix, int lvl) {
+        const auto& model = d_.model();
+        const std::size_t G = model.groups.size();
+        // La chaine de chaque repere : les profondeurs de ses indices (dans l'ordre du modele : 1, 2, 3...), ou son groupe.
+        std::vector<std::vector<std::size_t>> chains(ms.size());
+        std::vector<long long> up(G, -2);   // -2 : pas vu ; -1 : en tete ; sinon le groupe d'au-dessus
+        for (std::size_t q = 0; q < ms.size(); ++q) {
+            const auto& mm = model.markers[ms[q]];
+            auto& chain = chains[q];
+            if (mm.kind == dup::GroupKind::Index && !mm.slots.empty()) {
+                for (const auto& sl : mm.slots)
+                    if (std::find(chain.begin(), chain.end(), sl.group) == chain.end()) chain.push_back(sl.group);
+                std::sort(chain.begin(), chain.end());
+            } else
+                chain.push_back(mm.group);
+            for (std::size_t k = 0; k < chain.size(); ++k)
+                if (up[chain[k]] == -2) up[chain[k]] = k == 0 ? -1 : static_cast<long long>(chain[k - 1]);
+        }
+        // Les noeuds, dans l'ordre du modele (une mere avant ses filles : sa profondeur est plus petite).
+        std::vector<std::size_t> node(G, kNoNode);
+        for (std::size_t gi = 0; gi < G; ++gi) {
+            const auto& g = model.groups[gi];
+            const bool used = up[gi] != -2;
+            const bool alone = hors_ && li == 0 && g.kind == dup::GroupKind::Index && !g.marked;
+            if (!used && !alone) continue;
+            std::size_t mother = parent;
+            const dup::Group* motherGroup = nullptr;
+            if (used && up[gi] >= 0 && node[static_cast<std::size_t>(up[gi])] != kNoNode) {
+                mother = node[static_cast<std::size_t>(up[gi])];
+                motherGroup = &model.groups[static_cast<std::size_t>(up[gi])];
+            }
+            TreeNode n;
+            n.key = prefix + g.key;
+            n.groupKey = g.key;
+            n.title = motherGroup ? relativeLabel(g.label, motherGroup->label)
+                                  : g.label + (g.kind == dup::GroupKind::Index && !g.marked ? "  (hors rep\xC3\xA8re)" : "");
+            n.level = motherGroup ? t_.nodes[mother].level + 1 : lvl;
+            n.keepEmpty = alone;
+            if (alone) n.spots = g.spots;
+            node[gi] = attach(std::move(n), mother);
+        }
+        // Les reperes : dans chaque noeud de leur chaine ; laisses a la plus grande profondeur.
+        std::vector<std::vector<std::size_t>> leaves(G);
+        for (std::size_t q = 0; q < ms.size(); ++q) {
+            for (const std::size_t gi : chains[q]) {
+                auto& n = t_.nodes[node[gi]];
+                n.members.push_back(ms[q]);
+                n.spots += spotsOf(ms[q]);
+            }
+            leaves[chains[q].back()].push_back(ms[q]);
+        }
+        for (std::size_t gi = 0; gi < G; ++gi)
+            if (node[gi] != kNoNode && !leaves[gi].empty())
+                level(li + 1, leaves[gi], node[gi], t_.nodes[node[gi]].key + "/", t_.nodes[node[gi]].level + 1);
+    }
+
+    const HmiDuplicateDialog& d_;
+    Tree&                     t_;
+    std::vector<Level>        levels_;
+    bool                      hors_{false};
+};
+
+} // namespace
+
+std::string HmiDuplicateDialog::groupingLabel(Grouping g) {
+    switch (g) {
+    case Grouping::Depth: return "Profondeur";
+    case Grouping::Object: return "Objet";
+    case Grouping::DepthObject: return "Profondeur \xE2\x80\xBA Objet";
+    case Grouping::ObjectDepth: return "Objet \xE2\x80\xBA Profondeur";
+    default: return "Rien";
+    }
+}
+
+std::optional<HmiDuplicateDialog::Grouping> HmiDuplicateDialog::groupingNamed(std::string_view text) {
+    // "profondeur>objet", "Profondeur > Objet", le libelle (le chevron) ; sans la casse ni les blancs.
+    std::string t;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if (text.compare(i, 3, "\xE2\x80\xBA") == 0) {
+            t += '>';
+            i += 2;
+            continue;
+        }
+        const char c = text[i];
+        if (std::isspace(static_cast<unsigned char>(c))) continue;
+        t += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    if (t == "profondeur" || t == "profondeurs") return Grouping::Depth;
+    if (t == "objet" || t == "objets") return Grouping::Object;
+    if (t == "rien" || t == "aucun") return Grouping::None;
+    if (t == "profondeur>objet") return Grouping::DepthObject;
+    if (t == "objet>profondeur") return Grouping::ObjectDepth;
+    return std::nullopt;
+}
+
+// La liste des reperes : groupee (1.50.1 : sur plusieurs niveaux - l'arbre des profondeurs, les objets) ou a plat,
+// filtree, cherchee ; un groupe replie ne garde que sa ligne (ses comptes restent : tout son sous-arbre). La table ne
+// dessine que les lignes visibles : 500 ou 5 000 reperes, pareil.
 void HmiDuplicateDialog::buildList() {
     listRows_.clear();
+    nodes_.clear();
     std::string needle;
     for (const char c : search_) needle += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     const auto lowerOf = [](const std::string& s) {
@@ -1849,7 +2159,11 @@ void HmiDuplicateDialog::buildList() {
         case ListFilter::Indices: if (mm.kind != dup::GroupKind::Index) return false; break;
         case ListFilter::Addresses: if (mm.kind != dup::GroupKind::Address) return false; break;
         case ListFilter::Texts: if (mm.kind != dup::GroupKind::Text && mm.kind != dup::GroupKind::Variable) return false; break;
-        case ListFilter::Own: if (rules_.ownOf(key).kind == dup::OwnKind::Group) return false; break;
+        case ListFilter::Own: {
+            const auto own = rules_.ownOf(key);
+            if (own.kind == dup::OwnKind::Group || own.inList) return false;
+            break;
+        }
         case ListFilter::Conflicts: if (!markerLevel_.count(key)) return false; break;
         default: break;
         }
@@ -1864,13 +2178,19 @@ void HmiDuplicateDialog::buildList() {
     for (const auto& c : check_.cells)
         if (c.blocks && c.row == static_cast<int>(lastRow) && c.column.size() > 2 && c.column.front() == '$')
             lastFault.emplace(dup::markerKey(c.column.substr(1, c.column.size() - 2)), c.message);
-    const auto markerRow = [&](std::size_t mi) {
+    // 1.50.1 : les reperes qui ont leur regle (dans la liste), relevees une fois.
+    std::vector<char> ruled(scan_.markers.size(), 0);
+    for (std::size_t mi = 0; mi < scan_.markers.size(); ++mi) ruled[mi] = rules_.ownOf(dup::markerKey(scan_.markers[mi].name)).inList ? 1 : 0;
+    const auto markerRow = [&](std::size_t mi, int level) {
         ListRow r;
         r.key = dup::markerKey(scan_.markers[mi].name);
         r.marker = mi;
+        r.level = level;
         r.text = markerLabel(scan_.markers[mi].name);   // ou il est : demande par la table, ligne dessinee par ligne
         r.rule = ruleText(mi);
-        r.own = rules_.ownOf(r.key).kind != dup::OwnKind::Group;
+        const auto own = rules_.ownOf(r.key);
+        r.rule2 = own.inList;
+        r.own = own.kind != dup::OwnKind::Group && !own.inList;
         if (lastRow > 0) {
             const auto it = plan_.rows[lastRow].markers.find(r.key);
             r.last = it == plan_.rows[lastRow].markers.end() || it->second.empty()
@@ -1882,71 +2202,65 @@ void HmiDuplicateDialog::buildList() {
             if (const auto it = lastFault.find(r.key); it != lastFault.end()) r.last += "  \xE2\x80\x94 " + it->second;
         return r;
     };
-    // Les groupes : une cle, un titre, ses reperes.
-    struct Bucket {
-        std::string key, title, rule, last;
-        std::vector<std::size_t> markers;
-        std::size_t spots{0};
-    };
-    std::vector<Bucket> buckets;
-    if (grouping_ == Grouping::Depth) {
-        for (std::size_t gi = 0; gi < model_.groups.size(); ++gi) {
-            const auto& g = model_.groups[gi];
-            if (g.kind == dup::GroupKind::Name) continue;
-            Bucket b;
-            b.key = g.key;
-            b.title = g.label + (g.kind == dup::GroupKind::Index && !g.marked ? "  (hors rep\xC3\xA8re)" : "");
-            const auto& rule = rules_.rule(g);
-            b.rule = rule.kind == dup::RuleKind::Formula ? "varie : " + rule.formula
-                   : rule.kind == dup::RuleKind::Empty ? std::string("\xC3\xA0 remplir") : std::string("fixe");
-            b.spots = g.spots;
-            for (std::size_t mi = 0; mi < scan_.markers.size(); ++mi)
-                if (model_.markers[mi].group == gi && keep(mi)) b.markers.push_back(mi);
-            if (b.markers.empty() && (g.kind != dup::GroupKind::Index || g.marked || filter_ != ListFilter::All || !needle.empty())) continue;
-            buckets.push_back(std::move(b));
-        }
-    } else if (grouping_ == Grouping::Object) {
-        std::map<std::string, std::size_t> at;
-        for (std::size_t mi = 0; mi < scan_.markers.size(); ++mi) {
-            if (!keep(mi)) continue;
-            const auto& m = scan_.markers[mi];
-            const std::string obj = m.spots.empty() ? std::string("?") : m.spots.front().objectName;
-            auto it = at.find(obj);
-            if (it == at.end()) {
-                it = at.emplace(obj, buckets.size()).first;
-                Bucket b;
-                b.key = "O:" + obj;
-                b.title = obj;
-                buckets.push_back(std::move(b));
-            }
-            buckets[it->second].markers.push_back(mi);
-            buckets[it->second].spots += m.spots.size();
-        }
-    } else {
-        for (std::size_t mi = 0; mi < scan_.markers.size(); ++mi)
-            if (keep(mi)) listRows_.push_back(markerRow(mi));
-        if (listModel_) listModel_->modelReset->emit();
-        return;
+    std::vector<std::size_t> shown;
+    for (std::size_t mi = 0; mi < scan_.markers.size(); ++mi)
+        if (keep(mi)) shown.push_back(mi);
+    Tree tree;
+    {
+        TreeBuilder b(*this, tree, levelsOf(grouping_), filter_ == ListFilter::All && needle.empty());
+        b.level(0, shown, kNoNode, {}, 0);
     }
-    for (const auto& b : buckets) {
+    // Les noms de chaque groupe (deplier / replier par son nom).
+    for (const auto& n : tree.nodes) {
+        NodeName nn;
+        nn.key = n.key;
+        nn.parent = n.parent == kNoNode ? std::string{} : tree.nodes[n.parent].key;
+        nn.names.push_back(n.title);
+        if (const auto* g = model_.group(n.groupKey)) {
+            nn.names.push_back(g->label);
+            nn.names.push_back(g->tail);
+            nn.names.push_back(bare(g->tail));
+        }
+        nodes_.push_back(std::move(nn));
+    }
+    const auto ruleOf = [&](const std::string& groupKey) -> std::string {
+        const auto* g = model_.group(groupKey);
+        if (!g) return {};
+        const auto& rule = rules_.rule(*g);
+        return rule.kind == dup::RuleKind::Formula ? "varie : " + rule.formula
+             : rule.kind == dup::RuleKind::Empty ? std::string("\xC3\xA0 remplir") : std::string("fixe");
+    };
+    const auto emit = [&](const auto& self, std::size_t ni) -> void {
+        const auto& n = tree.nodes[ni];
+        if (n.members.empty() && !n.keepEmpty) return;
         ListRow head;
         head.group = true;
-        head.key = b.key;
-        head.text = b.title;
-        head.count = b.markers.size();
-        head.where = plural(b.spots, "endroit", "endroits");
-        head.rule = b.rule;
-        head.expanded = !collapsed_.count(b.key);
-        if (lastRow > 0 && !b.markers.empty()) {
-            const auto it = plan_.rows[lastRow].markers.find(dup::markerKey(scan_.markers[b.markers.front()].name));
+        head.key = n.key;
+        head.text = n.title;
+        head.level = n.level;
+        head.groupKey = n.groupKey;
+        head.members = n.members;
+        head.count = n.members.size();
+        std::size_t own = 0;
+        for (const std::size_t mi : n.members) own += static_cast<std::size_t>(ruled[mi]);
+        head.where = plural(n.spots, "endroit", "endroits");
+        if (own > 0) head.where += " \xC2\xB7 " + std::to_string(own) + (own > 1 ? " avec leur r\xC3\xA8gle" : " avec sa r\xC3\xA8gle");
+        head.rule = ruleOf(n.groupKey);
+        head.expanded = !collapsed_.count(n.key);
+        if (lastRow > 0 && !n.members.empty()) {
+            const auto it = plan_.rows[lastRow].markers.find(dup::markerKey(scan_.markers[n.members.front()].name));
             if (it != plan_.rows[lastRow].markers.end()) head.last = it->second;
         }
-        for (const std::size_t mi : b.markers)
+        for (const std::size_t mi : n.members)
             if (const auto it = markerLevel_.find(dup::markerKey(scan_.markers[mi].name)); it != markerLevel_.end()) head.conflict = std::max(head.conflict, it->second);
+        const bool open = head.expanded;
         listRows_.push_back(std::move(head));
-        if (collapsed_.count(b.key)) continue;
-        for (const std::size_t mi : b.markers) listRows_.push_back(markerRow(mi));
-    }
+        if (!open) return;
+        for (const std::size_t k : n.kids) self(self, k);
+        for (const std::size_t mi : n.direct) listRows_.push_back(markerRow(mi, n.level + 1));
+    };
+    for (const std::size_t r : tree.roots) emit(emit, r);
+    for (const std::size_t mi : tree.flat) listRows_.push_back(markerRow(mi, 0));
     if (listModel_) listModel_->modelReset->emit();
 }
 
@@ -1972,12 +2286,19 @@ void HmiDuplicateDialog::setGrouping(Grouping g) {
     syncWidgets();
 }
 
+// 1.50.1 : a tous les niveaux - replier : chaque groupe de l'arbre (tous les reperes, sans filtre : un filtre change
+// ensuite ne fait rien reapparaitre deplie).
 void HmiDuplicateDialog::expandAll(bool expanded) {
     collapsed_.clear();
     if (!expanded) {
-        for (const auto& g : model_.groups) collapsed_.insert(g.key);
-        for (const auto& m : scan_.markers)
-            if (!m.spots.empty()) collapsed_.insert("O:" + m.spots.front().objectName);
+        std::vector<std::size_t> all(scan_.markers.size());
+        for (std::size_t mi = 0; mi < all.size(); ++mi) all[mi] = mi;
+        for (const auto g : {Grouping::Depth, Grouping::Object, Grouping::DepthObject, Grouping::ObjectDepth}) {
+            Tree tree;
+            TreeBuilder b(*this, tree, levelsOf(g), true);
+            b.level(0, all, kNoNode, {}, 0);
+            for (const auto& n : tree.nodes) collapsed_.insert(n.key);
+        }
     }
     buildList();
 }
@@ -1986,6 +2307,35 @@ void HmiDuplicateDialog::toggleGroup(std::string_view key) {
     const std::string k(key);
     if (!collapsed_.erase(k)) collapsed_.insert(k);
     buildList();
+}
+
+bool HmiDuplicateDialog::setGroupExpanded(std::string_view name, bool expanded) {
+    const auto norm = [](std::string_view s) {
+        std::string out;
+        for (std::size_t i = 0; i < s.size(); ++i) {
+            if (s.compare(i, 2, "\xC2\xB7") == 0) { ++i; continue; }
+            const char c = s[i];
+            if (c == ' ' || c == '*' || c == '.' || c == '$' || c == '[' || c == ']') continue;
+            out += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        }
+        return out;
+    };
+    const std::string want = norm(name);
+    if (want.empty()) return false;
+    std::map<std::string, std::string> parentOf;
+    for (const auto& n : nodes_) parentOf[n.key] = n.parent;
+    bool found = false;
+    for (const auto& n : nodes_) {
+        if (std::none_of(n.names.begin(), n.names.end(), [&](const std::string& x) { return norm(x) == want; })) continue;
+        found = true;
+        if (!expanded) {
+            collapsed_.insert(n.key);
+            continue;
+        }
+        for (std::string k = n.key; !k.empty(); k = parentOf[k]) collapsed_.erase(k);   // ses parents aussi
+    }
+    if (found) buildList();
+    return found;
 }
 
 std::vector<std::size_t> HmiDuplicateDialog::selectedMarkers() const {
@@ -1999,14 +2349,61 @@ std::vector<std::size_t> HmiDuplicateDialog::selectedMarkers() const {
             if (seen.insert(r.marker).second) out.push_back(r.marker);
             continue;
         }
-        // Un groupe : tous ses reperes (meme replies).
-        for (std::size_t mi = 0; mi < scan_.markers.size(); ++mi) {
-            const bool in = grouping_ == Grouping::Depth ? model_.groups[model_.markers[mi].group].key == r.key
-                                                         : !scan_.markers[mi].spots.empty() && "O:" + scan_.markers[mi].spots.front().objectName == r.key;
-            if (in && seen.insert(mi).second) out.push_back(mi);
-        }
+        // Un groupe : tous ses reperes (tout son sous-arbre, meme replie).
+        for (const std::size_t mi : r.members)
+            if (seen.insert(mi).second) out.push_back(mi);
     }
     return out;
+}
+
+// 1.50.1 : sa regle dans la liste - une formule, « garder » ; vide (ou la formule de son groupe) : comme son groupe.
+bool HmiDuplicateDialog::setMarkerRule(std::string_view marker, std::string text) {
+    const int c = columnIndex(marker);
+    if (c <= 0) return false;
+    const auto mi = static_cast<std::size_t>(c - 1);
+    const auto& mm = model_.markers[mi];
+    const auto& g = model_.groups[mm.group];
+    const auto& groupRule = rules_.rule(g);
+    std::string t;
+    {
+        std::size_t a = 0, b = text.size();
+        while (a < b && std::isspace(static_cast<unsigned char>(text[a]))) ++a;
+        while (b > a && std::isspace(static_cast<unsigned char>(text[b - 1]))) --b;
+        t = text.substr(a, b - a);
+    }
+    // La case d'un repere a part se lit « a part : (Voies : ) formule » : la formule seule.
+    static const std::string kApart = "\xC3\xA0 part : ";
+    if (t.rfind(kApart, 0) == 0) {
+        t = t.substr(kApart.size());
+        if (const auto colon = t.rfind(" : "); mm.kind == dup::GroupKind::Index && colon != std::string::npos) t = t.substr(colon + 3);
+    }
+    if (t == "garder le rep\xC3\xA8re") t = "garder";
+    const std::string label = markerLabel(scan_.markers[mi].name);
+    if (t.empty() || t == "comme son groupe" || t == "comme sa profondeur" || (groupRule.kind == dup::RuleKind::Formula && t == groupRule.formula))
+        return setOwnRule(label, dup::Own{});
+    dup::Own own;
+    own.inList = true;
+    own.how = "sa r\xC3\xA8gle";
+    if (t == "garder" || t == "fixe") own.kind = dup::OwnKind::Keep;
+    else {
+        own.kind = dup::OwnKind::Formula;
+        own.formula = std::move(t);
+        if (mm.kind == dup::GroupKind::Index) own.group = g.key;   // pour sa plus grande profondeur (la ou la liste le range)
+    }
+    return setOwnRule(label, std::move(own));
+}
+
+std::size_t HmiDuplicateDialog::markerRules(std::string_view group) const {
+    const auto* g = findGroup(group);
+    if (!g) return 0;
+    std::size_t n = 0;
+    for (const std::size_t mi : g->markers) {
+        const auto own = rules_.ownOf(dup::markerKey(scan_.markers[mi].name));
+        if (!own.inList) continue;
+        if (model_.markers[mi].kind == dup::GroupKind::Index && own.kind == dup::OwnKind::Formula && own.group != g->key) continue;
+        ++n;
+    }
+    return n;
 }
 
 void HmiDuplicateDialog::openOwnEditor(int mode) {
@@ -2045,7 +2442,11 @@ void HmiDuplicateDialog::openOwnEditor(int mode) {
         syncing_ = false;
     }
     if (copiesPage_) copiesPage_->invalidateLayout();
-    if (editMode_ && ownField_) (void)ownField_->focusAndSelectAll();
+    // 1.50.1 : le champ se montre avant de prendre le clavier (cache jusqu'a la mise en page, il le refusait).
+    if (editMode_ && ownField_) {
+        ownField_->setVisibility(ui::Visibility::Visible);
+        (void)ownField_->focusAndSelectAll();
+    }
 }
 
 // Les tableaux, la bande, les onglets suivent le plan.
@@ -2101,8 +2502,16 @@ void HmiDuplicateDialog::syncWidgets() {
         if (filterButtons_[i]->text() != label) filterButtons_[i]->setText(label);
         filterButtons_[i]->setStyle(filter_ == kFilters[i] ? ui::Button::Style::Primary : ui::Button::Style::Default);
     }
-    for (std::size_t i = 0; i < groupButtons_.size(); ++i)
-        groupButtons_[i]->setStyle(static_cast<std::size_t>(grouping_) == i ? ui::Button::Style::Primary : ui::Button::Style::Default);
+    if (groupBy_) {   // 1.50.1 : le choix de « Grouper par »
+        const auto& items = groupBy_->items();
+        for (std::size_t i = 0; i < items.size(); ++i)
+            if (items[i].value == std::to_string(static_cast<int>(grouping_)) && groupBy_->selectedIndex() != static_cast<int>(i)) {
+                const bool was = syncing_;
+                syncing_ = true;
+                groupBy_->setSelectedIndex(static_cast<int>(i));
+                syncing_ = was;
+            }
+    }
     if (kButton_) kButton_->setText(rules_.counters.grid.size() >= 3 ? "Retirer k" : "+ un compteur k");
     if (band_) band_->invalidateLayout();
     if (copiesPage_) copiesPage_->invalidateLayout();
@@ -2114,6 +2523,10 @@ void HmiDuplicateDialog::rebuildGrid() {
 }
 
 HmiDuplicateDialog::SheetStats HmiDuplicateDialog::sheetStats() const { return sheet_ ? sheet_->stats() : SheetStats{}; }
+
+gfx::Rect HmiDuplicateDialog::sheetCell(int row, int column) const { return sheet_ ? sheet_->cellOnScreen(row, column) : gfx::Rect{}; }
+ui::InputText* HmiDuplicateDialog::sheetEditor() const noexcept { return sheet_ ? sheet_->editor : nullptr; }
+bool HmiDuplicateDialog::sheetEditing() const noexcept { return sheet_ && sheet_->editing(); }
 
 void HmiDuplicateDialog::scrollSheet(float x, float y) {
     if (sheet_) sheet_->scrollTo(x, y);
@@ -2193,6 +2606,69 @@ std::vector<std::string> HmiDuplicateDialog::memberSuggestions(std::string_view 
         if (p != path && std::find(out.begin(), out.end(), p) == out.end()) out.push_back(std::move(p));
     if (out.size() > 3) out.resize(3);
     return out;
+}
+
+// 1.50.1 : l'exemple des captures (dupliquer-exemple) - avant, Armoires etait ARRAY[0..3] OF INT : « Armoires[0].Nom
+// n'existe pas », Dupliquer gris. Les types fictifs tiennent chaque chemin ecrit ; seul avertissement : %MW1037 (Compteur).
+std::vector<hmi::Id> HmiDuplicateDialog::addExample(hmi::Project& p, hmi::View& v) {
+    std::vector<hmi::Id> made;
+    const auto type = [&p](const std::string& name, const std::vector<std::pair<std::string, std::string>>& members) {
+        for (const auto& t : p.programs.types)
+            if (t.name == name) return;
+        hmi::HmiType t;
+        t.id = p.allocate();
+        t.name = name;
+        t.description = "Exemple fictif (Dupliquer)";
+        for (const auto& [member, memberType] : members) {
+            hmi::TypeMember m;
+            m.name = member;
+            m.type = memberType;
+            t.members.push_back(std::move(m));
+        }
+        p.programs.types.push_back(std::move(t));
+    };
+    type("T_Mesure", {{"Valeur", "REAL"}});
+    type("T_Voie", {{"Etat", "INT"}, {"Courant", "REAL"}, {"Tension", "REAL"}, {"Seuil", "REAL"}, {"Alarme", "BOOL"}, {"Defaut", "BOOL"}, {"Marche", "BOOL"}});
+    type("T_Depart", {{"Nom", "STRING"}, {"Voies", "ARRAY[0..31] OF T_Voie"}, {"Mesures", "ARRAY[0..3] OF T_Mesure"}});
+    type("T_Armoire", {{"Nom", "STRING"}, {"Departs", "ARRAY[0..7] OF T_Depart"}});
+    const auto variable = [&p](const std::string& name, const std::string& varType, const std::string& address) {
+        for (const auto& x : p.programs.variables)
+            if (x.name == name) return;
+        hmi::Variable var;
+        var.id = p.allocate();
+        var.name = name;
+        var.type = varType;
+        var.address = address;
+        p.programs.variables.push_back(var);
+    };
+    variable("Armoires", "ARRAY[0..3] OF T_Armoire", {});
+    variable("Compteur", "INT", "%MW1037");
+    const auto object = [&](hmi::Kind k, const std::string& name, double x, double y) -> hmi::Object& {
+        const hmi::Id id = hmi::edit::add(p, v, k, x, y);
+        made.push_back(id);
+        auto* o = v.object(id);
+        o->name = name;
+        return *o;
+    };
+    // (chaque reference sert avant l'objet suivant : un ajout peut deplacer les objets de la vue)
+    auto& depart = object(hmi::Kind::Rectangle, "Depart_0_0", 40, 40);
+    depart.setExpr("fill", "$Armoires[0].Departs[0].Voies[5].Etat$ > 0");
+    for (int k = 0; k < 4; ++k)
+        depart.setExpr("mesure_" + std::to_string(k), "$Armoires[0].Departs[0].Mesures[" + std::to_string(k) + "].Valeur$");
+    depart.setExpr("armoire", "$Armoires[0].Nom$");
+    auto& voyant = object(hmi::Kind::Rectangle, "Voyant_V5", 150, 40);
+    for (const char* m : {"Alarme", "Defaut", "Marche"})
+        voyant.setExpr(std::string("voie_") + m, std::string("$Armoires[0].Departs[0].Voies[5].") + m + "$");
+    auto& mesure = object(hmi::Kind::Rectangle, "Afficheur_I5", 150, 110);
+    for (const char* m : {"Courant", "Tension", "Seuil"})
+        mesure.setExpr(std::string("voie_") + m, std::string("$Armoires[0].Departs[0].Voies[5].") + m + "$");
+    auto& adresse = object(hmi::Kind::Rectangle, "Afficheur_P", 40, 110);
+    adresse.setExpr("fill", "$%MW1000$ > 0");
+    adresse.setExpr("visible", "$%M200$");
+    object(hmi::Kind::Text, "Titre_0", 40, 170).set("text", "$Titre 1.1$");
+    object(hmi::Kind::Text, "Legende_0", 40, 220).set("text", "$L\xC3\xA9gende armoire$");
+    object(hmi::Kind::Text, "Code_0", 150, 220).set("text", "$Code D00$");
+    return made;
 }
 
 const hmi::View* HmiDuplicateDialog::view() const {
@@ -2666,10 +3142,18 @@ core::Status HmiDuplicateDialog::buildUi() {
             filterButtons_.push_back(button(*copies, "Tous", std::string("filter.") + kIds[i]));
             links_ += filterButtons_.back()->clicked->connect([this, i] { setListFilter(static_cast<ListFilter>(i)); });
         }
-        static const char* kGroups[] = {"Profondeur", "Objet", "Rien"};
-        for (int i = 0; i < 3; ++i) {
-            groupButtons_.push_back(button(*copies, kGroups[i], std::string("group") + std::to_string(i)));
-            links_ += groupButtons_.back()->clicked->connect([this, i] { setGrouping(static_cast<Grouping>(i)); });
+        // 1.50.1 : « Grouper par » sur plusieurs niveaux - une liste (5 choix : les boutons ne tenaient plus).
+        {
+            auto dd = std::make_unique<ui::DropDown>(base + ".groupBy");
+            std::vector<ui::DropDown::Item> items;
+            for (const auto g : {Grouping::Depth, Grouping::DepthObject, Grouping::Object, Grouping::ObjectDepth, Grouping::None})
+                items.push_back({groupingLabel(g), std::to_string(static_cast<int>(g))});
+            dd->setItems(std::move(items));
+            groupBy_ = &static_cast<ui::DropDown&>(copies->addChild(std::move(dd)));
+            links_ += groupBy_->selectionChanged->connect([this](int) {
+                if (syncing_ || !groupBy_->selectedItem()) return;
+                setGrouping(static_cast<Grouping>(std::atoi(groupBy_->selectedItem()->value.c_str())));
+            });
         }
         foldButtons_.push_back(button(*copies, "Tout d\xC3\xA9plier", "expand"));
         foldButtons_.push_back(button(*copies, "Tout replier", "collapse"));
@@ -2746,8 +3230,18 @@ core::Status HmiDuplicateDialog::buildUi() {
     {
         auto dd = std::make_unique<ui::DropDown>(base + ".ownDepth");
         ownDepth_ = &static_cast<ui::DropDown&>(copies->addChild(std::move(dd)));
-        auto f = std::make_unique<ui::InputText>(base + ".ownFormula");
+        auto f = std::make_unique<KeyField>(base + ".ownFormula");
         f->setMonospace(true);
+        // 1.50.1 : Echap abandonne la regle en cours (comme Annuler) - avant, la perte du clavier l'appliquait.
+        auto* typed = f.get();
+        f->keys = [this, typed](const ui::KeyDown& k) {
+            if (k.key != ui::Key::Escape || !k.mods.none() || !editMode_) return false;
+            editMode_ = 0;               // d'abord : la perte du clavier qui suit n'applique rien
+            editing_.clear();
+            typed->drop();
+            if (copiesPage_) copiesPage_->invalidateLayout();
+            return true;
+        };
         ownField_ = &static_cast<ui::InputText&>(copies->addChild(std::move(f)));
         auto fr = std::make_unique<ui::InputText>(base + ".ownFrom");
         ownFrom_ = &static_cast<ui::InputText&>(copies->addChild(std::move(fr)));
@@ -2853,7 +3347,8 @@ core::Status HmiDuplicateDialog::buildUi() {
     {
         auto sheet = std::make_unique<Sheet>(*this);
         sheet_ = sheet.get();
-        auto ed = std::make_unique<ui::InputText>(base + ".cell");
+        auto ed = std::make_unique<KeyField>(base + ".cell");
+        ed->keys = [this](const ui::KeyDown& k) { return sheet_ && sheet_->editorKey(k); };   // 1.50.1 : Entree, Echap
         sheet_->editor = &static_cast<ui::InputText&>(sheet_->addChild(std::move(ed)));
         sheet_->editor->setVisibility(ui::Visibility::Collapsed);
         links_ += sheet_->editor->editingDone->connect([this](const std::string&) {
@@ -2958,8 +3453,10 @@ std::vector<std::string> HmiDuplicateDialog::beforeAfter(int row) const {
 
 ui::EventResult HmiDuplicateDialog::HandleEvent(const ui::InputEvent& ev) {
     if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
-        // Ctrl+Entree : "Dupliquer" (Entree choisit dans l'aide d'une case).
+        // Ctrl+Entree : "Dupliquer" (Entree choisit dans l'aide d'une case). 1.50.1 : la case ouverte du tableau
+        // (Excel) s'ecrit d'abord (avant : ce qui y etait tape se perdait).
         if (k->key == ui::Key::Return && k->mods.ctrl) {
+            if (sheet_ && sheet_->editing()) sheet_->commit();
             confirm();
             return ui::EventResult::Consumed;
         }

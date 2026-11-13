@@ -31,6 +31,7 @@
 
 #include "HmiModel.hpp"
 #include "HmiOperators.hpp"   // OperatorName (reutilise pour la legende SELF)
+#include "HmiOverload.hpp"    // 1.50.1 : les surcharges des methodes (la regle des fonctions)
 
 #include <cstddef>
 #include <functional>
@@ -86,6 +87,31 @@ struct OwnedMethod {
 
 // 1.13.0 (J1b) : la methode d'identifiant `id` (d'un type du projet) et le type qui la porte ; nulle : aucune.
 [[nodiscard]] const HmiFunction* methodById(const Project&, Id id, const HmiType** owner = nullptr);
+
+// ---------------------------------------------- 1.50.1 : LES SURCHARGES -------
+//  Comme les fonctions (HmiOverload.hpp) : plusieurs methodes d'un MEME type peuvent porter le meme nom si leurs
+//  parametres different (pas leur seul retour) ; un appel prend la sienne par la regle des surcharges (l'arite, la
+//  reference, puis les types : le controle et le moteur choisissent la meme). Une methode virtuelle ne se surcharge
+//  pas (ses redefinitions la designent par son nom) ; une interface non plus (une signature par nom). Un sous-type
+//  herite de toutes les surcharges du parent ; il n'en ajoute pas (meme nom qu'une methode non virtuelle du parent :
+//  refuse, comme avant).
+// Les methodes de ce nom portees par `t` (sans remonter), dans l'ordre.
+[[nodiscard]] std::vector<const HmiFunction*> ownMethods(const HmiType& t, std::string_view name);
+// Les methodes EN VIGUEUR de ce nom pour `typeName` : ses surcharges (une redefinition remplace la virtuelle du parent).
+[[nodiscard]] std::vector<OwnedMethod> effectiveMethods(const Project&, std::string_view typeName, std::string_view name);
+// Le nom interne qui tient compte des surcharges : la premiere de son nom dans `owner` garde METHODE_T_POMPE_REGLER ;
+// une autre surcharge, METHODE_T_POMPE_REGLER__<id>. Un nom que le moteur, SUPER et le debogueur retrouvent.
+[[nodiscard]] std::string methodFunctionName(const HmiType& owner, const HmiFunction& m);
+// La signature d'une methode pour le choix d'une surcharge (sans SELF) : son nom "T_Pompe.Regler", sa cle "#<id>", ses
+// parametres ; un type generique (de la methode ou du type) n'est pas compare (vide).
+[[nodiscard]] overload::Signature methodOverloadSignature(const HmiType& owner, const HmiFunction& m);
+// La surcharge de `name` (sur `typeName`) qui prend ces arguments : vrai et `chosen` ; faux et `why` (aucune, appel
+// ambigu - `uncertain` : l'egalite vient d'un type inconnu ici). Une seule methode de ce nom : prise si l'arite va.
+bool chooseMethod(const Project&, std::string_view typeName, std::string_view name, const std::vector<overload::Arg>& args,
+                  OwnedMethod& chosen, std::string& why, bool* uncertain = nullptr);
+// Les surcharges mal distinguees d'une methode de son type : la meme forme qu'une autre de son nom, une virtuelle
+// surchargee, une surcharge dans une interface. Vide : rien.
+[[nodiscard]] std::string methodOverloadProblem(const HmiType& owner, const HmiFunction& m);
 
 // ------------------------------------------------------------- predicats ----
 // `sub` est-il `base`, ou en descend par EXTENDS (transitif, sans casse) ?
@@ -170,6 +196,22 @@ bool setMethodParams(HmiFunction& m, std::string_view text, const std::function<
 // sous-types, SELF.X( / THIS.X( / SUPER.X( et l'appel nu X(. Le reste du projet (Pompe1.X() dans un script) n'est pas
 // recrit : Compiler signale l'ancien nom. Rend le nombre de textes changes (0 : introuvable ou meme nom).
 std::size_t renameMethodEverywhere(Project&, Id method, std::string_view newName);
+// ---- 1.50.1 : LA SIGNATURE D'UNE VIRTUELLE, SUIVIE PAR SES REDEFINITIONS ----
+// Les redefinitions de la methode `method` dans les sous-types de son type, a toute profondeur (la redefinition d'une
+// redefinition aussi), dans l'ordre des types du projet ; une par type.
+[[nodiscard]] std::vector<OwnedMethod> overridesOf(const Project&, Id method);
+// Les parametres (nom, type, mode, defaut, unite, dans l'ordre) et le retour (et son unite) de `a` et `b` sont-ils les memes ?
+[[nodiscard]] bool sameMethodHead(const HmiFunction& a, const HmiFunction& b);
+// Apres un changement de la signature de la methode `method` (`before` : elle avant le geste ; ses parametres gardent
+// leur identifiant), chaque redefinition prend la meme : un parametre renomme l'est aussi dans son corps (la machinerie
+// de renommage des declarations : ni chaine, ni commentaire, ni membre x.Nom), retype, ajoute a sa place, retire,
+// deplace ; le retour suit ; un appel SUPER.M(...) suit (par position : l'ordre ; par nom : a := x) ; ses cas de test
+// suivent leurs parametres. Une redefinition qui nommait autrement un parametre garde son nom. Faux et `why` : un nom
+// qu'une redefinition emploie deja (une locale...) - le projet est alors a jeter (l'appelant travaille sur une copie).
+// `touched` : "T_PompeDoublee.Demarrer"...
+bool followOverrides(Project&, Id method, const HmiFunction& before, std::vector<std::string>* touched = nullptr,
+                     std::string* why = nullptr);
+
 // Les types qui implementent l'interface `iface` (eux-memes, ou par un parent), par leur nom - la colonne de droite de
 // la page d'une interface ("Types qui l'implementent").
 [[nodiscard]] std::vector<std::string> implementersOf(const Project&, const HmiType& iface);

@@ -50,6 +50,7 @@
 #include "AiPrompt.hpp"   // 1.20.0 : IncidentSource
 #include "AiAgentTools.hpp"
 #include "AiAttachments.hpp"   // 1.21.0 : le contexte de la discussion
+#include "AiChatReply.hpp"     // 1.50.1 : repondre a un message (la citation)
 #include "AiBuild.hpp"         // 1.22.5 : l'avis du logiciel (Generer et Compiler sur une copie)
 #include "AiFileModels.hpp"    // 1.21.0 : les classeurs joints, les modeles de fichiers
 #include "AiMissionStore.hpp"   // 1.22.0 : les missions IA persistantes (et AiMission.hpp)
@@ -150,6 +151,13 @@ public:
     // l'Assistant desactive.
     bool send(std::string text, std::string* why = nullptr);
     void stop();
+    // 1.50.1 : REPONDRE A UN MESSAGE (AiChatReply.hpp) - la prochaine demande cite le message `message` de la conversation
+    // ouverte : elle porte la citation (sa bulle montre l'extrait), le modele la recoit balisee devant le texte. Faux et
+    // `why` : pas de tel message, la reponse en cours d'ecriture, un message sans texte. Un envoi reussi l'efface ; une
+    // autre conversation ouverte aussi (replyTo rend nul).
+    bool setReplyTo(int message, std::string* why = nullptr);
+    void clearReply();
+    [[nodiscard]] const chatreply::Quote* replyTo() const;
     [[nodiscard]] Phase phase() const noexcept { return gen_.phase; }
     [[nodiscard]] bool  generating() const noexcept { return gen_.phase != Phase::Idle; }
     // Le message de l'assistant en cours d'ecriture (son indice ; -1 : aucun) et ce qui en est ecrit.
@@ -718,6 +726,12 @@ private:
     int                       current_{-1};
     Generation                gen_;
     std::vector<Pending>      pending_;
+    // 1.50.1 : la citation de la prochaine demande (la conversation ou elle a ete choisie, le message cite).
+    struct PendingReply {
+        std::string      conversation;
+        chatreply::Quote quote;
+    };
+    std::optional<PendingReply> reply_;
     bool                      suggestionsAfter_{false};
     std::vector<std::string>  localSuggestions_;   // 1.16.0 : celles de la derniere reponse de l'IA integree
     std::string               notice_;

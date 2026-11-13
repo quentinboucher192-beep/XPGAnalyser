@@ -321,19 +321,14 @@ void refus() {
         int         line;
         const char* word;
     };
+    // 1.50.1 : l'arithmetique des pointeurs (dans un tableau), les classes, les lambdas, malloc, ++ au milieu, std::vector,
+    // std::cout, un case qui continue, static dans une fonction sont pris (scripts_c_1501.inl) ; restent refuses :
     const Case cases[] = {
-        {ScriptLang::C, "int a = 0;\nint *p = &a;\np++;\n", 3, "arithm\xC3\xA9tique des pointeurs"},
-        {ScriptLang::C, "int t[3];\nint *p = &t[0];\nt[1] = p[1];\n", 3, "arithm\xC3\xA9tique des pointeurs"},
-        {ScriptLang::Cpp, "int a = 0;\nclass Pompe { };\n", 2, "classe"},
-        {ScriptLang::Cpp, "int a = 0;\nauto f = [](int x) { return x; };\n", 2, "lambda"},
-        {ScriptLang::C, "int a = 0;\na = 1;\nint *t = malloc(10);\n", 3, "malloc"},
-        {ScriptLang::C, "int a = 0;\na = b++ + 1;\n", 2, "propre ligne"},
-        {ScriptLang::C, "int a = 0;\nif (a = 1) a = 2;\n", 2, "affectation"},
-        {ScriptLang::Cpp, "#include <vector>\nstd::vector<int> v;\n", 2, "std::vector"},
-        {ScriptLang::Cpp, "#include <iostream>\nstd::cout << 1;\n", 2, "std::cout"},
-        {ScriptLang::C, "int a = 1;\nswitch (a) {\n  case 1: a = 2;\n  case 2: a = 3; break;\n}\n", 4, "break"},
         {ScriptLang::C, "int a = 1;\ngoto fin;\n", 2, "goto"},
-        {ScriptLang::C, "int f(void) {\n  static int n;\n  return n;\n}\n", 2, "static"},
+        {ScriptLang::Cpp, "#include <map>\nstd::map<int, int> m;\n", 2, "std::map"},
+        {ScriptLang::Cpp, "int a = 0;\nauto f = [&](int x) { return x; };\n", 2, "[&]"},
+        {ScriptLang::C, "int a = 0;\na = 1;\nint *t = malloc(10);\nt = realloc(t, 20);\n", 4, "realloc"},
+        {ScriptLang::C, "int a = 0;\nif (a == 1) {\n  a = 2;\n}\nfin:\na = 3;\n", 5, "goto"},
     };
     for (const auto& c : cases) {
         const auto t = cscript::translate(c.body, c.lang);
@@ -342,8 +337,8 @@ void refus() {
               std::string("refus ligne ") + std::to_string(c.line) + " (" + c.word + ") : " + what);
     }
     // les textes a l'ecran disent ce qui est pris
-    check(cscript::supportedSubset(ScriptLang::Cpp).find("POINTER TO") != std::string::npos
-              && cscript::supportedSubset(ScriptLang::Cpp).find("Pas d'arithm\xC3\xA9tique des pointeurs") != std::string::npos
+    check(cscript::supportedSubset(ScriptLang::Cpp).find("pointeurs") != std::string::npos
+              && cscript::supportedSubset(ScriptLang::Cpp).find("Pas de goto") != std::string::npos
               && cscript::supportedSubset(ScriptLang::Cpp).find("std::vector") != std::string::npos,
           "le sous-ensemble dit (C++) : " + cscript::supportedSubset(ScriptLang::Cpp));
     Project p;
@@ -366,14 +361,61 @@ void refus() {
     check(whole.ok() && whole.entry == "main", "un fichier C complet : traduit, main() en point d'entree (" + (whole.ok() ? whole.entry : whole.errors.front().message) + ")");
 }
 
+#include "scripts_c_1501.inl"   // 1.50.1 : struct, enum, pointeurs dans un tableau, classes, new / delete, lambdas, le debogueur
+
 } // namespace
 
+// SCRC_RUN=fichier.c|.cpp|.st : traduit (C, C++) et execute le fichier, ecrit la traduction, R (DINT), les erreurs et le
+// journal - un banc d'essai a la main.
+int runFile(const char* path) {
+    std::FILE* f = std::fopen(path, "rb");
+    if (!f) return 2;
+    std::string body;
+    char buf[4096];
+    for (std::size_t n; (n = std::fread(buf, 1, sizeof buf, f)) > 0;) body.append(buf, n);
+    std::fclose(f);
+    const std::string p(path);
+    const ScriptLang lang = p.size() > 4 && p.substr(p.size() - 4) == ".cpp" ? ScriptLang::Cpp : p.size() > 2 && p.substr(p.size() - 2) == ".c" ? ScriptLang::C : ScriptLang::ST;
+    Project pr;
+    const char* rtype = std::getenv("SCRC_RTYPE");
+    addVar(pr, "R", rtype ? rtype : "DINT", "");
+    Script s;
+    s.id = pr.allocate();
+    s.name = "Essai";
+    s.lang = lang;
+    s.event = "Appel";
+    s.body = body;
+    pr.programs.scripts.push_back(s);
+    if (lang != ScriptLang::ST) {
+        const auto t = cscript::translate(body, lang);
+        std::printf("---- ST ----\n%s\n", t.st.c_str());
+        for (const auto& e : t.errors) std::printf("faute ligne %d : %s\n", e.line, e.message.c_str());
+    }
+    for (const auto& d : checkScript(lang, body, "Essai"))
+        std::printf("Compiler : %d ligne %d : %s\n", static_cast<int>(d.severity), d.line, d.message.c_str());
+    View v = makeView(pr, "Vue_Essai");
+    pr.views.push_back(v);
+    pr.config.startView = pr.views.back().id;
+    Runtime rt;
+    rt.bind(&pr, nullptr);
+    rt.start(0.0);
+    rt.tick(0.1);
+    std::string e;
+    const bool ok = rt.callScript("Essai", 0.2, &e);
+    sim::Value out;
+    std::printf("---- R = %s  (%s) %s\n", rt.environment().read("R", out) ? shown(out).c_str() : "#", ok ? "ok" : "ECHEC", e.c_str());
+    for (const auto& j : rt.journal()) std::printf("journal %s : %s\n", j.kind.c_str(), j.message.c_str());
+    return ok ? 0 : 1;
+}
+
 int main() {
+    if (const char* f = std::getenv("SCRC_RUN"); f && *f) return runFile(f);
     std::printf("scripts C et C++ : compiles et executes\n");
     traduction();
     execution();
     sousEnsemble();
     refus();
+    c1501::all();
     std::printf("%d controles, %d echecs\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

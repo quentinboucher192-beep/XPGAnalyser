@@ -872,6 +872,17 @@ struct ColumnGrid {
     bool operator==(const ColumnGrid&) const = default;
 };
 
+// 1.50.1 : LES MARGES DE LA VUE (en pixels de la vue) : ce que garde << Etirer > Garder les marges >> (avant elles,
+// la marge de la grille de colonnes montree, puis le pas d'aimantation), dessinees en tirets dans l'editeur (en
+// marche, rien). Toutes a 0 : la vue n'en a pas a elle (un projet d'avant la 1.50.1 : rien ne change) ; une vue
+// neuve (Nouvelle vue, Nouvelle popup) en a 16 de chaque cote, comme la maquette.
+struct ViewMargins {
+    double top{0}, bottom{0}, left{0}, right{0};
+    [[nodiscard]] bool any() const noexcept { return top > 0 || bottom > 0 || left > 0 || right > 0; }
+    bool operator==(const ViewMargins&) const = default;
+};
+inline constexpr double kNewViewMargin = 16;   // 1.50.1 : les marges d'une vue neuve
+
 enum class ScriptLang : std::uint8_t { ST, C, Cpp };
 [[nodiscard]] std::string_view              scriptLangKey(ScriptLang) noexcept;
 [[nodiscard]] std::optional<ScriptLang>     scriptLangFromKey(std::string_view) noexcept;
@@ -1037,6 +1048,7 @@ struct View {
     std::vector<Guide>  guides;
     GridSettings        grid;
     ColumnGrid          columns;       // 1.12.30 : la grille de colonnes
+    ViewMargins         margins;       // 1.50.1 : ses marges (Etirer les garde)
 
     // ---- lot 6 : ecrans modeles, en-tetes et pieds de page ----------------------
     //  `role` : "vue" (ordinaire), "modele" (un ecran modele : une vue en herite,

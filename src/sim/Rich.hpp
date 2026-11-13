@@ -47,6 +47,8 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <tuple>
+#include <unordered_map>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -126,6 +128,67 @@ bool splitResourcePath(std::string_view path, std::string& type, std::string& na
 struct Obj;
 using ObjRef = std::shared_ptr<Obj>;
 
+// ---- 1.50.1 : LES GRANDS TABLEAUX RANGES SERRES ------------------------------------------------------------------
+//  Un tableau de valeurs simples - ou de tableaux de valeurs simples, a tous les niveaux (ARRAY[0..999] OF
+//  ARRAY[0..9999] OF BOOL) - d'au moins packFrom() cases en tout garde ses valeurs dans UN SEUL BLOC : un BOOL = 1 bit,
+//  un BYTE 1 octet, un INT / WORD 2, un DINT / DWORD / TIME 4, un LINT / une date 8, un REAL / LREAL 8, un STRING son
+//  texte. Ses `items` restent vides (10 000 000 de BOOL : 1,2 Mo, et non 4 Go d'objets).
+//  - UNE CASE SORTIE EN OBJET (cellAt : a[i] := x, une reference, FOR EACH...) vit dans `live` le temps qu'on la tient,
+//    et fait foi ; lachee (plus personne ne la tient, pas de reference vers elle : `pinned`), sa valeur rentre dans le
+//    bloc. Une lecture simple (cellValue) ne sort rien.
+//  - UNE LIGNE, UNE COUCHE (a[i] sur plusieurs dimensions, une case d'un tableau de tableaux) est une VUE du meme bloc
+//    (packedFrom : sa premiere case) : l'ecrire ecrit le tableau.
+//  - unpack : le tableau sort toutes ses cases (items) - pour une fonction qui parcourt `items` (LIST_SORT...) ; le bloc
+//    reste et les cases sorties font foi (les memes objets).
+struct PackedCells {
+    Type        scalar{Type::Unknown};
+    TypeRef     cell;                                // le type d'une case (une valeur simple)
+    std::size_t count{0};                            // les cases du bloc entier
+    int         width{0};                            // octets par case (entiers, durees, dates) ; 0 : bits, reels, textes
+    std::vector<std::uint64_t> bits;                 // BOOL
+    std::vector<unsigned char> bytes;                // les entiers, les durees, les dates (`width` octets chacun)
+    std::vector<double>        reals;                // REAL, LREAL
+    std::vector<std::string>   texts;                // STRING
+    std::unordered_map<std::size_t, ObjRef> live;    // les cases sorties en objet (elles font foi)
+    std::map<std::tuple<std::size_t, std::size_t, const TypeDesc*>, ObjRef> views;   // les vues tenues (premiere case, nombre, type)
+    std::size_t settleAt{256};
+    [[nodiscard]] Value raw(std::size_t k) const;    // la valeur du bloc (sans `live`)
+    void put(std::size_t k, const Value& v);         // `v` deja du type de la case
+    [[nodiscard]] std::size_t memory() const noexcept;
+};
+// Les cases a partir desquelles un tableau neuf se range serre (65 536) ; les essais le baissent.
+[[nodiscard]] std::int64_t packFrom() noexcept;
+void setPackFrom(std::int64_t cells) noexcept;
+// Ce tableau (et ses tableaux de tableaux) se range-t-il serre : des valeurs simples au fond ?
+[[nodiscard]] bool packable(const TypeDesc& array) noexcept;
+// LA MEMOIRE : une case rangee serree (BOOL : 0,125 octet ; STRING : 32 et son texte), un objet (une case non serree,
+// un membre), une valeur neuve de ce type (estimee, en octets) ; la limite par valeur (1 Gio) ; un nombre d'octets
+// ecrit ("1,2 Mo", "476 Mo", "1,5 Go") ; le message d'un type trop grand.
+[[nodiscard]] double       cellBytes(Type) noexcept;
+[[nodiscard]] std::int64_t objectBytes() noexcept;
+[[nodiscard]] std::int64_t memoryEstimate(const TypeDesc&);
+inline constexpr std::int64_t kMaxValueBytes = std::int64_t{1} << 30;
+[[nodiscard]] std::string  memoryText(std::int64_t bytes);
+[[nodiscard]] std::string  tooLargeText(const TypeDesc&, std::int64_t bytes);
+// Les cases d'un niveau de tableau (items ou bloc) ; la case k (sortie en objet si le tableau est serre ; une vue
+// pour un tableau de tableaux) ; la valeur simple de la case k, sans la sortir ; l'ecrire (assignFrom).
+[[nodiscard]] std::size_t cellCount(const Obj& array) noexcept;
+[[nodiscard]] ObjRef      cellAt(const Obj& array, std::size_t k);
+[[nodiscard]] Value       cellValue(const Obj& array, std::size_t k);
+void                      setCellValue(const Obj& array, std::size_t k, const Value& v);
+// Une vue de `span` cases de ce tableau a partir de `first` (une ligne : a[i] sur deux dimensions), du type `type` ; un
+// tableau non serre : un tableau des memes cases (les memes objets).
+[[nodiscard]] ObjRef      subView(const Obj& array, std::size_t first, std::size_t span, TypeRef type);
+// Toutes les cases sorties (items) ; faux et `why` au-dela de `maxCells`.
+bool                      unpack(Obj& array, std::int64_t maxCells, std::string* why);
+// Une valeur pour toutes les cases simples d'un tableau (a tous les niveaux) : la valeur initiale "0", "FALSE" d'un grand
+// tableau. Faux : des cases qui ne sont pas des valeurs simples (des structures).
+bool                      fillCells(const Obj& array, const Value& v);
+// La case visee par une reference : elle reste un objet (une case d'un tableau serre ne rentre pas dans le bloc).
+void                      pin(const ObjRef& o) noexcept;
+// La memoire tenue par un objet et ce qu'il contient (estimee, en octets) - les essais.
+[[nodiscard]] std::size_t heldMemory(const Obj& o);
+
 struct Obj {
     TypeRef type;
     Value   value;                                   // Scalar
@@ -147,6 +210,11 @@ struct Obj {
     std::string                 callee;
     std::shared_ptr<const void> lambda;
     std::string                 lambdaWhere;          // « Script_Tri, ligne 12 » (l'affichage, la Console)
+    // 1.50.1 : un grand tableau range serre (voir PackedCells) : son bloc et sa premiere case dedans (une vue) ;
+    // `pinned` : une case visee par une reference reste un objet.
+    std::shared_ptr<PackedCells> packed;
+    std::size_t                  packedFrom{0};
+    bool                         pinned{false};
 };
 
 // 1.27.0 : le nom d'une poignee a montrer (et a donner a une fonction qui attend un STRING) : le nom de la ressource,

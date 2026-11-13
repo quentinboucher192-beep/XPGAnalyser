@@ -272,6 +272,18 @@ public:
         (void)ownerType; (void)method; (void)out;
         return false;
     }
+    // 1.50.1 : LES SURCHARGES D'UNE METHODE (plusieurs methodes du meme nom dans un type IHM). Combien en a le type
+    // `ownerType` (0 ou 1 : rien a choisir, le chemin d'avant) ; puis la sienne pour ces arguments (sans SELF) : vrai et
+    // `key`, le nom a passer a findMethod ("Regler#615") ; faux et `why` (aucune ne convient, l'appel est ambigu).
+    virtual int methodOverloads(std::string_view ownerType, std::string_view method) {
+        (void)ownerType; (void)method;
+        return 0;
+    }
+    virtual bool chooseMethodOverload(std::string_view ownerType, std::string_view method, const std::vector<ArgShape>& args,
+                                      std::string& key, std::string& why) {
+        (void)ownerType; (void)method; (void)args; (void)key; (void)why;
+        return false;
+    }
     // 1.13.0 (lot J1) : SUPER - dans un corps de methode, SUPER.M(...) est emis comme un appel du nom
     // interne de la methode du parent (METHODE_T_POMPE_DEMARRER) ; l'interpreteur le resout ici. Vrai et
     // `out` (la fonction, VAR_IN_OUT SELF) ; faux : pas un nom interne de methode.
@@ -518,6 +530,9 @@ struct CallSite {
     std::uint32_t         rank{1};
     std::string           within;
     std::vector<ArgShape> args;
+    // 1.50.1 : un appel chemin.M(...) - le type de l'objet (Pompe1, a[i], p^, F(), SELF : celui de leur type) ; vide :
+    // inconnu, ou pas un tel appel. Le controle y cherche les methodes (et leurs surcharges) d'un type IHM.
+    std::string           receiver{};
 };
 [[nodiscard]] std::vector<CallSite> callSites(const Program&, Environment& typing);
 // Les fonctions internes d'une section du dialecte, dans l'ordre.

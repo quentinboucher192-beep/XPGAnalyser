@@ -42,6 +42,7 @@
 
 #include "AiAssistant.hpp"
 #include "AiFixes.hpp"   // 1.22.1 : le clic droit sur une erreur de la carte
+#include "../hmi/SessionText.hpp"   // 1.50.1 : repondre, reduire, copier - les gestes et la barre de la discussion des sessions
 #include "../../menu/IMenu.hpp"
 #include "../../ui/Widget.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -82,6 +83,8 @@ public:
     static constexpr std::size_t kMaxRows = 5;
     explicit AiPromptEdit(std::string id);
     const core::SignalPtr<> submitted = core::Signal<>::create();
+    // 1.50.1 : Echap d'abord au panneau (une reponse en attente : l'annuler) ; vrai : pris, le champ garde le clavier.
+    std::function<bool()> onEscape;
 
     void setText(std::string t);
     [[nodiscard]] const std::string& text() const noexcept { return text_; }
@@ -341,6 +344,14 @@ public:
     [[nodiscard]] std::optional<bool> missionCard(const std::string& missionId, const std::string& proposalId) const;
     void                              setMissionCard(const std::string& missionId, const std::string& proposalId, bool open);
 
+    // ---- 1.50.1 : REPONDRE A UN MESSAGE (AiChatReply.hpp, la discussion des sessions) ---------------------------------
+    // << Repondre >> sur le message `message` (le survol, le clic droit, ia repondre) : la barre << En reponse a Assistant :
+    // << debut du message... >> >> au-dessus de la saisie (sessionui::ReplyBar), le clavier dans la saisie ; la prochaine
+    // demande cite ce message. cancelReply : la croix de la barre, Echap. Faux : refuse (la barre d'etat dit pourquoi).
+    bool replyTo(int message);
+    void cancelReply();
+    [[nodiscard]] sessionui::ReplyBar& replyBar() noexcept { return *replyBar_; }
+
     [[nodiscard]] UiHost& uiHost() noexcept { return ui_; }
     // La part du separateur que l'ecran a posee pour la largeur par defaut (-1 : aucune) ; une
     // autre part est celle que l'utilisateur a tiree.
@@ -379,6 +390,8 @@ private:
     float             ctxH_{0.f};
     void              contextAction(int what, const std::string& attachmentId);
     AiPromptEdit*     prompt_{nullptr};
+    sessionui::ReplyBar* replyBar_{nullptr};   // 1.50.1 : << En reponse a ... >> au-dessus de la saisie
+    void              syncReply();             // 1.50.1 : la barre suit la citation de l'Assistant (envoyee, autre conversation)
     ui::Button*       attachBtn_{nullptr};
     ui::Button*       sendBtn_{nullptr};
     ui::PopupMenu*    menu_{nullptr};
@@ -679,6 +692,13 @@ private:
         float                    billY{0.f};
         std::string              billText;
         std::vector<std::string> billLines;
+        // 1.50.1 : repondre, reduire - la cle (conversation|message), les lignes montrees, l'extrait cite et << ... voir
+        // tout >> / << Reduire >> (hauteurs relatives au haut du bloc, x au bord gauche de la vue), la largeur de l'en-tete.
+        std::string              key;
+        std::size_t              shown{0};
+        bool                     collapsible{false}, collapsed{false};
+        std::string              quote, toggle;
+        float                    quoteY{0.f}, toggleY{0.f}, textX{0.f}, headW{0.f};
     };
     struct CardButtons {
         int         message{-1};
@@ -780,10 +800,51 @@ public:
     // La place d'un message au dernier dessin (toute sa largeur ; vide : hors de la vue) - << Mission << X >> creee - Ouvrir >>.
     [[nodiscard]] gfx::Rect                messageRect(int message) const;
 
+    // ---- 1.50.1 : REPONDRE, REDUIRE / DEBALLER, COPIER (AiChatReply.hpp ; les gestes de la discussion des sessions) ----
+    //  Le survol d'un message : << Repondre >> et << Copier >> (deux pictogrammes sur sa ligne d'en-tete) ; le clic droit sur
+    //  un message (une demande, une reponse) : Repondre, Copier (Ctrl+C), Copier avec l'auteur et l'heure, Copier le code (sur
+    //  un bloc de code), Deballer / Reduire, Tout reduire - et, sur une demande, Creer une mission avec ce message. Un clic
+    //  choisit un message ; Ctrl+C le copie. Une demande qui cite un message montre l'extrait au-dessus de son texte (un
+    //  clic : le message cite, choisi et mis en vue).
+    //  REDUIRE : un message de plus de sessionui::kCollapseLines + 1 lignes montre ses kCollapseLines premieres lignes puis
+    //  << ... voir tout >> ; deballe : tout, puis << Reduire >>. UN BLOC DE CODE N'EST JAMAIS COUPE : la coupe passe avant lui
+    //  (un message qui commence par un bloc garde son en-tete, << 42 lignes >> et Copier : le code entier). Le dernier
+    //  echange (la derniere demande et ce qui la suit) et la reponse qui s'ecrit restent deballes tant qu'on ne les reduit
+    //  pas ; l'etat choisi suit le message (conversation, message), pour la seance.
+    [[nodiscard]] int         selectedMessage() const;
+    void                      selectMessage(int message);   // -1 : aucun
+    [[nodiscard]] bool        collapsible(int message) const;
+    [[nodiscard]] bool        collapsed(int message) const;
+    void                      setExpanded(int message, bool expanded);
+    void                      collapseAll();                // << Tout reduire >>
+    bool                      copyMessage(int message, bool withAuthor);
+    bool                      copyCodeOf(int message, int block);   // << Copier le code >> (le bloc `block` du message)
+    bool                      goToQuoted(int message);      // le message cite par cette demande, choisi et mis en vue
+    [[nodiscard]] std::string quoteText(int message) const; // l'extrait cite tel qu'il est montre (vide : aucun)
+    [[nodiscard]] std::string toggleText(int message) const; // << ... voir tout >> / << Reduire >> (vide : rien)
+    [[nodiscard]] std::size_t shownLineCount(int message) const;   // les lignes montrees (reduit : moins que renderedLines)
+    [[nodiscard]] gfx::Rect   quoteRect(int message) const;
+    [[nodiscard]] gfx::Rect   toggleRect(int message) const;
+    [[nodiscard]] gfx::Rect   hoverButton(int message, int which) const;   // 0 Repondre, 1 Copier ; vide : pas survole
+    [[nodiscard]] int         hoveredMessage() const noexcept { return hover_; }
+    [[nodiscard]] int         messageAt(gfx::Point p) const;   // le message sous `p` (-1 : aucun)
+    // Le menu du clic droit d'un message, ouvert par programme (un bloc de code : son rang, -1 : aucun).
+    bool                      openMessageMenu(int message, int codeBlock);
+    // La coupe d'un message reduit : combien de ses lignes il montre (lines.size() : il ne se reduit pas).
+    [[nodiscard]] static std::size_t collapseCut(const std::vector<Line>& lines);
+
 private:
-    bool         openMessageMenuAt(int message, gfx::Point at);
+    bool         openMessageMenuAt(int message, gfx::Point at, int codeBlock = -1);
+    void         runMessageMenu(int item);
+    [[nodiscard]] std::string keyOf(int message) const;   // conversation|message
+    void         refold();                                 // la mise en page refaite (l'etat reduit a change)
     ui::PopupMenu* msgMenu_{nullptr};
     int          msgMenuMessage_{-1};
+    int          msgMenuCode_{-1};                        // 1.50.1 : le bloc de code sous le clic droit
+    std::map<std::string, bool> fold_;                    // 1.50.1 : deballe (vrai) / reduit (faux) a la main
+    std::string  selected_;                               // 1.50.1 : le message choisi (sa cle)
+    int          hover_{-1};                              // 1.50.1 : le message survole
+    std::vector<std::pair<gfx::Rect, std::pair<int, int>>> codeSpots_;   // 1.50.1 : chaque bloc de code (message, bloc)
 };
 
 } // namespace app::ai

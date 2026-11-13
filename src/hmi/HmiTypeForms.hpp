@@ -7,7 +7,9 @@
 //
 //      Simple        REAL
 //      Tableau       ARRAY[0..9] OF REAL            (parametre : les bornes)
-//      Tableau 2D    ARRAY[0..3, 0..9] OF INT       (parametre : les bornes des deux dimensions)
+//      Tableau a N dimensions  ARRAY[0..3, 0..9] OF INT, ARRAY[0..1, 0..3, 0..9] OF INT
+//                                    (parametre : les bornes de chaque dimension - 1.50.1 : autant qu'on veut ;
+//                                    avant, Tableau 2D, deux au plus)
 //      Liste         LIST OF REAL                   (taille variable, L[0], LIST_ADD)
 //      Vecteur       VECTOR OF REAL                 (taille variable, V[0], VECTOR_PUSH)
 //      Dictionnaire  MAP[STRING] OF REAL            (parametre : le type des cles)
@@ -39,8 +41,13 @@ namespace hmi::typeform {
 enum class Form : std::uint8_t { Simple, Array, Array2D, List, Vector, Map, Tuple, Set, Ring };     // 1.12.7 : Set, Ring
 inline constexpr Form kForms[] = {Form::Simple, Form::Array, Form::Array2D, Form::List, Form::Vector, Form::Map, Form::Tuple, Form::Set, Form::Ring};
 
-[[nodiscard]] std::string_view label(Form) noexcept;          // "Simple", "Tableau", "Tableau 2D", "Liste", "Vecteur", "Dictionnaire (MAP)", "Tuple"
-[[nodiscard]] std::string_view key(Form) noexcept;            // "simple", "tableau", "tableau2d", "liste", "vecteur", "map", "tuple"
+[[nodiscard]] std::string_view label(Form) noexcept;          // "Simple", "Tableau", "Tableau a N dimensions", "Liste", "Vecteur", "Dictionnaire (MAP)", "Tuple"
+[[nodiscard]] std::string_view key(Form) noexcept;            // "simple", "tableau", "tableau2d" (N dimensions), "liste", "vecteur", "map", "tuple"
+// 1.50.1 : les bornes d'un tableau, une dimension de plus ("0..3, 0..9" -> "0..3, 0..9, 0..9" : la derniere recopiee) ou de
+// moins ("0..3, 0..9" -> "0..3") ; vide : "0..9".
+[[nodiscard]] std::string withDimension(std::string_view bounds);
+[[nodiscard]] std::string withoutDimension(std::string_view bounds);
+[[nodiscard]] std::size_t dimensionsOf(std::string_view bounds);
 [[nodiscard]] std::optional<Form> fromText(std::string_view labelOrKey) noexcept;   // sans casse, le libelle ou la cle
 // Le parametre de la forme : son nom ("Bornes", "Cl\xC3\xA9", "Puis"), une aide, sa valeur par defaut ; vide : aucun.
 [[nodiscard]] std::string_view parameterLabel(Form) noexcept;

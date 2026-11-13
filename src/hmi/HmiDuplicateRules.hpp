@@ -17,6 +17,8 @@
 //     le calcul de hmi::types (formulaValue, namedFormulaAddress : + - * / MOD, parentheses) ; un texte : {i+1},
 //     {j:02} (deux chiffres) ; un repere peut avoir la sienne (« a part ») ou ses cases (les Remplir d'avant) ;
 //   - le plan qui en sort est celui d'avant (hmi::dup::Plan) : validate et apply ne changent pas, Ctrl+Z retire tout.
+//  1.50.1 : un repere peut porter SA regle dans la liste, sans sortir de son groupe (Own::inList) : plusieurs regles
+//  dans un groupe de textes, celle du groupe pour les autres.
 //  Sans rien regler (une suite), les regles d'office redonnent EXACTEMENT defaultPlan : les indices hors repere
 //  suivis si aucun repere n'en porte et que ca tient (o + n), les morceaux a indices decales (o + n), les autres
 //  reperes a remplir, les noms en serie.
@@ -144,6 +146,10 @@ struct Own {
     std::string formula;
     std::string group;   // OwnKind::Formula d'un repere a indices : la cle de la profondeur visee
     std::string how;     // ce que la liste en dit : "S\xC3\xA9rie V1{n}", "Coller (Excel)", "\xC3\xA0 la main"
+    // 1.50.1 : SA REGLE, ECRITE DANS LA LISTE (la case Regle du repere) - il reste dans son groupe (pas « a part ») :
+    // un groupe de textes a plusieurs regles, celle du groupe pour ceux qui n'ont pas la leur. Le calcul est celui
+    // d'une regle a part (Formula, Keep) ; seul l'ecran le dit autrement.
+    bool        inList{false};
 };
 struct Rules {
     Counters                    counters;

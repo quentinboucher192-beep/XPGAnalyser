@@ -1399,6 +1399,8 @@ void testDetectButton() {
     check(!f.panel->canDetect(m), "apres Ctrl+Z : plus de detection (Reappliquer)");
 }
 
+#include "ai_assistant_repondre.inl"   // 1.50.1 : repondre, reduire, copier dans la discussion
+
 int main() {
     ai::setClock([] { return fixedNow(); });
     {
@@ -1427,6 +1429,8 @@ int main() {
     testSecondPass();
     testKeyManager();
     testDetectButton();
+    testCollapseCut();          // 1.50.1
+    testReplyCollapseCopy();    // 1.50.1
     std::printf("ai_assistant_test : %d verifications, %d echecs\n", g_ok + g_fail, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

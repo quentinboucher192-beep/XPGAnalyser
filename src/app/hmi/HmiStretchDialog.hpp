@@ -27,8 +27,9 @@ public:
         std::string                    id{"dialog.hmiStretch"};
         std::string                    title{"\xC3\x89tirer"};   // "Etirer Courbe_1"
         std::string                    object;                   // la carte : "Courbe_1", "3 objets"
-        hmi::stretch::Request          request;                  // le depart (la marge : >= 0)
-        double                         viewMargin{10};           // « celle de la vue »
+        hmi::stretch::Request          request;                  // le depart (la marge : >= 0 ; < 0 : celles de la vue)
+        double                         viewMargin{10};           // << celle de la vue >>
+        hmi::stretch::Margins          viewMargins{};            // 1.50.1 : une par bord ; differentes : le champ vide
         // L'apercu sur la vue pour cette demande : possible ou non, et la ligne Taille (ou pourquoi rien).
         std::function<std::pair<bool, std::string>(const hmi::stretch::Request&)> preview;
     };

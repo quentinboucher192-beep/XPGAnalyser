@@ -259,7 +259,7 @@ HmiNewFunctionDialog::HmiNewFunctionDialog(Spec spec) : menu::WidgetMenu(spec.id
     answer_.name = trimmed(spec_.name);
     if (answer_.name.empty() && spec_.doc && ty) {
         answer_.name = "Methode";
-        for (int k = 2; k < 1000 && !nameProblem().empty(); ++k) answer_.name = "Methode" + std::to_string(k);
+        for (int k = 2; k < 1000 && (!nameProblem().empty() || sameName() > 0); ++k) answer_.name = "Methode" + std::to_string(k);   // 1.50.1 : un nom libre
     } else if (answer_.name.empty() && spec_.doc) {
         if (v) {
             answer_.name = "Fonction";
@@ -327,7 +327,7 @@ int HmiNewFunctionDialog::sameName() const {
         return true;
     };
     int count = 0;
-    if (owner_ == Owner::Type) {                       // 1.50.0 : une methode n'a pas de surcharge (nameProblem)
+    if (owner_ == Owner::Type) {                       // 1.50.1 : les methodes de ce nom dans le type (une surcharge)
         if (const auto* t = spec_.doc->project.hmiType(spec_.type))
             for (const auto& m : t->methods) count += same(m.name) ? 1 : 0;
         return count;
@@ -344,7 +344,9 @@ std::string HmiNewFunctionDialog::nameProblem() const {
     const std::string n = trimmed(answer_.name);
     if (n.empty()) return "Son nom : des lettres, des chiffres et _.";
     if (!hmi::isIdentifier(n)) return "\xC2\xAB " + n + " \xC2\xBB n'est pas un nom : des lettres, des chiffres et _ (pas de chiffre en t\xC3\xAA" "te).";
-    // 1.50.0 : une methode - ni le nom d'une autre methode du type (pas de surcharge), ni celui d'un membre.
+    // 1.50.0 : une methode - pas le nom d'un membre. 1.50.1 : le nom d'une autre methode d'une STRUCTURE fait une surcharge
+    // (comme une fonction), sauf d'une virtuelle (ses redefinitions la designent par son nom) ; une interface : un nom
+    // par signature.
     if (owner_ == Owner::Type && spec_.doc)
         if (const auto* t = spec_.doc->project.hmiType(spec_.type)) {
             const auto same = [](const std::string& a, const std::string& b) {
@@ -353,8 +355,14 @@ std::string HmiNewFunctionDialog::nameProblem() const {
                     if (std::toupper(static_cast<unsigned char>(a[i])) != std::toupper(static_cast<unsigned char>(b[i]))) return false;
                 return true;
             };
-            for (const auto& m : t->methods)
-                if (same(m.name, n)) return t->name + " a d\xC3\xA9j\xC3\xA0 une m\xC3\xA9thode " + m.name + " (une m\xC3\xA9thode n'a pas de surcharge).";
+            for (const auto& m : t->methods) {
+                if (!same(m.name, n)) continue;
+                if (interface_) return t->name + " a d\xC3\xA9j\xC3\xA0 une signature " + m.name + " (une interface n'a pas de surcharge).";
+                if (m.isVirtual)
+                    return m.name + " est virtuelle : une m\xC3\xA9thode virtuelle ne se surcharge pas (ses red\xC3\xA9" "finitions la d\xC3\xA9signent par son nom).";
+                if (answer_.isVirtual)
+                    return t->name + " a d\xC3\xA9j\xC3\xA0 une m\xC3\xA9thode " + m.name + " : une surcharge ne peut pas \xC3\xAAtre virtuelle (d\xC3\xA9" "coche Virtuelle).";
+            }
             for (const auto& mem : hmi::types::membersOf(spec_.doc->project, hmi::fullName(*t)))
                 if (same(mem.name, n)) return n + " est d\xC3\xA9j\xC3\xA0 un membre de " + t->name + " (un membre et une m\xC3\xA9thode ne partagent pas un nom).";
         }
@@ -390,7 +398,14 @@ std::string HmiNewFunctionDialog::instanceName() const {
 }
 
 std::string HmiNewFunctionDialog::nameNote() const {
-    if (owner_ == Owner::Type) return "Des lettres, des chiffres et _ ; ni le nom d'un membre, ni celui d'une autre m\xC3\xA9thode du type.";
+    // 1.50.1 : une methode d'une structure - un nom deja pris fait une surcharge (planche 01), comme une fonction.
+    if (owner_ == Owner::Type && interface_) return "Des lettres, des chiffres et _ ; ni le nom d'une autre signature de l'interface.";
+    if (owner_ == Owner::Type) {
+        if (const int k = sameName(); k > 0)
+            return "D\xC3\xA9j\xC3\xA0 pris : une surcharge (" + std::to_string(k + 1) + " m\xC3\xA9thodes " + trimmed(answer_.name) +
+                   ") ; ses param\xC3\xA8tres la distingueront.";
+        return "Des lettres, des chiffres et _ ; un nom d\xC3\xA9j\xC3\xA0 pris fait une surcharge (pas celui d'un membre).";
+    }
     const int n = sameName();
     if (n > 0)
         return "D\xC3\xA9j\xC3\xA0 pris : une surcharge (" + std::to_string(n + 1) + " fonctions " + trimmed(answer_.name) +

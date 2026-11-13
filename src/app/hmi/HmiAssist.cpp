@@ -111,6 +111,29 @@ std::size_t pathStart(std::string_view text, std::size_t end) {
     return i;
 }
 
+// 1.50.1 : comme pathStart, et a travers un appel - F(x), Pompe1.Lire(), a[i].Moteur() : le chemin du resultat d'un appel
+// (une parenthese fermante : jusqu'a son ouvrante, puis le nom appele). Une parenthese sans nom devant ((a + b).) : le
+// chemin commence par elle, ce n'est pas un chemin.
+std::size_t pathStartThroughCalls(std::string_view text, std::size_t end) {
+    std::size_t i = end;
+    for (;;) {
+        i = pathStart(text, i);
+        if (i == 0 || text[i - 1] != ')') return i;
+        // la parenthese ouvrante qui va avec (sans compter celles d'une chaine)
+        int depth = 0;
+        std::size_t k = i;
+        bool open = false;
+        while (k > 0) {
+            const char c = text[k - 1];
+            --k;
+            if (c == ')') ++depth;
+            else if (c == '(' && --depth == 0) { open = true; break; }
+        }
+        if (!open || k == 0 || !identChar(text[k - 1])) return i;
+        i = k;
+    }
+}
+
 // 1.13.1 : LES REPERES $...$ SONT TRANSPARENTS POUR L'AIDE, COMME POUR LE CALCUL (HmiMarkers.hpp). Depuis la
 // 1.11, un repere entoure un morceau d'expression ($V[1].Ouv$, $V[0]$.Nom, $Cuve$.IN_Percent dans un symbole) ;
 // l'aide, elle, en etait restee a la 1.10.2 (un repere n'etait qu'un nom a remplir par Dupliquer) : rien n'etait
@@ -392,10 +415,51 @@ std::string hmiVariableDetail(const hmi::Variable& v) {
 // 1.12.7 : les membres d'un SET ou d'un RING (plus bas).
 bool setRingMembers(const std::string& type, const std::string& needle, const std::function<void(Item)>& push);
 
+// 1.50.1 : LES METHODES D'UN TYPE IHM, apres un chemin vers une instance - une variable IHM, une locale, un parametre, un
+// membre d'un autre type, une case a[i], un pointeur p^, le resultat d'un appel F() - ou SELF. (THIS.) : ses methodes
+// et celles qu'il herite. Une PRIVEE est GRISEE, la raison dite, la ou le moteur la refuserait (insideMethodOf) : hors
+// d'une methode de son type ou d'un type qui en herite. `inside` : le type de SELF du code ecrit (le corps d'une
+// methode : Scope::methodOwner) ; vide : un script, une fonction - toute privee y est grisee. Rend le nombre proposees.
+std::string trimmed(std::string_view s);   // plus bas
+
+std::size_t typeMethodItems(const hmi::Project& hp, const std::string& type, const std::string& needle, const std::string& inside,
+                            int rankBase, const std::function<void(Item)>& push) {
+    const hmi::HmiType* owner = hp.hmiTypeByName(trimmed(type));
+    if (!owner || owner->kind != hmi::HmiTypeKind::Structure) return 0;
+    std::size_t n = 0;
+    int order = 0;
+    for (const auto& om : hmi::allMethods(hp, hmi::fullName(*owner))) {
+        if (!om.method || !om.owner) continue;
+        const auto& m = *om.method;
+        const int r = matchRank(m.name, needle);
+        if (r < 0) continue;
+        const bool priv = m.visibility == hmi::Visibility::Private;
+        // le droit du moteur : une methode du type qui la declare, ou d'un type qui en herite (hmi::isA)
+        const bool reachable = !priv || (!inside.empty() && hmi::isA(hp, inside, hmi::fullName(*om.owner)));
+        Item it;
+        it.text = m.name;
+        it.insert = m.name + "()";
+        it.caret = hmi::methodParamsText(m).empty() ? it.insert.size() : m.name.size() + 1;
+        it.detail = hmi::methodSignature(om.owner->name, m);
+        if (priv && !reachable)
+            it.detail += "  \xC2\xB7  priv\xC3\xA9" "e : seulement depuis une m\xC3\xA9thode de " + om.owner->name + " (ou d'un type qui en h\xC3\xA9rite)";
+        else if (priv)
+            it.detail += "  \xC2\xB7  priv\xC3\xA9" "e, permise ici (une m\xC3\xA9thode de " + om.owner->name
+                       + (inside.empty() || hmi::fullName(*om.owner) == inside ? std::string(")") : " ou d'un type qui en h\xC3\xA9rite)");
+        it.kind = Kind::UserFunction;
+        it.muted = priv && !reachable;
+        it.rank = r * 100 + rankBase + order++;
+        push(std::move(it));
+        ++n;
+    }
+    return n;
+}
+
 // Lot 16 : apres le point d'une structure ou d'un tableau IHM - les membres, les
 // proprietes publiques (avec leur valeur). Faux : le chemin n'en est pas un.
+// 1.50.1 : `inside` - le type de SELF du code ecrit (le corps d'une methode), pour le gris des methodes privees.
 bool hmiCompositeMembers(const hmi::Project& hp, const std::string& path, const std::string& needle,
-                         const std::function<void(Item)>& push) {
+                         const std::function<void(Item)>& push, const std::string& inside = {}) {
     namespace ty = hmi::types;
     const std::string type = ty::typeOfPath(hp, path);
     if (type.empty()) return false;
@@ -420,26 +484,8 @@ bool hmiCompositeMembers(const hmi::Project& hp, const std::string& path, const 
             push(std::move(it));
         }
     // 1.50.0 (planche 01) : LES METHODES DU TYPE (Pompe1.Demarrer(...)) - apres les membres ; une privee GRISEE (la
-    // reponse 1) : d'ici, hors d'une methode du type, l'appel serait refuse.
-    if (!spec.array())
-        if (const hmi::HmiType* owner = hp.hmiTypeByName(type); owner && owner->kind == hmi::HmiTypeKind::Structure)
-            for (const auto& om : hmi::allMethods(hp, hmi::fullName(*owner))) {
-                if (!om.method || !om.owner) continue;
-                const auto& m = *om.method;
-                const int r = matchRank(m.name, needle);
-                if (r < 0) continue;
-                const bool priv = m.visibility == hmi::Visibility::Private;
-                Item it;
-                it.text = m.name;
-                it.insert = m.name + "()";
-                it.caret = hmi::methodParamsText(m).empty() ? it.insert.size() : m.name.size() + 1;
-                it.detail = hmi::methodSignature(om.owner->name, m)
-                          + (priv ? "  \xC2\xB7  priv\xC3\xA9" "e : seulement depuis une m\xC3\xA9thode de " + om.owner->name : std::string{});
-                it.kind = Kind::UserFunction;
-                it.muted = priv;
-                it.rank = r * 100 + 40 + order++;
-                push(std::move(it));
-            }
+    // reponse 1) : d'ici, hors d'une methode du type, l'appel serait refuse. 1.50.1 : la regle du moteur (typeMethodItems).
+    if (!spec.array()) order += static_cast<int>(typeMethodItems(hp, type, needle, inside, 40 + order, push));
     for (const auto& pi : ty::properties()) {
         if (pi.arrayOnly && !spec.array()) continue;
         if (pi.twoD && spec.dims != 2) continue;
@@ -878,6 +924,13 @@ struct Scope {
     // 1.10.1 (U2) : le script d'un operateur - a, b, Resultat (et TO_X) et leurs types.
     std::vector<hmi::OperatorName> opNames;
 
+    // 1.50.1 : le corps d'une METHODE - l'editeur des Methodes pose SELF en VAR_IN_OUT devant le code (assist::Sources::
+    // declarations) : le type de SELF ; vide : un autre code (un script, une fonction). Le gris des methodes privees.
+    [[nodiscard]] std::string methodOwner() const {
+        if (!script) return {};
+        const auto* l = parts.local("SELF");
+        return l && l->section == hmi::LocalVar::Section::InOut ? trimmed(l->type) : std::string{};
+    }
     // Un nom declare par le script la ou est le curseur : parametre ou locale de la
     // fonction interne, variable de FOR EACH, locale du script ; `type` : son type.
     bool declared(std::string_view name, std::string& type, int depth = 0) const {
@@ -1041,6 +1094,45 @@ Scope makeScope(const hmi::Project& hp, std::string_view before, bool script, hm
     return sc;
 }
 
+// 1.50.1 : LE TYPE RENDU PAR UN APPEL ecrit en tete d'un chemin - F(x) (une fonction du script, du projet, une methode du
+// type quand on ecrit une methode), Pompe1.Lire(), SELF.Moteur(), a[i].Lire() (une methode du type de l'objet) - puis
+// ce qui le suit (F().Moteur, F()[0]). Vide : inconnu, ou pas un appel.
+std::string callResultType(const Scope& sc, const std::string& path) {
+    const auto& hp = *sc.hp;
+    const auto close = path.rfind(')');
+    if (close == std::string::npos) return {};
+    int depth = 0;
+    std::size_t open = std::string::npos;
+    for (std::size_t k = close + 1; k-- > 0;) {
+        if (path[k] == ')') ++depth;
+        else if (path[k] == '(' && --depth == 0) { open = k; break; }
+    }
+    if (open == std::string::npos || open == 0) return {};
+    const std::string callee = trimmed(std::string_view(path).substr(0, open));
+    const std::string tail = path.substr(close + 1);
+    std::string type;
+    const auto dot = callee.rfind('.');
+    if (dot == std::string::npos) {
+        for (const auto& f : sc.analysis.functions)                         // une fonction interne du script
+            if (iequals(f.name, callee) && !f.returnType.empty()) { type = f.returnType; break; }
+        if (type.empty())
+            if (const std::string self = sc.methodOwner(); !self.empty())   // une methode du type, par son nom nu
+                for (const auto& om : hmi::effectiveMethods(hp, self, callee))
+                    if (!om.method->returnType.empty()) { type = om.method->returnType; break; }
+        if (type.empty())
+            for (const auto* f : hp.functionsNamed(callee))                   // une fonction IHM du projet
+                if (!f->returnType.empty()) { type = f->returnType; break; }
+    } else {
+        const std::string receiver = callee.substr(0, dot), method = callee.substr(dot + 1);
+        std::string rt = receiver.find('(') != std::string::npos ? callResultType(sc, receiver) : sc.typeOf(receiver);
+        if (rt.empty()) rt = hmi::types::typeOfPath(hp, receiver);
+        rt = pointee(rt).empty() ? rt : pointee(rt);
+        for (const auto& om : hmi::effectiveMethods(hp, trimmed(rt), method))
+            if (!om.method->returnType.empty()) { type = om.method->returnType; break; }
+    }
+    return tail.empty() || type.empty() ? type : walkType(hp, type, tail);
+}
+
 // Le chemin qui finit `text`, blancs de fin sautes ("x := v1 " -> "v1") ; vide sinon.
 std::string pathBefore(std::string_view text) {
     std::size_t end = text.size();
@@ -1152,8 +1244,9 @@ bool iteratorOf(std::string_view clean, std::string_view name, std::string& map)
 }
 
 // Les membres d'un type : une structure IHM, une DDT de l'automate. Faux : ni l'un ni l'autre.
+// 1.50.1 : `inside` - le type de SELF du code ecrit (le corps d'une methode) : le gris des methodes privees du type.
 bool typeMembers(const hmi::Project& hp, const domain::Project* plc, const std::string& type, const std::string& needle,
-                 const std::function<void(Item)>& push) {
+                 const std::function<void(Item)>& push, const std::string& inside = {}) {
     int order = 0;
     const auto add = [&](const std::string& name, std::string detail) {
         const int r = matchRank(name, needle);
@@ -1167,8 +1260,12 @@ bool typeMembers(const hmi::Project& hp, const domain::Project* plc, const std::
     };
     if (const auto ms = hmi::types::membersOf(hp, type); !ms.empty()) {
         for (const auto& m : ms) add(m.name, hmi::types::normalized(m.type) + (m.description.empty() ? std::string{} : kDot + m.description));
+        // 1.50.1 : puis ses methodes (SELF., une locale, un parametre, a[i]., p^.) - une privee grisee hors de son type.
+        (void)typeMethodItems(hp, type, needle, inside, 40 + order, push);
         return true;
     }
+    // 1.50.1 : un type qui n'a que des methodes (ni membre propre ni herite).
+    if (typeMethodItems(hp, type, needle, inside, 40, push) > 0) return true;
     // 1.10.1 (U2) : un symbole (l'operande d'un operateur de symbole) - ses parametres,
     // puis ce que publie une instance (comme Pompe_3.).
     if (const auto ms = hmi::operandMembers(hp, type); !ms.empty()) {
@@ -1281,7 +1378,7 @@ bool dialectMembers(const Scope& sc, const domain::Project* plc, const std::stri
         }
         return true;
     }
-    (void)typeMembers(*sc.hp, plc, type, needle, push);
+    (void)typeMembers(*sc.hp, plc, type, needle, push, sc.methodOwner());
     return true;
 }
 
@@ -1573,9 +1670,9 @@ Where locate(std::string_view before, bool templateText) {
     w.from = before.size();
 
     auto memberOrCode = [&](Context fallback, std::size_t lowest) {
-        // "a.b." : les membres de a.b.
+        // "a.b." : les membres de a.b. 1.50.1 : aussi apres un appel - F()., Pompe1.Lire(x)., a[i].Moteur().
         if (!before.empty() && before.back() == '.') {
-            const auto start = std::max(lowest, pathStart(before, before.size() - 1));
+            const auto start = std::max(lowest, pathStartThroughCalls(before, before.size() - 1));
             if (start < before.size() - 1) {
                 const char first = before[start];
                 if (std::isalpha(static_cast<unsigned char>(first)) != 0 || first == '_') {
@@ -2354,6 +2451,13 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                     }
                     break;
                 }
+            // 1.50.1 : le resultat d'un appel - F()., Pompe1.Lire()., SELF.Moteur(). : les membres et les methodes de son type.
+            if (where.path.find('(') != std::string::npos) {
+                if (code)
+                    if (const std::string t = callResultType(scope(), where.path); !t.empty())
+                        (void)typeMembers(hp, plc, t, needle, push, scope().methodOwner());
+                break;
+            }
             // 1.10 (chantier K2) : un nom du script - it. (Key, Value), p^. (les membres du
             // type vise), une locale d'un type IHM (ses membres), un tableau (Length).
             if (code && dialectMembers(scope(), plc, where.path, needle, push)) break;
@@ -2426,7 +2530,7 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
             // Lot 9 : SYS., Vue., Vue.Objet. - les variables publiques.
             if (publicMembers(hp, where.path, needle, push)) break;
             // Lot 16 : Four1., Fours[i].Vannes., Consignes. - membres et proprietes.
-            if (hmiCompositeMembers(hp, where.path, needle, push)) break;
+            if (hmiCompositeMembers(hp, where.path, needle, push, code ? scope().methodOwner() : std::string{})) break;
             if (!plc) break;
             std::vector<MemberInfo> list;
             if (!members(*plc, where.path, list)) break;
@@ -2478,6 +2582,14 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                     it.rank = r * 2;
                     push(std::move(it));
                 }
+                // 1.50.1 : le corps d'une methode - les methodes du type par leur nom nu (Journal() vaut SELF.Journal()),
+                // ses privees comprises, PAS grisees (le moteur les permet ici) ; celles qu'il herite aussi.
+                if (const std::string self = scope().methodOwner(); !self.empty() && !needle.empty())
+                    (void)typeMethodItems(hp, self, needle, self, 1, [&](Item it) {
+                        it.rank = matchRank(it.text, needle) * 2 + 1;
+                        it.detail += kDot + "m\xC3\xA9thode du type (SELF." + it.text + "())";
+                        push(std::move(it));
+                    });
             }
             // 1.9 : les parametres de la popup d'abord, avec leur type et leur mode.
             if (const auto* pv = hmiparams::assistView(hp))

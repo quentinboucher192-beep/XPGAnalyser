@@ -1626,8 +1626,9 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**\xC3\x89tirer** (clic droit \xE2\x80\xBA \xC3\x89tirer, ou **\xC3\x89tirer \xE2\x96\xBE** de la barre) : "
                          "jusqu'au bord de la vue (**Ctrl+Alt+Maj+fl\xC3\xA8" "che**), sur toute la largeur, la hauteur ou la "
                          "vue, jusqu'\xC3\xA0 l'objet voisin, au bord de la s\xC3\xA9lection, \xC3\xA0 un rep\xC3\xA8re ou \xC3\xA0 une "
-                         "colonne de la grille ; la marge de la vue gard\xC3\xA9" "e (\xC2\xAB Garder les marges \xC2\xBB), "
-                         "l'aper\xC3\xA7u au survol, un seul Ctrl+Z ;", {}, "1.50.0"},
+                         "colonne de la grille ; les marges de la vue gard\xC3\xA9" "es (\xC2\xAB Garder les marges \xC2\xBB, "
+                         "retenu par projet ; elles se r\xC3\xA8glent dans les propri\xC3\xA9t\xC3\xA9s de la vue, "
+                         "section **Marges de la vue**), l'aper\xC3\xA7u au survol, un seul Ctrl+Z ;", {}, "1.50.0"},
              {K::Bullet, "**Rotation** \xE2\x88\x92" "90\xC2\xB0, +90\xC2\xB0, +45\xC2\xB0, 180\xC2\xB0 et "
                          "**miroirs** horizontal / vertical ;", {}},
              {K::Bullet, "**Verrouiller** un objet : il ne se choisit plus \xC3\xA0 la souris ;", {}},

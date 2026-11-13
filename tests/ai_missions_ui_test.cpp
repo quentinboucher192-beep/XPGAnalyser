@@ -1492,7 +1492,10 @@ void testFromConversation() {
     check(chat.bubbleRect(0).h > 0.f && chat.bounds().contains({chat.bubbleRect(0).x + 4.f, chat.bubbleRect(0).y + 4.f}), "la bulle du message envoye");
     const ui::MouseDown right{{chat.bubbleRect(0).x + 4.f, chat.bubbleRect(0).y + 4.f}, ui::MouseButton::Right, 1, {}};
     (void)f.panel->dispatch(right);
-    check(chat.messageMenuItems() == std::vector<std::string>{"Cr\xC3\xA9" "er une mission avec ce message"}, "le clic droit : le menu");
+    // 1.50.1 : le clic droit d'un message dit aussi Repondre, Copier, Reduire... ; << Creer une mission avec ce message >> y reste, a la fin.
+    check(!chat.messageMenuItems().empty() && chat.messageMenuItems().back() == "Cr\xC3\xA9" "er une mission avec ce message"
+              && std::find(chat.messageMenuItems().begin(), chat.messageMenuItems().end(), "R\xC3\xA9pondre") != chat.messageMenuItems().end(),
+          "le clic droit : le menu (Repondre..., Creer une mission avec ce message)");
     const std::size_t missions = f.as().missions().size();
     check(chat.chooseMessageMenuItem("Cr\xC3\xA9" "er une mission avec ce message"), "Creer une mission avec ce message");
     check(f.as().missions().size() == missions + 1 && f.as().current() && f.as().current()->id != f.stationConv, "une mission, dans une conversation neuve");

@@ -147,6 +147,14 @@ public:
                              "le composer dans un second s\xC3\xA9lecteur (MAP[STRING] OF VECTOR OF T_Cuve). On peut aussi \xC3\xA9" "crire le "
                              "type entier dans la recherche.");
         links_ += compose_->clicked->connect([this] { composeElement(); });
+        // 1.50.1 : LES DIMENSIONS D'UN TABLEAU - une de plus (Tableau -> Tableau a N dimensions), une de moins.
+        addDim_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("+ Dimension", "dialog.typePicker.dimensionPlus")));
+        addDim_->setTooltip("Une dimension de plus : ARRAY[0..3, 0..9] devient ARRAY[0..3, 0..9, 0..9] (la derni\xC3\xA8re recopi\xC3\xA9" "e, \xC3\xA0 changer) ; "
+                            "la case se lit C[i, j, k] ou C[i][j][k]");
+        links_ += addDim_->clicked->connect([this] { addDimension(); });
+        dropDim_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("\xE2\x88\x92", "dialog.typePicker.dimensionMoins")));
+        dropDim_->setTooltip("Une dimension de moins (la derni\xC3\xA8re)");
+        links_ += dropDim_->clicked->connect([this] { removeDimension(); });
         cancel_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Annuler", "dialog.typePicker.annuler")));
         open_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Ouvrir la d\xC3\xA9" "finition", "dialog.typePicker.definition")));
         ok_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Choisir", "dialog.typePicker.choisir")));
@@ -324,6 +332,35 @@ public:
         return true;
     }
     [[nodiscard]] tf::Form form() const noexcept { return form_; }
+    // 1.50.1 : une dimension de plus ou de moins - un tableau a une dimension passe a N dimensions, et revient.
+    void addDimension() {
+        if (form_ != tf::Form::Array && form_ != tf::Form::Array2D) {
+            if (!setForm(tf::Form::Array)) return;
+        }
+        const std::string next = tf::withDimension(trimmed(bounds_->text()).empty() ? tf::defaultParameter(form_) : trimmed(bounds_->text()));
+        if (form_ == tf::Form::Array && !setForm(tf::Form::Array2D)) return;
+        bounds_->setText(next);
+        params_[static_cast<std::size_t>(form_)] = next;
+        relayout();
+        invalidate();
+    }
+    void removeDimension() {
+        if (form_ != tf::Form::Array2D) return;
+        const std::string next = tf::withoutDimension(bounds_->text());
+        if (tf::dimensionsOf(next) <= 1 && setForm(tf::Form::Array)) {
+            bounds_->setText(next);
+            params_[static_cast<std::size_t>(form_)] = next;
+        } else {
+            bounds_->setText(next);
+            params_[static_cast<std::size_t>(form_)] = next;
+        }
+        relayout();
+        invalidate();
+    }
+    [[nodiscard]] std::size_t dimensions() const {
+        if (form_ != tf::Form::Array && form_ != tf::Form::Array2D) return 0;
+        return std::max<std::size_t>(1, tf::dimensionsOf(bounds_->text()));
+    }
 
     // 1.12.14 : l'element compose - sa ligne (Collections, « compos\xC3\xA9 ici ») en tete de la liste, choisie.
     // Un type nomme revenu du second selecteur : sa ligne a lui, simplement.
@@ -419,6 +456,10 @@ protected:
             bounds_->setBounds({});
         }
         (void)x;
+        // 1.50.1 : + Dimension (et -, a N dimensions) au bout du champ des bornes d'un tableau.
+        const bool arrayForm = (form_ == tf::Form::Array || form_ == tf::Form::Array2D) && bounds_->bounds().w > 0.f;
+        if (addDim_) addDim_->setBounds(arrayForm ? gfx::Rect{bounds_->bounds().right() + 8.f, y, 110.f, 26.f} : gfx::Rect{});
+        if (dropDim_) dropDim_->setBounds(arrayForm && form_ == tf::Form::Array2D ? gfx::Rect{bounds_->bounds().right() + 122.f, y, 30.f, 26.f} : gfx::Rect{});
         // 1.50.0 (planche 03) : l'Acces - trois choix sous la forme (grises la ou ils ne sont pas permis), et, avec une
         // forme et un acces, ce que le pointeur vise (chaque element, le tout).
         accessBoxes_.clear();
@@ -1000,6 +1041,13 @@ private:
             if (x + total > panel_.right() - 16.f) {
                 pad = 12.f;
                 gap = 3.f;
+                // 1.50.1 : "Tableau a N dimensions" plus long que "Tableau 2D" - plus serre encore s'il le faut.
+                float tight = 0.f;
+                for (const auto f : forms) tight += r.measure(std::string(tf::label(f)), kSmall).width + pad + gap;
+                if (x + tight > panel_.right() - 16.f) {
+                    pad = 8.f;
+                    gap = 2.f;
+                }
             }
             for (const auto f : forms) {
                 const std::string text(tf::label(f));
@@ -1019,7 +1067,8 @@ private:
             if (!label.empty() && bounds_->bounds().w > 0.f)
                 r.drawText({x0, y + 5.f}, std::string(label) + " :", kSmall, on ? c.text : c.textDisabled);
             // Ce que la forme est (une liste vit dans la memoire de l'IHM...).
-            const float sx = (bounds_->bounds().w > 0.f ? bounds_->bounds().right() : x0 + 96.f) + 18.f;
+            float sx = (bounds_->bounds().w > 0.f ? bounds_->bounds().right() : x0 + 96.f) + 18.f;
+            if (addDim_ && addDim_->bounds().w > 0.f) sx = (dropDim_ && dropDim_->bounds().w > 0.f ? dropDim_->bounds().right() : addDim_->bounds().right()) + 12.f;   // 1.50.1
             const float sr = compose_ && compose_->bounds().w > 0.f ? compose_->bounds().x - 10.f : panel_.right() - 16.f;   // 1.12.14
             if (form_ != tf::Form::Simple)
                 r.drawText({sx, y + 5.f}, fit(r, std::string(tf::summary(form_)), kSmall, sr - sx), kSmall, c.textMuted);
@@ -1133,6 +1182,8 @@ private:
     tr::Entry                              composedEntry_;
     std::string                            typed_, typedWhy_;
     ui::Button*                            compose_{nullptr};
+    ui::Button*                            addDim_{nullptr};       // 1.50.1 : + Dimension
+    ui::Button*                            dropDim_{nullptr};      // 1.50.1 : une dimension de moins
     float                                  scroll_{0.f}, bottom_{0.f}, constructY_{0.f}, detailY_{0.f};
     bool                                   revealPending_{false};   // la ligne choisie, a montrer des la mise en page
     ui::InputText*                         search_{nullptr};
@@ -1238,6 +1289,9 @@ bool HmiTypePicker::setForm(std::string_view labelOrKey) {
     return body_ && f && body_->setForm(*f);
 }
 void HmiTypePicker::composeElement() { if (body_) body_->composeElement(); }
+void HmiTypePicker::addDimension() { if (body_) body_->addDimension(); }
+void HmiTypePicker::removeDimension() { if (body_) body_->removeDimension(); }
+std::size_t HmiTypePicker::dimensions() const { return body_ ? body_->dimensions() : 0; }
 std::string HmiTypePicker::finalResult() const { return body_ ? body_->finalResult() : std::string{}; }
 std::vector<std::string> HmiTypePicker::shownNames() const { return body_ ? body_->shownNames() : std::vector<std::string>{}; }
 std::string HmiTypePicker::result() const { return body_ ? body_->result() : std::string{}; }

@@ -3,8 +3,8 @@
 // -----------------------------------------------------------------------------
 //  UNE VARIABLE IHM PEUT ETRE COMPOSEE :
 //    - d'un type IHM, une structure (Programs::types) : Four1 : T_Four ;
-//    - un tableau a une ou deux dimensions, bornes libres :
-//          ARRAY[0..9] OF REAL        ARRAY[0..3, 0..9] OF INT
+//    - un tableau a une, deux ou plus de dimensions (1.50.1), bornes libres :
+//          ARRAY[0..9] OF REAL        ARRAY[0..3, 0..9] OF INT        ARRAY[0..3, 0..7, 0..15] OF BOOL
 //          ARRAY[1..4] OF T_Four      (un tableau de structures)
 //
 //  DANS LE MOTEUR, UNE VALEUR PAR CASE. Comme les variables composees de
@@ -39,14 +39,25 @@
 namespace hmi::types {
 
 // ------------------------------------------------------------------ types ---
+// 1.50.1 : AUTANT DE DIMENSIONS QU'ON VEUT par niveau (IEC 61131-3) - ARRAY[0..3, 0..7, 0..15] OF BOOL : dims 3, ses
+// bornes dans low / high (une par dimension) ; la case se lit X[1, 2, 3] ou X[1][2][3], la derniere dimension varie le
+// plus vite (le depliage, la place Modbus, les valeurs initiales).
 struct Spec {
-    std::string element;           // "REAL", "T_Four" (un type elementaire en majuscules)
-    int         dims{0};           // 0 : pas un tableau ; 1 ou 2
-    long long   low[2]{0, 0};
-    long long   high[2]{-1, -1};
+    std::string            element;       // "REAL", "T_Four" (un type elementaire en majuscules)
+    int                    dims{0};       // 0 : pas un tableau ; 1, 2, 3...
+    std::vector<long long> low, high;     // une borne par dimension (vides : pas un tableau)
     [[nodiscard]] bool      array() const noexcept { return dims > 0; }
-    [[nodiscard]] long long count(int d) const noexcept { return d < dims ? high[d] - low[d] + 1 : 1; }
-    [[nodiscard]] long long length() const noexcept { return dims == 0 ? 1 : count(0) * count(1); }
+    [[nodiscard]] long long count(int d) const noexcept { return d >= 0 && d < dims ? high[static_cast<std::size_t>(d)] - low[static_cast<std::size_t>(d)] + 1 : 1; }
+    // Les cases de ce niveau (toutes ses dimensions) ; borne a kMaxCells (pas de debordement).
+    [[nodiscard]] long long length() const noexcept {
+        long long n = 1;
+        for (int d = 0; d < dims; ++d) {
+            const long long c = count(d);
+            n = c > 0 && n > kMaxCellsGuard / c ? kMaxCellsGuard : n * c;
+        }
+        return n;
+    }
+    static constexpr long long kMaxCellsGuard = 1LL << 50;   // au-dela : illisible (aucune machine ne le tiendrait)
 };
 
 // "ARRAY[0..9] OF REAL", "ARRAY [ 0 .. 3 , 0..9 ] of int", "T_Four", "real" -> Spec.
@@ -97,7 +108,27 @@ bool parseSpec(std::string_view text, Spec& out, std::string* why = nullptr);
 // 1.13.0 : par identite - `typeName` en entier (Gaz.T_Vanne) ; un homonyme d'un autre espace ne compte pas.
 [[nodiscard]] std::vector<std::string> usersOf(const Project&, std::string_view typeName);
 
-inline constexpr long long kMaxElements = 100000;    // les cases d'une variable, au plus
+// 1.50.1 : LES GRANDS TABLEAUX. Une variable IHM (ou un membre) dont les tableaux ont jusqu'a kMaxElements cases
+// (tous niveaux) se deplie en cases, une par case, chacune sa place Modbus. Au-dela, c'est un GRAND TABLEAU : il vit
+// entier dans la memoire de l'IHM (un objet du moteur des scripts, ses valeurs simples rangees serrees - un BOOL : 1 bit,
+// un INT : 2 octets), sans equipement ni adresse (isRich, unbindableReason). Avant 1.50.1 : refuse (100 000 cases au plus).
+// La seule limite : la memoire qu'il prendrait, kMaxArrayBytes (1 Go) par variable - dite avec l'estimation.
+inline constexpr long long kMaxElements = 100000;    // les cases depliees une par une d'une variable, au plus
+inline constexpr long long kMaxArrayBytes = 1LL << 30;
+// Les cases de tous les niveaux d'un tableau (ARRAY[0..1] OF ARRAY[0..2, 0..3] OF INT : 24) ; 1 : pas un tableau.
+[[nodiscard]] long long totalCells(std::string_view type);
+// Le type des cases du dernier niveau (ARRAY[0..1] OF ARRAY[0..3] OF BOOL : BOOL) ; un type simple : lui-meme.
+[[nodiscard]] std::string leafElement(std::string_view type);
+// Un grand tableau : plus de kMaxElements cases, tous niveaux.
+[[nodiscard]] bool isBigArray(std::string_view type);
+// La memoire qu'une variable de ce type prendra dans l'IHM, estimee (octets) ; et ce nombre ecrit ("1,2 Mo").
+[[nodiscard]] long long memoryOf(std::string_view type);
+[[nodiscard]] std::string memoryText(long long bytes);
+// 1.50.1 : les indices d'une case d'un niveau de tableau, ecrits "[3]", "[1,2]", "[1,2,3]" - la case `flat` (0 : la
+// premiere ; la derniere dimension varie le plus vite) ; `flat` au-dela : vide.
+[[nodiscard]] std::string cellText(const Spec&, long long flat);
+// La forme d'un type, ses bornes lues, sans la garde de la memoire (parseSpec = parseSpecShape + la garde).
+bool parseSpecShape(std::string_view text, Spec& out, std::string* why = nullptr);
 
 // ------------------------------------------------------------ la place ------
 // Les mots Modbus d'un type elementaire (un BOOL seul : 1).
@@ -264,6 +295,10 @@ struct TypeStep {
 // INT : 2 ; un tableau de tableaux, celles de son premier niveau : 1) ; une liste, une MAP : 1. a[i][j] et a[i, j]
 // designent la meme case dans l'un comme dans l'autre (les indices se prennent dans l'ordre, niveau par niveau).
 [[nodiscard]] std::size_t indexCount(std::string_view type);
+// 1.50.1 : LE SOUS-TABLEAU d'une case pas complete - ses `taken` premiers indices pris : ARRAY[0..1, 0..2, 0..3] OF INT,
+// 1 -> ARRAY[0..2, 0..3] OF INT (a[i], une couche), 2 -> ARRAY[0..3] OF INT (a[i, j], une ligne). Vide : pas un tableau, ou
+// toutes ses dimensions prises.
+[[nodiscard]] std::string subArrayType(std::string_view type, std::size_t taken);
 [[nodiscard]] TypeStep stepMember(const Project&, std::string_view type, std::string_view member);
 // 1.13.0 : un membre ou une methode PRIVE de `typeName` (ou d'un de ses parents), lu de l'exterieur de ses methodes :
 // le message ("Heures est prive dans T_Pompe : seules ses methodes le lisent et l'ecrivent") ; vide : permis. `owner`

@@ -1003,6 +1003,17 @@ namespace ui {
     // KeyboardMenuScope : chaque ecran ouvre le menu qu'il ouvre deja a la souris.
     void openContextMenuAt(Widget& target, gfx::Point at);
 
+    // 1.50.1 : UNE PASTILLE (<< nouveau >> dans un menu, << nv >> dans une barre d'outils) - le mot en petites
+    // capitales, sur un cartouche teinte, comme la maquette (.nv : le violet sur son fond pale). Les couleurs viennent
+    // du theme du moment : l'encre est la teinte rendue lisible (4,5:1 au moins) sur un fond fait d'elle et du fond
+    // des panneaux (opaque : lisible aussi sur une entree en surbrillance), en clair comme en sombre.
+    struct TagPillColors { gfx::Color ink, fill; };
+    [[nodiscard]] TagPillColors tagPillColors(const Theme& theme, Tone tone = Tone::New);
+    [[nodiscard]] std::string tagPillText(std::string_view text);   // en capitales ("nouveau" -> "NOUVEAU")
+    [[nodiscard]] float tagPillWidth(std::string_view text);        // sa largeur (le cartouche), en petite police
+    // Dessinee a partir de `x`, centree sur `centerY` ; rend son cadre.
+    gfx::Rect drawTagPill(const PaintContext& ctx, float x, float centerY, std::string_view text, Tone tone = Tone::New);
+
     class PopupMenu : public Widget {
     public:
         struct Item {
@@ -1043,6 +1054,11 @@ namespace ui {
             bool        locked{ false };
             // 1.41.0 : UN GESTE DANGEREUX (revoquer, supprimer, desactiver) - le libelle et l'icone en rouge.
             bool        danger{ false };
+            // 1.50.1 : UNE PASTILLE apres le libelle (<< nouveau >>) : le mot en petites capitales sur un cartouche
+            // teinte (drawTagPill), dans la teinte `badgeTone` (Tone::New : le violet des maquettes) ; l'entree en
+            // surbrillance porte en plus un lisere de cette teinte a gauche. Vide : rien.
+            std::string badge{};
+            Tone        badgeTone{ Tone::New };
         };
 
         explicit PopupMenu(std::string id = {});

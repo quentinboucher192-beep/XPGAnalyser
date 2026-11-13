@@ -7,7 +7,28 @@
 
 namespace sim {
 
+// 1.50.1 : les grands tableaux ranges serres (RichPacked.cpp).
+ObjRef makePackedArray(const TypeRef& type);
+ObjRef copyPacked(const Obj& from);
+bool packedFast(const Obj& a, const Obj& b);
+bool packedEquals(const Obj& a, const Obj& b);
+void packedAssign(const Obj& into, const Obj& from);
+
 namespace {
+// 1.50.1 : un litteral entier d'un tableau de plus de cases ne s'ecrit pas (il ferait des dizaines de Mo) : display.
+constexpr std::size_t kLiteralMaxCells = 100000;
+std::size_t literalCells(const Obj& o) {
+    if (!o.type || o.type->kind != TypeDesc::Kind::Array) return 1;
+    std::size_t n = 1;
+    for (const TypeDesc* x = o.type.get(); x && x->kind == TypeDesc::Kind::Array; x = x->element.get()) {
+        const auto c = static_cast<std::size_t>(std::max<std::int64_t>(0, x->count()));
+        n = c > 0 && n > (std::size_t{1} << 40) / c ? (std::size_t{1} << 40) : n * c;
+    }
+    return n;
+}
+// 1.50.1 : un tableau dont une case (ou plus) est rangee serree : case par case, par cellAt / cellValue.
+bool scalarElement(const Obj& array) { return array.type && array.type->element && array.type->element->kind == TypeDesc::Kind::Scalar; }
+
 std::string upperOf(std::string_view s) {
     std::string out(s);
     for (auto& c : out) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
@@ -290,6 +311,8 @@ ObjRef makeObj(const TypeRef& type) {
     switch (type->kind) {
         case TypeDesc::Kind::Scalar: o->value = Value::defaultOf(type->scalar); break;
         case TypeDesc::Kind::Array: {
+            // 1.50.1 : un grand tableau de valeurs simples (tous niveaux) : un seul bloc, ses cases a la demande.
+            if (packable(*type) && literalCells(*o) >= static_cast<std::size_t>(packFrom())) return makePackedArray(type);
             const auto n = type->count();
             o->items.reserve(static_cast<std::size_t>(std::max<std::int64_t>(0, n)));
             for (std::int64_t i = 0; i < n; ++i) o->items.push_back(makeObj(type->element));
@@ -307,6 +330,7 @@ ObjRef makeObj(const TypeRef& type) {
 }
 
 ObjRef deepCopy(const Obj& from) {
+    if (from.packed && from.type && from.type->kind == TypeDesc::Kind::Array) return copyPacked(from);   // 1.50.1
     auto o = std::make_shared<Obj>();
     o->type = from.type;
     o->value = from.value;
@@ -392,6 +416,24 @@ bool assignObj(Obj& into, const Obj& from, std::string* why) {
     }
     switch (t.kind) {
         case TypeDesc::Kind::Array:
+            // 1.50.1 : un grand tableau range serre, d'un cote ou de l'autre : case par case (les valeurs simples sans sortir).
+            if (into.packed || from.packed) {
+                if (packedFast(into, from)) {                   // le bloc d'un coup
+                    packedAssign(into, from);
+                    return true;
+                }
+                const std::size_t n = std::min(cellCount(into), cellCount(from));
+                if (scalarElement(into)) {
+                    for (std::size_t i = 0; i < n; ++i) setCellValue(into, i, cellValue(from, i));
+                    return true;
+                }
+                for (std::size_t i = 0; i < n; ++i) {
+                    const ObjRef a = cellAt(into, i), b = cellAt(from, i);
+                    if (a && b && !assignObj(*a, *b, why)) return false;
+                }
+                return true;
+            }
+            [[fallthrough]];
         case TypeDesc::Kind::Struct:
         case TypeDesc::Kind::Tuple:
             for (std::size_t i = 0; i < into.items.size() && i < from.items.size(); ++i)
@@ -433,6 +475,22 @@ bool deepEquals(const Obj& a, const Obj& b) {
     if (!sameType(*a.type, *b.type)) return false;
     switch (a.type->kind) {
         case TypeDesc::Kind::Array:
+            if (a.packed || b.packed) {                       // 1.50.1 : case par case
+                if (packedFast(a, b)) return packedEquals(a, b);
+                const std::size_t n = cellCount(a);
+                if (n != cellCount(b)) return false;
+                if (scalarElement(a)) {
+                    for (std::size_t i = 0; i < n; ++i)
+                        if (cellValue(a, i).compare(cellValue(b, i)) != 0) return false;
+                    return true;
+                }
+                for (std::size_t i = 0; i < n; ++i) {
+                    const ObjRef x = cellAt(a, i), y = cellAt(b, i);
+                    if (!x || !y || !deepEquals(*x, *y)) return false;
+                }
+                return true;
+            }
+            [[fallthrough]];
         case TypeDesc::Kind::Struct:
         case TypeDesc::Kind::Tuple:
         case TypeDesc::Kind::List:
@@ -477,9 +535,15 @@ std::string display(const Obj& o) {
         case TypeDesc::Kind::Scalar: return o.value.display();
         case TypeDesc::Kind::Array: {
             std::string s = "[";
-            for (std::size_t i = 0; i < o.items.size(); ++i) {
-                if (i == 16) { s += ", ..."; break; }
-                s += (i ? ", " : "") + (o.items[i] ? display(*o.items[i]) : std::string("?"));
+            const std::size_t n = cellCount(o);                // 1.50.1 : range serre ou non
+            for (std::size_t i = 0; i < n; ++i) {
+                if (i == 16) { s += ", ..." + std::string(o.packed ? " (" + std::to_string(literalCells(o)) + " cases)" : ""); break; }
+                if (o.packed && o.items.empty() && scalarElement(o)) {
+                    s += (i ? ", " : "") + cellValue(o, i).display();
+                    continue;
+                }
+                const ObjRef c = cellAt(o, i);
+                s += (i ? ", " : "") + (c ? display(*c) : std::string("?"));
             }
             return s + "]";
         }
@@ -574,6 +638,25 @@ bool literalText(const Obj& o, std::string& out) {
             out = o.callee;
             return true;
         case TypeDesc::Kind::Array:
+            // 1.50.1 : un grand tableau ne s'ecrit pas en entier (display le montre) ; range serre : case par case.
+            if (literalCells(o) > kLiteralMaxCells) return false;
+            if (o.packed && o.items.empty()) {
+                std::string s = "[";
+                const std::size_t n = cellCount(o);
+                for (std::size_t i = 0; i < n; ++i) {
+                    std::string item;
+                    if (scalarElement(o)) {
+                        item = scalarLiteral(cellValue(o, i));
+                    } else {
+                        const ObjRef c = cellAt(o, i);
+                        if (!c || !literalText(*c, item)) return false;
+                    }
+                    s += (i ? ", " : "") + item;
+                }
+                out = s + "]";
+                return true;
+            }
+            [[fallthrough]];
         case TypeDesc::Kind::List:
         case TypeDesc::Kind::Tuple: {
             const bool tuple = o.type->kind == TypeDesc::Kind::Tuple;

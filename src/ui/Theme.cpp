@@ -1050,6 +1050,7 @@ gfx::Color Theme::tone(Tone t, gfx::Color fallback) const noexcept {
         case Tone::Input:   return brand.scopeIn;
         case Tone::Output:  return brand.scopeOut;
         case Tone::InOut:   return brand.scopeInOut;
+        case Tone::New:     return brand.scopeInOut;   // 1.50.1 : le violet de << nouveau >>
     }
     return fallback;
 }

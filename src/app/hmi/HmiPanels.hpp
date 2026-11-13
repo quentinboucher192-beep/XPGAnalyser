@@ -85,6 +85,13 @@ public:
     // image ; vide : le libelle fixe. labelOf : le libelle montre (les essais, les scripts).
     void setLabelWhen(int action, std::function<std::string()> label);
     [[nodiscard]] std::string labelOf(int action) const;
+    // 1.50.1 : UNE PASTILLE apres le libelle (<< nv >> : un geste nouveau), dans la teinte `tone` (Tone::New : le
+    // violet des maquettes) ; le libelle et le fond de l'icone prennent la meme teinte. Barre trop etroite (le
+    // libelle tombe) : un point de cette teinte sur l'icone. Vide : plus de pastille. badgeOf : la pastille (les
+    // essais, les scripts) ; badgeRectOf : ou elle est dessinee (vide : pas montree).
+    void setBadge(int action, std::string badge, ui::Tone tone = ui::Tone::New);
+    [[nodiscard]] std::string badgeOf(int action) const;
+    [[nodiscard]] gfx::Rect badgeRectOf(int action) const;
     [[nodiscard]] ui::SizeHint sizeHint() const override;
     const core::SignalPtr<int> triggered = core::Signal<int>::create();
     // Pour les tests : le rectangle ecran d'un bouton.
@@ -125,6 +132,8 @@ private:
         bool separator{false};
         std::function<bool()> enabled, checked, visible;
         std::function<std::string()> dynamicLabel;   // 1.24.0 : << Supprimer les 5 >>
+        std::string badge;                           // 1.50.1 : << nv >>
+        ui::Tone badgeTone{ui::Tone::New};
         [[nodiscard]] std::string shown() const {
             if (dynamicLabel)
                 if (auto l = dynamicLabel(); !l.empty()) return l;
@@ -132,6 +141,7 @@ private:
         }
         mutable gfx::Rect rect{};
         mutable bool compact{false};      // lot macros 1 : le libelle tombe (barre trop etroite)
+        mutable gfx::Rect badgeRect{};    // 1.50.1 : ou est dessinee sa pastille (vide : pas montree)
     };
     void layoutItems(float measureScale) const;
     [[nodiscard]] int itemAt(gfx::Point) const;

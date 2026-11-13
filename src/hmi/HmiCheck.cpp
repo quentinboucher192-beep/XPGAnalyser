@@ -6,6 +6,7 @@
 #include "HmiSoundLibrary.hpp"    // 1.27.0 : GetSound('Bip court')
 #include "HmiSemanticColors.hpp"  // 1.23.1 : les couleurs semantiques (@Nom)
 #include "HmiOverload.hpp"   // 1.11.20 : les surcharges
+#include "HmiCallCheck.hpp"  // 1.50.1 : les appels de methodes dans le corps d'une methode
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
 #include <cmath>
 #include <regex>
@@ -636,7 +637,7 @@ void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issu
             if (markers::strip(m.body).find_first_not_of(" \t\r\n") == std::string::npos) continue;   // rien a lire
             if (!isIdentifier(m.name)) continue;                                                        // methodProblem le dit
             MethodCall mc;
-            if (!resolveMethodInternal(p, methodFunctionName(tn, m), mc)) continue;
+            if (!resolveMethodInternal(p, methodFunctionName(ty, m), mc)) continue;   // 1.50.1 : une surcharge, son nom
             auto fn = sim::parseFunction(mc.function, mc.owner);
             if (!fn) {
                 const std::string raw = fn.error().context.empty() ? fn.error().message() : fn.error().context;
@@ -645,6 +646,16 @@ void checkMethodBodies(const Project& p, const NameExists& plc, std::vector<Issu
                 // La FUNCTION interne porte son en-tete sur la ligne 1 (methodFunctionText) : la ligne est celle du corps.
                 issue(S::Error, frenchSimMessage(rest), line);
                 continue;
+            }
+            // 1.50.1 : les appels de METHODES du corps (X(...), SELF.X(...), Autre.Y(...)) - la regle des surcharges, comme
+            // un script : aucune ne convient, appel ambigu, un argument d'un type interdit. Lus sur la FUNCTION interne
+            // (SELF y a son type) ; ses lignes sont celles du corps.
+            {
+                callcheck::Context cc;
+                cc.project = &p;
+                cc.methodsOnly = true;
+                for (const auto& pr : callcheck::checkCode(cc, mc.function))
+                    issue(pr.error ? S::Error : S::Warning, pr.message, pr.line);
             }
             const std::string code = decl::codeOf(m);
             const auto dialect = scriptcheck::dialectDeclared(code);
@@ -952,10 +963,9 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
                 ty.name + " : une interface ne porte pas de membre (seulement des signatures de m\xC3\xA9thodes)");
         // Les methodes : nom valide / en double, OVERRIDE vs VIRTUAL et meme signature, privee non virtuelle,
         // retour et parametres lisibles (methodProblem) ; une methode ne partage pas le nom d'un membre.
-        std::set<std::string> methodSeen;
+        // 1.50.1 : un meme nom n'est plus une faute en soi - des surcharges ; methodProblem (methodOverloadProblem) dit
+        // deux surcharges de la meme forme, une virtuelle surchargee, deux signatures d'interface du meme nom.
         for (const auto& m : ty.methods) {
-            if (isIdentifier(m.name) && !methodSeen.insert(upperText(m.name)).second)
-                add(out, S::Error, cat, kNoId, kNoId, ty.name, ty.name + " : m\xC3\xA9thode en double " + m.name);
             for (const auto& mem : types::membersOf(p, fullName(ty)))   // 1.13.0 (lot J1) : herites compris
                 if (sameTypeName(mem.name, m.name)) {
                     add(out, S::Error, cat, kNoId, kNoId, ty.name,

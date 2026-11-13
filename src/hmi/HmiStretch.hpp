@@ -7,10 +7,11 @@
 //  (la taille change ; rien ne suit la vue ensuite).
 //
 //  LES CIBLES (Request::to) :
-//    - View : le bord de la vue, moins la marge (Garder les marges : la marge
-//      de la vue - celle de la grille de colonnes quand elle est montree, sinon
-//      le pas d'aimantation ; decochee, l'objet touche le bord). Toute la
-//      largeur, toute la hauteur, toute la vue : deux ou quatre bords ;
+//    - View : le bord de la vue, moins la marge (Garder les marges : 1.50.1, les
+//      marges de la vue - View::margins, une par bord - ; une vue qui n'en a pas,
+//      celle de la grille de colonnes quand elle est montree, sinon le pas
+//      d'aimantation ; decochee, l'objet touche le bord). Toute la largeur, toute
+//      la hauteur, toute la vue : deux ou quatre bords ;
 //    - Neighbour : l'objet voisin dans le sens du bord (le plus proche, au meme
 //      niveau, qui chevauche l'objet sur l'autre axe) ; il s'arrete avant lui,
 //      l'espacement garde (le pas d'aimantation ; sans marge : contre lui) ;
@@ -49,9 +50,20 @@ struct Request {
     unsigned edges{kRight};
     To       to{To::View};
     int      index{-1};           // Guide : le rang dans View::guides (-1 : le plus proche) ; Column : la colonne (0 = la 1re)
-    bool     keepMargins{true};   // la marge de la vue (View), l'espacement (Neighbour)
-    double   margin{-1.0};        // >= 0 : cette marge (la fenetre Etirer...) ; < 0 : celle de la vue
+    bool     keepMargins{true};   // les marges de la vue (View), l'espacement (Neighbour)
+    double   margin{-1.0};        // >= 0 : cette marge, a chaque bord (la fenetre Etirer...) ; < 0 : celles de la vue
     bool operator==(const Request&) const = default;
+};
+
+// 1.50.1 : LES MARGES GARDEES, une par bord, et d'ou elles viennent : les marges de la vue (View::margins, dans
+// ses proprietes), sinon celle de la grille de colonnes montree (les quatre bords), sinon le pas d'aimantation.
+struct Margins {
+    enum class From : std::uint8_t { View, Columns, Snap, Given };
+    double left{0}, right{0}, top{0}, bottom{0};
+    From   from{From::Snap};
+    [[nodiscard]] double of(unsigned edge) const noexcept;   // kLeft, kRight, kTop ou kBottom (sinon 0)
+    [[nodiscard]] bool   uniform() const noexcept;           // les quatre egales
+    bool operator==(const Margins&) const = default;
 };
 
 // Un objet (une unite de la selection) et sa boite a l'ecran, avant et apres.
@@ -65,14 +77,22 @@ struct Plan {
     std::vector<Change>      changes;
     std::vector<std::string> skipped;   // "Bouton_2 (verrouill\xC3\xA9)"
     std::string              why;       // rien a faire : pourquoi (vide : changes n'est pas vide)
-    double                   margin{0}; // la marge (View) ou l'espacement (Neighbour) applique ; 0 : aucun
+    double                   margin{0}; // la marge (View : la plus grande des bords qui bougent) ou l'espacement (Neighbour) ; 0 : aucun
+    Margins                  margins;   // 1.50.1 (View) : la marge de chaque bord (0 : aucune ; Garder les marges decochee : 0)
     std::string              neighbour; // Neighbour, un seul objet : le nom du voisin
     To                       to{To::View};   // la cible (l'apercu dessine la marge du bord de la vue, l'espacement d'un voisin)
     [[nodiscard]] bool possible() const noexcept { return !changes.empty(); }
 };
 
-// La marge de la vue : celle de la grille de colonnes quand elle est montree, sinon le pas d'aimantation.
+// 1.50.1 : les marges que garde Etirer : celles de la vue (View::margins.any()), sinon celle de la grille de
+// colonnes montree, sinon le pas d'aimantation.
+[[nodiscard]] Margins viewMargins(const View&);
+// Une seule valeur (la fenetre, le menu) : la marge des quatre bords quand elles sont egales, sinon la plus grande.
 [[nodiscard]] double viewMargin(const View&);
+// "16 px" ; differentes : "haut 16 \xC2\xB7 bas 16 \xC2\xB7 gauche 24 \xC2\xB7 droite 24 px".
+[[nodiscard]] std::string marginsText(const Margins&);
+// D'ou elles viennent : "les marges de la vue", "la marge de la grille de colonnes", "le pas d'aimantation".
+[[nodiscard]] std::string marginsSource(const Margins&);
 // L'espacement garde avec un voisin : le pas d'aimantation.
 [[nodiscard]] double neighbourGap(const View&);
 

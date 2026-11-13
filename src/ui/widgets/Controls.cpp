@@ -3914,6 +3914,7 @@ namespace ui {
         constexpr float kScreenMargin = 4.f;      // 1.12.18 : un menu trop haut garde ce jour en haut et en bas
 
         constexpr float kNoteHeight = 14.f;       // 1.12.18 : la note sous le libelle
+        constexpr float kBadgeGap = 8.f;          // 1.50.1 : entre le libelle et sa pastille (<< nouveau >>)
         constexpr const char* kLockedNote = "pas dans ta licence";   // 1.39.0 : une entree verrouillee
         float menuRowHeight(const PopupMenu::Item& it, float rowHeight) {
             return it.separator ? kSeparatorHeight : it.note.empty() || it.heading ? rowHeight : rowHeight + kNoteHeight;
@@ -3930,6 +3931,7 @@ namespace ui {
                     w += 12.f + measureWidth(it.disabledReason, kFontUi);
                 if (it.locked)                  w += 12.f + 18.f + measureWidth(kLockedNote, kFontUi);   // 1.39.0
                 if (!it.children.empty())       w += kSubmenuArrow;
+                if (!it.badge.empty())          w += kBadgeGap + tagPillWidth(it.badge);   // 1.50.1
                 // 1.12.18 : la note sous le libelle (petite : 13 contre 16).
                 if (!it.note.empty())
                     w = std::max(w, kMenuIconGutter + measureWidth(it.note, kFontUi) * 13.f / 16.f + 8.f);
@@ -4076,6 +4078,74 @@ namespace ui {
         KeyboardMenuScope scope;
         // 1.12.31 : `at` est dans le repere de `target` ; l'appui part du haut de l'arbre (la surface).
         (void)target.topWidget().dispatch(MouseDown{ target.toSurface(at), MouseButton::Right, 1, {} });
+    }
+
+    // ---- 1.50.1 : la pastille (<< nouveau >>) ----------------------------------------------------
+    namespace {
+        constexpr gfx::FontId kBadgeFont{ 11 };
+        constexpr float kBadgePad = 5.f;      // de chaque cote du mot
+        constexpr float kBadgeHeight = 15.f;
+
+        double badgeChannel(std::uint8_t v) {
+            const double c = static_cast<double>(v) / 255.0;
+            return c <= 0.03928 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+        }
+        double badgeContrast(gfx::Color a, gfx::Color b) {
+            const auto lum = [](gfx::Color c) { return 0.2126 * badgeChannel(c.r) + 0.7152 * badgeChannel(c.g) + 0.0722 * badgeChannel(c.b); };
+            const double x = lum(a) + 0.05, y = lum(b) + 0.05;
+            return x > y ? x / y : y / x;
+        }
+        gfx::Color badgeMix(gfx::Color a, gfx::Color b, float t) {
+            const auto m = [t](std::uint8_t x, std::uint8_t y) {
+                return static_cast<std::uint8_t>(std::lround(static_cast<float>(x) + (static_cast<float>(y) - static_cast<float>(x)) * t));
+            };
+            return { m(a.r, b.r), m(a.g, b.g), m(a.b, b.b), 255 };
+        }
+    } // namespace
+
+    TagPillColors tagPillColors(const Theme& theme, Tone tone) {
+        const gfx::Color base = theme.tone(tone, theme.color.accent);
+        const gfx::Color bg = theme.color.panelBg;
+        // Le fond : la teinte, legere, sur le fond des panneaux - opaque (une entree en surbrillance dessous ne
+        // change pas sa lecture). L'encre : la teinte, rapprochee du texte du theme jusqu'au contraste voulu.
+        const gfx::Color fill = badgeMix(bg, base, theme.isDark() ? 0.24f : 0.12f);
+        const double need = theme.isHighContrast() ? 7.0 : 4.5;
+        gfx::Color ink{ base.r, base.g, base.b, 255 };
+        for (int step = 1; step <= 10 && badgeContrast(ink, fill) < need; ++step)
+            ink = badgeMix(base, theme.color.text, 0.1f * static_cast<float>(step));
+        return { ink, fill };
+    }
+
+    std::string tagPillText(std::string_view text) {
+        std::string out(text);
+        for (std::size_t i = 0; i < out.size(); ++i) {
+            const auto c = static_cast<unsigned char>(out[i]);
+            if (c < 0x80) {
+                out[i] = static_cast<char>(std::toupper(c));
+            } else if (c == 0xC3 && i + 1 < out.size()) {
+                // Les lettres accentuees du Latin-1 (e accent aigu -> E accent aigu), sauf la division.
+                const auto d = static_cast<unsigned char>(out[i + 1]);
+                if (d >= 0xA0 && d <= 0xBE && d != 0xB7) out[i + 1] = static_cast<char>(d - 0x20);
+                ++i;
+            }
+        }
+        return out;
+    }
+
+    float tagPillWidth(std::string_view text) {
+        if (text.empty()) return 0.f;
+        return measureWidth(tagPillText(text), kBadgeFont) + 2.f * kBadgePad;
+    }
+
+    gfx::Rect drawTagPill(const PaintContext& ctx, float x, float centerY, std::string_view text, Tone tone) {
+        if (text.empty()) return {};
+        const std::string up = tagPillText(text);
+        const auto col = tagPillColors(ctx.theme, tone);
+        const gfx::FontId f = gfx::semibold(kBadgeFont);
+        const gfx::Rect box{ x, std::round(centerY - kBadgeHeight * 0.5f), tagPillWidth(text), kBadgeHeight };
+        ctx.r.fillRoundedRect(box, col.fill, 4.f);
+        ctx.r.drawText({ box.x + kBadgePad, box.y + (kBadgeHeight - ctx.r.lineHeight(kBadgeFont)) * 0.5f }, up, f, col.ink);
+        return box;
     }
 
     PopupMenu::PopupMenu(std::string id) : Widget(std::move(id)) {
@@ -4501,6 +4571,12 @@ namespace ui {
                 }
                 const gfx::Point text{ row.x + kMenuPadding + kMenuIconGutter, row.y + (ch - lh) * 0.5f };
                 ctx.r.drawText(text, item.label, ctx.theme.font.ui, fg);
+                // 1.50.1 : la pastille apres le libelle (<< NOUVEAU >>) ; le lisere de sa teinte a gauche de l'entree.
+                if (!item.badge.empty()) {
+                    if (item.enabled)
+                        ctx.r.fillRoundedRect({ row.x + 1.f, row.y + 2.f, 3.f, ch - 4.f }, tagPillColors(ctx.theme, item.badgeTone).ink, 1.5f);
+                    (void)drawTagPill(ctx, text.x + measureWidth(item.label, kFontUi) + kBadgeGap, row.y + ch * 0.5f, item.badge, item.badgeTone);
+                }
                 // 1.39.0 : pas dans la licence - le libelle barre
                 if (item.locked) {
                     const float sy = std::floor(text.y + lh * 0.5f) + 0.5f;

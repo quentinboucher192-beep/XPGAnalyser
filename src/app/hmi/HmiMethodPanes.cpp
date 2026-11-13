@@ -8,6 +8,13 @@
 #include "HmiScriptPanes.hpp"    // guardedDiagnostics, squigglesOf
 #include "HmiTypePicker.hpp"     // "Choisir..." : le selecteur de types
 #include "HmiUnitPanes.hpp"      // 1.50.0 : l'unite du retour (comme une fonction)
+#include "HmiInitModel.hpp"      // 1.50.1 : l'invite d'une case vide d'Essayer (iv::zeroOf)
+#include "HmiMethodFollow.hpp"   // 1.50.1 : la signature d'une virtuelle suivie par ses redefinitions
+#include "../../hmi/HmiFunctionTests.hpp"   // 1.50.1 : Essayer sur le banc des Tests (l'instance d'essai)
+#include "../../hmi/HmiRoles.hpp"           // 1.50.1 : l'invite d'une case vide (defaultInvite)
+#include "../../hmi/HmiRuntime.hpp"         // 1.50.1 : Essayer
+#include "../../hmi/HmiExpr.hpp"            // 1.50.1 : Essayer - un argument, une pose lus comme une case
+#include "../../hmi/HmiSymbols.hpp"         // 1.50.1 : cellValue, shownCell, shownLiteral
 #include "../../hmi/HmiCheck.hpp"
 #include "../../hmi/HmiDeclEdit.hpp"
 #include "../../hmi/HmiDecl.hpp"
@@ -73,11 +80,19 @@ std::string newProblem(const hmi::Project& before, const hmi::Project& after) {
 }
 
 // Pourquoi `name` ne va pas comme nom d'une methode de `t` (vide : il va) ; `self` : la methode renommee.
-std::string nameProblem(const hmi::Project& p, const hmi::HmiType& t, const std::string& name, Id self) {
+// 1.50.1 : `overload` (creer une methode) - un nom deja pris fait une SURCHARGE dans une structure, sauf d'une virtuelle
+// (`isVirtual` : la nouvelle l'est) ; renommer, dupliquer : le nom doit etre libre (des appels changeraient de cible).
+std::string nameProblem(const hmi::Project& p, const hmi::HmiType& t, const std::string& name, Id self, bool overload = false,
+                        bool isVirtual = false) {
     if (name.empty()) return "donne un nom";
     if (!hmi::isIdentifier(name)) return "nom invalide : lettres, chiffres et _, pas de chiffre en t\xC3\xAAte";
-    for (const auto& m : t.methods)
-        if (m.id != self && sameText(m.name, name)) return t.name + " a d\xC3\xA9j\xC3\xA0 une m\xC3\xA9thode " + m.name;
+    for (const auto& m : t.methods) {
+        if (m.id == self || !sameText(m.name, name)) continue;
+        if (!overload || t.kind != hmi::HmiTypeKind::Structure) return t.name + " a d\xC3\xA9j\xC3\xA0 une m\xC3\xA9thode " + m.name;
+        if (m.isVirtual || isVirtual)
+            return name + (m.isVirtual ? " est virtuelle" : " existe d\xC3\xA9j\xC3\xA0") + " : une m\xC3\xA9thode virtuelle ne se surcharge pas (ses "
+                   "red\xC3\xA9" "finitions la d\xC3\xA9signent par son nom)";
+    }
     for (const auto& mem : hmi::types::membersOf(p, hmi::fullName(t)))
         if (sameText(mem.name, name)) return name + " est d\xC3\xA9j\xC3\xA0 un membre de " + t.name + " (un membre et une m\xC3\xA9thode ne partagent pas un nom)";
     return {};
@@ -178,6 +193,11 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
                "Ajouter une m\xC3\xA9thode\xE2\x80\xA6");
     tools->add(AOverride, HmiGlyph::Code, "Red\xC3\xA9" "finir la m\xC3\xA9thode h\xC3\xA9rit\xC3\xA9" "e choisie (une virtuelle du parent) : son corps pr\xC3\xA9rempli avec SUPER",
                "Red\xC3\xA9" "finir");
+    // 1.50.1 : comme le volet Fonctions - une methode du meme nom, d'autres parametres (chaque appel prend la sienne).
+    tools->add(AOverload, HmiGlyph::Duplicate,
+               "Nouvelle surcharge : une m\xC3\xA9thode du m\xC3\xAAme nom que la m\xC3\xA9thode choisie, avec d'autres param\xC3\xA8tres "
+               "(chaque appel prend la sienne)",
+               "Nouvelle surcharge");
     tools->separator();
     tools->add(ADuplicate, HmiGlyph::Duplicate, "Dupliquer la m\xC3\xA9thode (Ctrl+D) : la copie juste apr\xC3\xA8s", "Dupliquer");
     tools->add(ADelete, HmiGlyph::Delete, "Supprimer la m\xC3\xA9thode (Ctrl+Z la rend)", "Supprimer");
@@ -185,6 +205,10 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     tools->add(ADown, HmiGlyph::Down, "Descendre la m\xC3\xA9thode", "Descendre");
     tools->separator();
     tools->add(ACompile, HmiGlyph::Check, "Compiler la m\xC3\xA9thode montr\xC3\xA9" "e (F7) : ses fautes soulign\xC3\xA9" "es dans son corps, \xC3\xA0 leur ligne", "Compiler (F7)");
+    // 1.50.1 : comme une fonction - des arguments, le resultat et SELF apres, sur une instance d'essai du type.
+    tools->add(ATry, HmiGlyph::Play,
+               "Essayer la m\xC3\xA9thode : des arguments, le r\xC3\xA9sultat et SELF apr\xC3\xA8s (une instance d'essai du type, sans toucher le projet)",
+               "Essayer");
     // 1.50.0 : comme le volet Fonctions - tous les cas des methodes du type, chacun sur une instance d'essai.
     tools->add(ARunTests, HmiGlyph::Play, "Lancer les tests de toutes les m\xC3\xA9thodes du type (chaque cas part d'une instance d'essai) : les verdicts au panneau du bas",
                "Lancer les tests");
@@ -204,6 +228,16 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         return selectedMethod() != kNoId && selectedRow_ >= 0 && static_cast<std::size_t>(selectedRow_) + 1 < ownCount() && one();
     });
     tools_->setEnabledWhen(ACompile, [this, one] { return selectedMethod() != kNoId && one(); });
+    // 1.50.1 : une methode propre d'une structure (une signature d'interface n'a ni corps ni surcharge).
+    const auto structure = [this] {
+        const auto* t = owner();
+        return t && t->kind == hmi::HmiTypeKind::Structure;
+    };
+    tools_->setEnabledWhen(AOverload, [this, one, structure] {
+        const auto* m = selectedMethod() != kNoId ? current() : nullptr;
+        return m && !m->isVirtual && structure() && one();
+    });
+    tools_->setEnabledWhen(ATry, [this, one, structure] { return selectedMethod() != kNoId && structure() && one(); });
     tools_->setEnabledWhen(ARunTests, [this] {
         const auto* t = owner();
         return t && std::any_of(t->methods.begin(), t->methods.end(), [](const hmi::HmiFunction& m) { return !m.tests.empty(); });
@@ -313,6 +347,14 @@ HmiMethodsPane::HmiMethodsPane(std::string id, hmi::DocumentPtr doc, Apply apply
             case ADown: if (sel) (void)moveMethod(sel, 1); break;
             case ACompile: (void)compileCurrent(); break;
             case ARunTests: (void)runTests(); break;
+            case AOverload:                                    // 1.50.1
+                if (sel && addOverload(sel, &why) == kNoId && !why.empty()) say("Surcharge refus\xC3\xA9" "e : " + why, true);
+                break;
+            case ATry:                                         // 1.50.1 : la fenetre des arguments (l'hote), sinon tout de suite
+                if (!sel) break;
+                if (tryHosts_.ask) tryHosts_.ask(sel);
+                else (void)tryMethod(sel, {});
+                break;
             default: break;
         }
     });
@@ -459,6 +501,14 @@ void HmiMethodsPane::refresh() {
                                                                              : std::string(priv ? "priv\xC3\xA9" "e (vue des seules m\xC3\xA9thodes du type)"
                                                                                                 : "publique"));
         if (kind != "\xE2\x80\x94" && !iface) tip += " \xC2\xB7 " + kind;
+        if (const auto n = iface ? 0 : hmi::ownMethods(where, m.name).size(); n > 1) {   // 1.50.1 : "surcharge 2 sur 3"
+            std::size_t k = 0;
+            for (const auto* o : hmi::ownMethods(where, m.name)) {
+                ++k;
+                if (o->id == m.id) break;
+            }
+            tip += " " + std::to_string(k) + " sur " + std::to_string(n) + " (chaque appel prend la sienne par ses arguments)";
+        }
         if (!iface) tip += " \xC2\xB7 " + origin;
         tips.push_back(std::move(tip));
     };
@@ -472,7 +522,10 @@ void HmiMethodsPane::refresh() {
         };
         for (const auto& m : t->methods) {
             rows_.push_back({m.id, t->id, true});
-            row(*t, m, iface ? std::string("signature") : m.isVirtual ? std::string("virtuelle") : std::string("\xE2\x80\x94"),
+            // 1.50.1 : une surcharge (plusieurs methodes de ce nom dans le type) le dit dans la colonne Genre.
+            const bool overloaded = !iface && hmi::ownMethods(*t, m.name).size() > 1;
+            row(*t, m, iface ? std::string("signature") : m.isVirtual ? std::string("virtuelle") : overloaded ? std::string("surcharge")
+                                                                                                            : std::string("\xE2\x80\x94"),
                 iface ? std::string("propre") : origin(m));
         }
         if (!iface)
@@ -837,7 +890,7 @@ void HmiMethodsPane::rebuildProperties() {
     }));
     c.properties.push_back(prop("Signature", hmi::methodSignature(t->name, *m)));
     if (!iface) {
-        c.properties.push_back(prop("Fonction interne", hmi::methodFunctionName(hmi::fullName(*t), *m), PG::ValueType::ReadOnly, {}, {},
+        c.properties.push_back(prop("Fonction interne", hmi::methodFunctionName(*t, *m), PG::ValueType::ReadOnly, {}, {},
                                     "Le nom que le moteur et le d\xC3\xA9" "bogueur donnent \xC3\xA0 la m\xC3\xA9thode (SELF y est un VAR_IN_OUT)."));
         std::string redef = "\xE2\x80\x94";
         for (const auto* b : hmi::baseChain(p, hmi::fullName(*t)))
@@ -948,7 +1001,8 @@ Id HmiMethodsPane::addMethod(const std::string& rawName, const std::string& retu
     if (!t) return fail(why, "choisis une structure ou une interface"), kNoId;
     const bool iface = t->kind == hmi::HmiTypeKind::Interface;
     const std::string name = trimmedOf(rawName);
-    if (const std::string w = nameProblem(doc_->project, *t, name, kNoId); !w.empty()) return fail(why, w), kNoId;
+    // 1.50.1 : un nom deja pris fait une surcharge (ses parametres, donnes ici, la distinguent) - pas d'une virtuelle.
+    if (const std::string w = nameProblem(doc_->project, *t, name, kNoId, true, isVirtual && !iface); !w.empty()) return fail(why, w), kNoId;
     hmi::HmiFunction draft;
     draft.name = name;
     draft.returnType = trimmedOf(returnType);
@@ -957,6 +1011,13 @@ Id HmiMethodsPane::addMethod(const std::string& rawName, const std::string& retu
     std::string w;
     if (!hmi::setMethodParams(draft, params, [] { return Id{0}; }, &w)) return fail(why, w), kNoId;
     if (std::string mp = hmi::methodProblem(doc_->project, *t, draft); !mp.empty()) return fail(why, mp), kNoId;
+    {
+        hmi::HmiType with = *t;                        // 1.50.1 : la meme forme qu'une autre surcharge - refusee ici
+        hmi::HmiFunction probe = draft;
+        probe.id = doc_->project.nextId;
+        with.methods.push_back(probe);
+        if (std::string clash = hmi::methodOverloadProblem(with, probe); !clash.empty()) return fail(why, clash), kNoId;
+    }
     const Id typeId = t->id;
     const std::string typeName = t->name;
     Id made = kNoId;
@@ -1091,12 +1152,41 @@ bool HmiMethodsPane::setVirtual(Id id, bool on, std::string* why) {
     return ok;
 }
 
+// 1.50.1 : une virtuelle redefinie dans des sous-types - le geste fait sur une copie, puis ses redefinitions suivent
+// (followSignature : la question qui les nomme, une commande). Follow::None : rien a suivre, le geste d'avant.
+Follow HmiMethodsPane::followed(Id id, const std::string& label,
+                                const std::function<bool(hmi::Project&, hmi::HmiFunction&, std::string*)>& edit, std::string* why) {
+    const auto* m = hmi::methodById(doc_->project, id);
+    if (!m || !m->isVirtual || hmi::overridesOf(doc_->project, id).empty()) return Follow::None;
+    hmi::Project trial = doc_->project;
+    hmi::HmiFunction* tm = findMethod(trial, id);
+    if (!tm) return Follow::None;
+    std::string w;
+    if (!edit(trial, *tm, &w)) {
+        if (why) *why = w;
+        return Follow::Refused;
+    }
+    const std::weak_ptr<int> alive = alive_;
+    const auto f = followSignature(doc_, apply_, id, trial, label, why, [this, alive] {
+        if (!alive.expired()) refresh();
+    });
+    return f;
+}
+
 bool HmiMethodsPane::setReturnType(Id id, const std::string& type, std::string* why) {
     const std::string next = trimmedOf(type);
     const auto* m = hmi::methodById(doc_->project, id);
     if (!m) return fail(why, "m\xC3\xA9thode introuvable");
     if (m->returnType == next) return true;
-    return change(id, "Retour de " + m->name + (next.empty() ? std::string(" : aucun") : " : " + next),
+    const std::string label = "Retour de " + m->name + (next.empty() ? std::string(" : aucun") : " : " + next);
+    // 1.50.1 : une virtuelle redefinie - le retour de ses redefinitions suit (avant : refuse, elles changeaient de signature).
+    if (const auto f = followed(id, label, [next](hmi::Project&, hmi::HmiFunction& g, std::string*) {
+            g.returnType = next;
+            if (next.empty()) g.returnUnit.clear();
+            return true;
+        }, why); f != Follow::None)
+        return f == Follow::Done;
+    return change(id, label,
                   [next](hmi::Project&, hmi::HmiType&, hmi::HmiFunction& f, std::string*) {
                       f.returnType = next;
                       return true;
@@ -1107,9 +1197,35 @@ bool HmiMethodsPane::setParams(Id id, const std::string& text, std::string* why)
     const auto* m = hmi::methodById(doc_->project, id);
     if (!m) return fail(why, "m\xC3\xA9thode introuvable");
     if (hmi::methodParamsText(*m) == trimmedOf(text)) return true;
-    return change(id, "Param\xC3\xA8tres de " + m->name, [text](hmi::Project& p, hmi::HmiType&, hmi::HmiFunction& f, std::string* w) {
+    const std::string label = "Param\xC3\xA8tres de " + m->name;
+    // 1.50.1 : une virtuelle redefinie - les parametres de ses redefinitions suivent.
+    if (const auto f = followed(id, label, [text](hmi::Project& p, hmi::HmiFunction& g, std::string* w) {
+            return hmi::setMethodParams(g, text, [&p] { return p.allocate(); }, w);
+        }, why); f != Follow::None)
+        return f == Follow::Done;
+    return change(id, label, [text](hmi::Project& p, hmi::HmiType&, hmi::HmiFunction& f, std::string* w) {
         return hmi::setMethodParams(f, text, [&p] { return p.allocate(); }, w);
     }, why);
+}
+
+// 1.50.1 : NOUVELLE SURCHARGE - le meme nom, son retour, sa portee ; l'onglet Parametres s'ouvre.
+Id HmiMethodsPane::addOverload(Id of, std::string* why) {
+    const hmi::HmiType* t = nullptr;
+    const auto* m = hmi::methodById(doc_->project, of, &t);
+    if (!m || !t) return fail(why, "m\xC3\xA9thode introuvable"), kNoId;
+    if (t->kind != hmi::HmiTypeKind::Structure) return fail(why, "une interface n'a qu'une signature par nom"), kNoId;
+    if (m->isVirtual)
+        return fail(why, m->name + " est virtuelle : une m\xC3\xA9thode virtuelle ne se surcharge pas (ses red\xC3\xA9" "finitions la d\xC3\xA9signent par son nom)"),
+               kNoId;
+    if (t->id != type_) setType(t->id);
+    HmiNewFunctionDialog::Answer a;
+    a.name = m->name;
+    a.returnType = m->returnType;
+    a.returnUnit = m->returnUnit;
+    a.description = m->description;
+    a.pub = m->visibility != hmi::Visibility::Private;
+    a.isVirtual = false;
+    return createMethod(a, why);
 }
 
 bool HmiMethodsPane::setDescription(Id id, const std::string& text) {
@@ -1171,6 +1287,235 @@ Id HmiMethodsPane::overrideMethod(Id inherited, std::string* why) {
     return made;
 }
 
+// ---- 1.50.1 : ESSAYER (comme une fonction), sur une instance d'essai du type ----
+std::vector<HmiMethodsPane::TryField> HmiMethodsPane::tryFields(Id id) const {
+    std::vector<TryField> out;
+    const hmi::HmiType* t = nullptr;
+    const auto* m = hmi::methodById(doc_->project, id, &t);
+    if (!m || !t || t->kind != hmi::HmiTypeKind::Structure) return out;
+    const auto& p = doc_->project;
+    const auto generic = [&](const std::string& type) {
+        for (const auto* gens : {&m->generics, &t->generics})
+            for (const auto& g : *gens)
+                if (sameText(g.name, trimmedOf(type))) return true;
+        return false;
+    };
+    const auto parts = functionDeclarations(*m);
+    for (const auto* in : parts.parameters()) {
+        using S = hmi::LocalVar::Section;
+        TryField f;
+        f.name = in->name;
+        f.label = in->name + " : " + in->type
+                + (in->section == S::InOut ? " (E/S : sa valeur de d\xC3\xA9part)" : in->section == S::Output ? " (sortie : rendue apr\xC3\xA8s l'essai)" : "");
+        const std::string fallback = !in->initial.empty() ? hmi::shownCell(in->initial)
+                                     : generic(in->type) ? std::string{}
+                                                         : hmi::shownLiteral(initvalue::zeroOf(p, in->type));
+        f.placeholder = in->section == S::Output ? std::string("rendue par la m\xC3\xA9thode")
+                                                 : hmi::roles::defaultInvite(fallback.empty() ? std::string("vide") : fallback);
+        out.push_back(std::move(f));
+    }
+    // SELF avant : un membre par case (les simples ; une structure, un tableau, une liste partent de leur valeur initiale).
+    for (const auto& mem : hmi::types::membersOf(p, hmi::fullName(*t))) {
+        if (!hmi::types::isElementary(hmi::types::normalized(mem.type)) && !p.hmiTypeByName(trimmedOf(mem.type))) continue;
+        if (const auto* e = p.hmiTypeByName(trimmedOf(mem.type)); e && e->kind != hmi::HmiTypeKind::Enumeration) continue;
+        TryField f;
+        f.name = mem.name;
+        f.member = true;
+        f.label = "SELF." + mem.name + " : " + mem.type + " (avant)";
+        const std::string init = !mem.initial.empty() ? hmi::shownCell(mem.initial) : hmi::shownLiteral(initvalue::zeroOf(p, mem.type));
+        f.placeholder = hmi::roles::defaultInvite(init.empty() ? std::string("vide") : init, "sa valeur initiale");
+        out.push_back(std::move(f));
+    }
+    return out;
+}
+
+bool HmiMethodsPane::tryWithAnswers(Id id, const std::vector<std::string>& answers) {
+    const auto fields = tryFields(id);
+    std::vector<std::string> args;
+    std::vector<std::pair<std::string, std::string>> before;
+    for (std::size_t i = 0; i < fields.size() && i < answers.size(); ++i) {
+        if (!fields[i].member) args.push_back(answers[i]);
+        else if (!trimmedOf(answers[i]).empty()) before.emplace_back(fields[i].name, answers[i]);
+    }
+    return tryMethod(id, args, before);
+}
+
+bool HmiMethodsPane::tryMethod(Id id, const std::vector<std::string>& arguments, const std::vector<std::pair<std::string, std::string>>& selfBefore) {
+    trial_ = {};
+    trial_.method = id;
+    const hmi::HmiType* t = nullptr;
+    const auto* m = hmi::methodById(doc_->project, id, &t);
+    const auto report = [this] {
+        if (tryHosts_.output) tryHosts_.output(trialLines());
+        if (trial_.ok) {
+            std::string said = "Essai : " + trial_.call + (trial_.result.empty() ? std::string(" (sans retour)") : " = " + trial_.result);
+            said += trial_.changed.empty() ? std::string("  \xC2\xB7  SELF inchang\xC3\xA9") : "  \xC2\xB7  " + trial_.changed.front()
+                                                                                           + (trial_.changed.size() > 1 ? " (+" + std::to_string(trial_.changed.size() - 1) + ")" : std::string{});
+            say(said + "  \xC2\xB7  le projet n'est pas touch\xC3\xA9");
+        } else {
+            say("Essai : " + (trial_.call.empty() ? std::string("la m\xC3\xA9thode") : trial_.call) + " \xC3\xA9" "choue : " + trial_.error, true);
+        }
+        return trial_.ok;
+    };
+    if (!m || !t) {
+        trial_.error = "m\xC3\xA9thode introuvable";
+        return report();
+    }
+    trial_.call = t->name + "." + m->name + "()";
+    hmi::MethodBench bench;
+    std::string why;
+    if (!hmi::methodBench(doc_->project, *m, bench, &why)) {
+        trial_.error = why;
+        return report();
+    }
+    const hmi::Project& q = bench.project;
+    const auto plc = trialPlc(tryHosts_.plc ? tryHosts_.plc() : nullptr);
+    hmi::Runtime rt;
+    rt.bind(&q, plc.get());
+    rt.prime(0.0);
+    // Une valeur tapee, lue comme une case dans son type (2,5 -> 2.5 ; VRAI -> TRUE ; =formule), puis evaluee sur le banc.
+    const auto valueOf = [&](const std::string& type, const std::string& text, sim::Value& v, std::string& shown, std::string& err) {
+        const auto cell = hmi::cellValue(&q, type, text);
+        if (!cell.ok()) {
+            err = cell.why;
+            return false;
+        }
+        const auto e = hmi::Expression::compile(hmi::benchText(bench, cell.text, false));
+        if (!e.valid()) {
+            std::string rest;
+            (void)hmi::splitLine(e.error(), &rest);
+            err = text + " illisible (" + hmi::frenchSimMessage(rest.empty() ? e.error() : rest) + ")";
+            return false;
+        }
+        auto r = e.evaluate(rt.environment());
+        if (!r) {
+            err = text + " ne s'\xC3\xA9value pas (" + hmi::frenchSimMessage(r.error().message()) + ")";
+            return false;
+        }
+        v = *r;
+        shown = cell.text;
+        return true;
+    };
+    // SELF avant : chaque pose ecrit son membre sur l'instance d'essai (apres la remise a l'initiale, avant l'appel).
+    const auto members = hmi::types::membersOf(q, bench.typeName);
+    for (const auto& [rawName, value] : selfBefore) {
+        std::string name = trimmedOf(rawName);
+        if (const auto dot = name.find('.'); dot != std::string::npos && (sameText(name.substr(0, dot), "SELF") || sameText(name.substr(0, dot), "THIS")))
+            name = name.substr(dot + 1);
+        const hmi::TypeMember* mem = nullptr;
+        for (const auto& x : members)
+            if (sameText(x.name, name)) mem = &x;
+        if (!mem) {
+            trial_.error = "SELF." + name + " : " + t->name + " n'a pas ce membre";
+            return report();
+        }
+        sim::Value v;
+        std::string shown, err;
+        if (!valueOf(mem->type, value, v, shown, err)) {
+            trial_.error = "SELF." + mem->name + " : " + err;
+            return report();
+        }
+        if (!rt.environment().write(bench.self + "." + mem->name, v)) {
+            trial_.error = "SELF." + mem->name + " : ne s'\xC3\xA9" "crit pas";
+            return report();
+        }
+        trial_.before.push_back(mem->name + " := " + shown);
+    }
+    // SELF et les variables IHM avant l'appel (pour dire ce qui a change).
+    std::vector<std::pair<std::string, std::string>> selfWas, varsWas;
+    for (const auto& x : members)
+        if (sim::Value v; rt.environment().read(bench.self + "." + x.name, v)) selfWas.emplace_back(x.name, trialValueText(v));
+    for (const auto& v : q.programs.variables)
+        if (v.name != bench.self)
+            if (const auto* val = rt.variable(v.name)) varsWas.emplace_back(v.name, hmi::formatValue(*val));
+    // Les arguments : un par parametre (dans l'ordre), une sortie n'en demande pas.
+    const auto parts = functionDeclarations(bench.call);
+    const auto inputs = parts.parameters();
+    std::vector<std::pair<std::string, sim::Value>> args;
+    std::string shownArgs;
+    for (std::size_t k = 0; k < arguments.size(); ++k) {
+        const std::string text = trimmedOf(arguments[k]);
+        if (text.empty()) continue;
+        if (k >= inputs.size()) {
+            trial_.error = "trop d'arguments (" + std::to_string(arguments.size()) + " pour " + std::to_string(inputs.size()) + ")";
+            return report();
+        }
+        if (inputs[k]->section == hmi::LocalVar::Section::Output) continue;
+        std::string asType = inputs[k]->type;              // un parametre generique (T) : sans type, le moteur le deduit
+        for (const auto* gens : {&m->generics, &t->generics})
+            for (const auto& g : *gens)
+                if (sameText(g.name, trimmedOf(asType))) asType.clear();
+        sim::Value v;
+        std::string shown, err;
+        if (!valueOf(asType, text, v, shown, err)) {
+            trial_.error = inputs[k]->name + " : " + err;
+            return report();
+        }
+        args.emplace_back(inputs[k]->name, v);
+        shownArgs += (shownArgs.empty() ? "" : ", ") + inputs[k]->name + " := " + shown;
+    }
+    trial_.call = t->name + "." + m->name + "(" + shownArgs + ")";
+    sim::Value result;
+    std::vector<std::pair<std::string, sim::Value>> outputs;
+    trial_.ok = rt.runFunction(bench.call.id, args, result, &why, &outputs);
+    if (!trial_.ok) {
+        // le message du banc, dans les mots de la methode
+        for (std::size_t at = why.find(bench.self); at != std::string::npos; at = why.find(bench.self, at + 4)) why.replace(at, bench.self.size(), "SELF");
+        trial_.error = why;
+        return report();
+    }
+    if (!m->returnType.empty()) {
+        trial_.result = trialValueText(result);
+        trial_.type = m->returnType;
+    }
+    for (const auto& [name, value] : outputs) {
+        const hmi::LocalVar* prm = parts.local(name);
+        const bool inOut = prm && prm->section == hmi::LocalVar::Section::InOut;
+        trial_.outputs.push_back(name + (inOut ? " (E/S)" : " (sortie)") + " = " + trialValueText(value));
+    }
+    for (const auto& x : members) {
+        sim::Value v;
+        if (!rt.environment().read(bench.self + "." + x.name, v)) continue;
+        const std::string now = trialValueText(v);
+        trial_.self.push_back(x.name + " = " + now);
+        for (const auto& [n, was] : selfWas)
+            if (n == x.name && was != now) trial_.changed.push_back("SELF." + x.name + " : " + was + "  \xE2\x86\x92  " + now);
+    }
+    for (const auto& [name, was] : varsWas)
+        if (const auto* now = rt.variable(name); now && hmi::formatValue(*now) != was)
+            trial_.changed.push_back(name + " : " + was + "  \xE2\x86\x92  " + hmi::formatValue(*now));
+    for (const auto& e : rt.journal())
+        if (e.kind != "Syst\xC3\xA8me" && e.kind != "Erreur") trial_.journal.push_back(e.kind == "Journal" ? e.message : e.kind + " : " + e.message);
+    return report();
+}
+
+std::vector<std::pair<hmi::pipeline::Severity, std::string>> HmiMethodsPane::trialLines() const {
+    using Sev = hmi::pipeline::Severity;
+    std::vector<std::pair<Sev, std::string>> out;
+    const hmi::HmiType* t = nullptr;
+    (void)hmi::methodById(doc_->project, trial_.method, &t);
+    const std::string where = t ? " (une instance d'essai de " + t->name + ")" : std::string{};
+    if (!trial_.ok) {
+        out.emplace_back(Sev::Error, "Essai : " + trial_.call + " \xC3\xA9" "choue : " + trial_.error);
+        return out;
+    }
+    out.emplace_back(Sev::Information, "Essai : " + trial_.call + (trial_.result.empty() ? std::string(" (sans retour)") : " = " + trial_.result) + where);
+    if (!trial_.before.empty()) {
+        std::string b;
+        for (const auto& x : trial_.before) b += (b.empty() ? "" : " ; ") + x;
+        out.emplace_back(Sev::Information, "SELF avant : " + b);
+    }
+    std::string self;
+    for (const auto& x : trial_.self) self += (self.empty() ? "" : "  \xC2\xB7  ") + x;
+    out.emplace_back(Sev::Information, "SELF apr\xC3\xA8s : " + (self.empty() ? std::string("\xE2\x80\x94") : self));
+    if (trial_.changed.empty()) out.emplace_back(Sev::Information, "Rien n'a chang\xC3\xA9 (ni SELF, ni les variables IHM).");
+    for (const auto& c : trial_.changed) out.emplace_back(Sev::Information, "Chang\xC3\xA9 : " + c);
+    for (const auto& o : trial_.outputs) out.emplace_back(Sev::Information, "Rendu : " + o);
+    for (const auto& j : trial_.journal) out.emplace_back(Sev::Information, "Journal : " + j);
+    out.emplace_back(Sev::Information, "Le projet n'est pas touch\xC3\xA9 : l'instance d'essai et son appel n'existent que le temps de l'essai.");
+    return out;
+}
+
 // ---- 1.50.0 (planche 01) : la fenetre des fonctions, sur le type ----
 HmiNewFunctionDialog::Spec HmiMethodsPane::addDialogSpec() const {
     HmiNewFunctionDialog::Spec spec;
@@ -1195,7 +1540,9 @@ Id HmiMethodsPane::createMethod(const HmiNewFunctionDialog::Answer& a, std::stri
     if (!t) return fail(why, "choisis une structure ou une interface"), kNoId;
     const bool iface = t->kind == hmi::HmiTypeKind::Interface;
     const std::string name = trimmedOf(a.name);
-    if (const std::string w = nameProblem(doc_->project, *t, name, kNoId); !w.empty()) return fail(why, w), kNoId;
+    // 1.50.1 : un nom deja pris fait une surcharge (comme une fonction) - pas d'une virtuelle.
+    if (const std::string w = nameProblem(doc_->project, *t, name, kNoId, true, a.isVirtual && !iface); !w.empty()) return fail(why, w), kNoId;
+    const std::size_t siblings = hmi::ownMethods(*t, name).size();
     hmi::HmiFunction draft;
     draft.name = name;
     const std::string ret = trimmedOf(a.returnType);
@@ -1228,8 +1575,19 @@ Id HmiMethodsPane::createMethod(const HmiNewFunctionDialog::Answer& a, std::stri
         refresh();
         selectMethod(made);
         showCodeTab(CodeTabParameters);    // ses parametres d'abord (la planche : " Parametres s'ouvre ")
+        // 1.50.1 : une surcharge - si sa forme est celle d'une autre (sans parametre), Compiler le dira : a changer.
+        std::string note;
+        if (siblings > 0) {
+            const hmi::HmiType* now = doc_->project.hmiType(typeId);
+            const auto* mine = hmi::methodById(doc_->project, made);
+            const std::string clash = now && mine ? hmi::methodOverloadProblem(*now, *mine) : std::string{};
+            note = clash.empty() ? " Une surcharge : " + std::to_string(siblings + 1) + " m\xC3\xA9thodes " + name + " (chaque appel prend la sienne)."
+                                 : " Une surcharge, de la m\xC3\xAAme forme qu'une autre pour l'instant : ajoute ses param\xC3\xA8tres (onglet Param\xC3\xA8tres) "
+                                   "pour la distinguer.";
+        }
         say(std::string(iface ? "Signature ajout\xC3\xA9" "e : " : "M\xC3\xA9thode ajout\xC3\xA9" "e : ") + hmi::methodSignature(typeName, draft)
-            + " - ses param\xC3\xA8tres, ses locales et ses constantes dans leurs onglets (Ctrl+Z la retire)");
+                + " - ses param\xC3\xA8tres, ses locales et ses constantes dans leurs onglets (Ctrl+Z la retire)." + note,
+            note.find("m\xC3\xAAme forme") != std::string::npos);
     }
     return made;
 }

@@ -1643,8 +1643,9 @@ private:
             if (!e) return e;
             // ARRAY[..] OF ARRAY[..] OF X : un tableau de tableaux garde ses deux etages.
             t->element = *e;
-            std::int64_t cells = t->count();
-            if (cells > 1000000) return error("the array is too large (more than 1000000 cells)");
+            // 1.50.1 : plus de << 1 000 000 de cases au plus >> - un grand tableau de valeurs simples se range serre (un BOOL :
+            // 1 bit). Seul ce qui ne tiendrait pas en memoire est refuse (1 Gio par valeur), avec l'estimation.
+            if (const std::int64_t bytes = memoryEstimate(*t); bytes > kMaxValueBytes) return error(tooLargeText(*t, bytes));
             return TypeRef(t);
         }
         if (acceptWord("MAP")) {
@@ -2365,6 +2366,11 @@ private:
                 c.within = within_;
                 Typer typer(env_, program_, [this](std::string_view n) { return localType(n); });
                 c.args = typer.shapesOf(*e);
+                // 1.50.1 : chemin.M(...) - le type de l'objet (une methode d'un type IHM, ses surcharges).
+                if (e->lhs && e->lhs->kind == Expr::Kind::Member && e->lhs->lhs) c.receiver = typer.typeOf(*e->lhs->lhs);
+                // 1.50.1 : a[i].M(), p^.M(), F().M() - pas de chemin a ecrire : le nom de la methode seul (le controle sait,
+                // par `receiver`, que ce n'est pas une fonction du projet).
+                if (c.callee.empty() && !c.receiver.empty() && e->lhs) c.callee = e->lhs->name;
                 if (!c.callee.empty()) sites_.push_back(std::move(c));
                 if (e->lhs && e->lhs->kind != Expr::Kind::Reference) expr(e->lhs);
                 for (const auto& a : e->arguments) expr(a.second);
@@ -2602,6 +2608,9 @@ public:
         if (!e) return failWith(e.error().message());
         auto v = rich(**e);
         if (!v) return failWith(v.error().message());
+        // 1.50.1 : un tableau et une valeur seule (0, FALSE, 'x') : toutes ses cases simples la prennent (la valeur
+        // initiale d'un grand tableau de l'IHM, comme celle d'un tableau deplie en cases).
+        if (!v->o && (*obj)->type && (*obj)->type->kind == TypeDesc::Kind::Array && fillCells(**obj, v->v)) return *obj;
         std::string w;
         if (!store(**obj, *v, &w)) return failWith(w);
         return *obj;
@@ -3746,8 +3755,9 @@ private:
             case TypeDesc::Kind::Array: {
                 const std::int64_t low = t->bounds.empty() ? 0 : t->bounds.front().first;
                 const bool flat = t->bounds.size() <= 1;
-                for (std::size_t k = 0; k < obj->items.size(); ++k)
-                    add(flat ? "[" + std::to_string(low + static_cast<std::int64_t>(k)) + "]" : "[#" + std::to_string(k) + "]", obj->items[k]);
+                // 1.50.1 : un tableau range serre sort ses premieres cases seulement ; plusieurs dimensions : [1,2,3].
+                for (std::size_t k = 0, n = cellCount(*obj); k < n && k < kMaxCells; ++k)
+                    add(flat ? "[" + std::to_string(low + static_cast<std::int64_t>(k)) + "]" : indexText(*t, k), cellAt(*obj, k));
                 break;
             }
             case TypeDesc::Kind::List:
@@ -3940,6 +3950,9 @@ private:
     core::Result<ObjRef> instantiate(const TypeRef& t) {
         auto r = resolve(t);
         if (!r) return core::Err<core::Error>(r.error());
+        // 1.50.1 : la garde de la memoire, les structures connues (un tableau de structures : chacune ses membres).
+        if (*r && (*r)->kind == TypeDesc::Kind::Array)
+            if (const std::int64_t bytes = memoryEstimate(**r); bytes > kMaxValueBytes) return dialectError(tooLargeText(**r, bytes));
         return makeObj(*r);
     }
 
@@ -4321,6 +4334,8 @@ private:
             into.bound = false;
             into.target.reset();
             into.targetName.clear();
+            into.map.reset();                    // 1.50.1 : plus de case de tableau
+            into.textKey.clear();
             return true;
         }
         // 1.12.2 : un litteral ([1, 2], ['a' := 1], (1, 'x')) se convertit dans le type de la
@@ -4339,6 +4354,9 @@ private:
             into.bound = v.o->bound;
             into.target = v.o->target;
             into.targetName = v.o->targetName;
+            into.map = v.o->map;                 // 1.50.1 : un pointeur dans un tableau (le C traduit) garde sa case
+            into.textKey = v.o->textKey;
+            into.intKey = v.o->intKey;
             return true;
         }
         return assignObj(into, *v.o, why);
@@ -4454,9 +4472,25 @@ private:
             case TypeDesc::Kind::Array: {
                 std::vector<ObjRef> flat;
                 flattenItems(from, t.bounds.size(), flat);
-                if (flat.size() > into.items.size())
-                    return fail("trop de valeurs : " + std::to_string(flat.size()) + " pour les " + std::to_string(into.items.size())
+                const std::size_t cells = cellCount(into);
+                if (flat.size() > cells)
+                    return fail("trop de valeurs : " + std::to_string(flat.size()) + " pour les " + std::to_string(cells)
                                 + " cases d'un " + t.text());
+                // 1.50.1 : un tableau range serre - ses cases une a une (les suivantes : la valeur par defaut).
+                if (into.packed && into.items.empty()) {
+                    const ObjRef fresh = flat.size() < cells && t.element && t.element->kind != TypeDesc::Kind::Scalar ? makeObj(t.element) : nullptr;
+                    for (std::size_t k = 0; k < cells; ++k) {
+                        if (k < flat.size()) {
+                            const ObjRef cell = cellAt(into, k);
+                            if (!cell || !storeItem(*cell, itemValue(flat[k]), why)) return false;
+                        } else if (t.element && t.element->kind == TypeDesc::Kind::Scalar) {
+                            setCellValue(into, k, Value::defaultOf(t.element->scalar));
+                        } else if (const ObjRef cell = cellAt(into, k); cell && fresh && !assignObj(*cell, *fresh, why)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
                 for (std::size_t k = 0; k < into.items.size(); ++k) {
                     if (k < flat.size()) {
                         if (!storeItem(*into.items[k], itemValue(flat[k]), why)) return false;
@@ -4641,8 +4675,10 @@ private:
                 return true;
             }
             case TypeDesc::Kind::Array:
-                for (std::size_t k = 0; k < o.items.size(); ++k)
-                    if (!loadFromEnv(*o.items[k], name + indexText(*o.type, k))) return false;
+                for (std::size_t k = 0, n = cellCount(o); k < n; ++k) {         // 1.50.1 : range serre ou non
+                    const ObjRef cell = cellAt(o, k);
+                    if (!cell || !loadFromEnv(*cell, name + indexText(*o.type, k))) return false;
+                }
                 return true;
             case TypeDesc::Kind::Struct:
             case TypeDesc::Kind::Tuple:
@@ -4664,8 +4700,10 @@ private:
                 if (why) *why = "'" + name + "' cannot be written";
                 return false;
             case TypeDesc::Kind::Array:
-                for (std::size_t k = 0; k < o.items.size(); ++k)
-                    if (!storeToEnv(name + indexText(*o.type, k), *o.items[k], why)) return false;
+                for (std::size_t k = 0, n = cellCount(o); k < n; ++k) {         // 1.50.1 : range serre ou non
+                    const ObjRef cell = cellAt(o, k);
+                    if (!cell || !storeToEnv(name + indexText(*o.type, k), *cell, why)) return false;
+                }
                 return true;
             case TypeDesc::Kind::Struct:
             case TypeDesc::Kind::Tuple:
@@ -4735,6 +4773,11 @@ private:
                                                : "pointeur nul (NULL) : il ne vise rien");
         if (!o->targetName.empty()) return Place{nullptr, o->targetName, false, false};
         auto t = o->target.lock();
+        // 1.50.1 : le C traduit - la case qui suit la derniere d'un tableau ne se lit pas ; un objet libere (delete) non plus.
+        if (const auto array = o->map.lock(); array && !t && array->type && array->type->kind == TypeDesc::Kind::Array)
+            return dialectError("pointeur hors du tableau : la case " + std::to_string(o->intKey) + " (le tableau en a "
+                                + std::to_string(array->items.size()) + ", de 0 \xC3\xA0 " + std::to_string(static_cast<std::int64_t>(array->items.size()) - 1) + ")");
+        if (t && cFreedObj(*t)) return dialectError("pointeur vers un objet lib\xC3\xA9r\xC3\xA9 (delete) : il ne s'emploie plus");
         if (!t) return dialectError(o->type && o->type->kind == TypeDesc::Kind::Ref
                                         ? "r\xC3\xA9" "f\xC3\xA9rence vers une variable disparue (la variable locale d'une fonction termin\xC3\xA9" "e ?)"
                                         : "pointeur vers une variable disparue (la variable locale d'une fonction termin\xC3\xA9" "e ?)");
@@ -4978,7 +5021,7 @@ private:
                         std::string why;
                         if (!flatIndex(level, head, cell, &why)) return dialectError(why);
                         idx.erase(idx.begin(), idx.begin() + static_cast<std::ptrdiff_t>(level.bounds.size()));
-                        at = Place{at.obj->items[cell], {}, at.constant, at.temp};
+                        at = Place{cellAt(*at.obj, cell), {}, at.constant, at.temp};       // 1.50.1 : range serre ou non
                         if (!at.obj || !at.obj->type) return dialectError("case vide");
                     }
                     const auto& arrayType = *at.obj->type;
@@ -5001,16 +5044,13 @@ private:
                         }
                         auto rowType = std::make_shared<TypeDesc>(arrayType);
                         rowType->bounds.erase(rowType->bounds.begin(), rowType->bounds.begin() + static_cast<std::ptrdiff_t>(idx.size()));
-                        auto row = std::make_shared<Obj>();
-                        row->type = TypeRef(rowType);
-                        row->items.assign(at.obj->items.begin() + static_cast<std::ptrdiff_t>(first),
-                                          at.obj->items.begin() + static_cast<std::ptrdiff_t>(first + span));
-                        return Place{row, {}, at.constant, false};
+                        // 1.50.1 : un tableau range serre : une vue du meme bloc (sinon les memes cases, comme avant).
+                        return Place{subView(*at.obj, first, span, TypeRef(rowType)), {}, at.constant, false};
                     }
                     std::size_t flat = 0;
                     std::string why;
                     if (!flatIndex(arrayType, idx, flat, &why)) return dialectError(why);
-                    return Place{at.obj->items[flat], {}, at.constant, at.temp};
+                    return Place{cellAt(*at.obj, flat), {}, at.constant, at.temp};     // 1.50.1 : range serre ou non
                 }
                 if (type.kind == TypeDesc::Kind::Map) {
                     if (indices.size() != 1) return dialectError("une MAP prend une seule cl\xC3\xA9 : m[cl\xC3\xA9]");
@@ -5279,7 +5319,14 @@ private:
         const std::string realType = ov->o->type->text();
         if (realType.empty()) return std::nullopt;
         OperatorSource src;
-        if (!env_.findMethod(realType, method, src)) return std::nullopt;
+        // 1.50.1 : des surcharges de cette methode - la sienne par ses arguments (la regle du controle), sous sa cle.
+        if (env_.methodOverloads(realType, method) > 1) {
+            std::string key, why;
+            if (!env_.chooseMethodOverload(realType, method, shapesOf(e), key, why)) return std::optional<core::Result<RV>>(dialectError(why));
+            if (!env_.findMethod(realType, key, src)) return std::nullopt;
+        } else if (!env_.findMethod(realType, method, src)) {
+            return std::nullopt;
+        }
         // 1.13.0 : une methode privee ne s'appelle que d'une methode de son type (ou d'un type qui en herite).
         if (!src.privateWhy.empty() && !insideMethodOf(src.selfType))
             return std::optional<core::Result<RV>>(dialectError(src.privateWhy));
@@ -6049,6 +6096,7 @@ private:
             if (auto mine = natives1220(callee, e)) return std::move(*mine);          // 1.12.20 : les dernieres natives a rappel
             if (auto mine = natives1219(callee, e)) return std::move(*mine);          // 1.12.19 : les natives a rappel
             if (auto mine = natives1127(callee, e)) return std::move(*mine);          // 1.12.7
+            if (auto mine = nativesC(u, e)) return std::move(*mine);                  // 1.50.1 : le C traduit (pointeurs, tas)
             if (auto builtin = dialectBuiltin(u, e)) return std::move(*builtin);
             if (auto r = chosen(callee)) return std::move(*r);
             if (auto f = env_.dialectFunction(callee)) return callDeclared(*f, e, true);
@@ -6280,7 +6328,7 @@ private:
             if (param.type && param.type->kind == TypeDesc::Kind::Ref && b && b->isPlace) {
                 // REF_TO T : la reference de la variable passee.
                 (*obj)->bound = true;
-                if (b->place.obj) (*obj)->target = b->place.obj;
+                if (b->place.obj) (*obj)->target = b->place.obj, pin(b->place.obj);       // 1.50.1 : une case serree reste
                 else (*obj)->targetName = env_.canonicalName(b->place.name);
             } else if (param.mode == VarDecl::Mode::Output) {
                 if (b && b->isPlace) outputs.emplace_back(b->place, *obj);
@@ -6629,10 +6677,12 @@ private:
             return {};
         }
         if (type.kind == TypeDesc::Kind::Array) {
-            const auto items = p.obj->items;          // les cases restent (taille fixe)
-            for (std::size_t k = 0; k < items.size(); ++k) {
+            // Les cases restent (taille fixe). 1.50.1 : un tableau range serre sort une case a la fois (cellAt).
+            const ObjRef array = p.obj;
+            const std::size_t count = cellCount(*array);
+            for (std::size_t k = 0; k < count; ++k) {
                 const std::int64_t index = static_cast<std::int64_t>(k) + (type.bounds.size() == 1 ? type.bounds[0].first : 0);
-                const int r = runBody(scalar(Value::integer(Type::DInt, index)), Place{items[k], {}, p.constant, false});
+                const int r = runBody(scalar(Value::integer(Type::DInt, index)), Place{cellAt(*array, k), {}, p.constant, false});
                 if (r == 1) break;
                 if (r == 2) return lastFlow_.kind == Flow::Kind::Normal ? Flow{Flow::Kind::Aborted} : lastFlow_;
             }
@@ -6957,6 +7007,9 @@ private:
         return readPlace(Place{best, {}, false, false});
     }
 
+    // 1.50.1 : ce que le C et le C++ traduits demandent (l'arithmetique des pointeurs, le tas : new, delete).
+#include "InterpreterC.inl"
+
     // ---- les fonctions du dialecte (MAP_..., REF, ADR, bornes) ---------------
     std::optional<core::Result<RV>> dialectBuiltin(const std::string& u, const Expr& e) {
         if (isListFunction(u)) return listBuiltin(u, e);          // 1.12.2
@@ -7044,6 +7097,7 @@ private:
             if (where->obj) {
                 t->element = where->obj->type;
                 o->target = where->obj;
+                pin(where->obj);                       // 1.50.1 : une case d'un tableau serre visee reste un objet
             } else {
                 o->targetName = env_.canonicalName(where->name);
                 Value probe;
@@ -7132,8 +7186,8 @@ private:
             t->element = scalarType(textual ? Type::String : o->type->key);
             auto arr = makeObj(t);
             std::size_t k = 0;
-            for (const auto& kv : o->textKeys) arr->items[k++]->value = Value::text(kv.first);
-            for (const auto& kv : o->intKeys) arr->items[k++]->value = Value::integer(o->type->key, kv.first);
+            for (const auto& kv : o->textKeys) setCellValue(*arr, k++, Value::text(kv.first));             // 1.50.1 : serre ou non
+            for (const auto& kv : o->intKeys) setCellValue(*arr, k++, Value::integer(o->type->key, kv.first));
             return core::Result<RV>(RV{{}, arr});
         }
         if (u == "MAP_BEGIN") {
@@ -7237,6 +7291,12 @@ private:
         if (out.obj && out.obj->type && out.obj->type->kind == TypeDesc::Kind::Scalar) {
             out.isScalar = true;
             out.scalar = out.obj->value;
+        }
+        // 1.50.1 : un grand tableau range serre passe a une fonction (LIST_SORT, LIST_SUM, FILL...) : ses cases sortent
+        // (les memes objets que ses indices lisent) - un million au plus, comme avant 1.50.1.
+        if (out.obj && out.obj->packed && out.obj->items.empty()) {
+            std::string why;
+            if (!unpack(*out.obj, 1000000, &why)) return dialectError(why);
         }
         return out;
     }
@@ -8818,7 +8878,7 @@ private:
         const auto sequenceOf = [&](const ObjArg& like, const std::vector<Value>& vals) -> RV {
             // 1.12.7 : d'un SET, une LIST (les sommes cumulees ne sont pas rangees, ni uniques).
             auto out = makeObj(isSetType(*like.obj->type) ? listType(like.obj->type->element) : like.obj->type);
-            for (std::size_t k = 0; k < out->items.size() && k < vals.size(); ++k) out->items[k]->value.assignFrom(vals[k]);
+            for (std::size_t k = 0, n = cellCount(*out); k < n && k < vals.size(); ++k) setCellValue(*out, k, vals[k]);   // 1.50.1
             if (like.obj->type->kind == TypeDesc::Kind::List) {
                 out->items.clear();
                 for (const auto& v : vals) {
@@ -9149,7 +9209,7 @@ private:
                     o->type = refT;
                     o->bound = ok;
                     if (ok) {
-                        if (where->obj) o->target = where->obj;
+                        if (where->obj) o->target = where->obj, pin(where->obj);   // 1.50.1
                         else o->targetName = env_.canonicalName(where->name);
                     }
                     return RV{{}, o};

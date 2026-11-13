@@ -11,6 +11,7 @@
 #include "SessionDialogs.hpp"   // 1.43.0
 #include "SessionMarks.hpp"   // 1.45.0 : l'onglet Session (session-onglet)
 #include "SessionService.hpp"   // 1.43.0
+#include "ScriptChat.hpp"       // 1.50.1 : repondre, reduire, copier (l'onglet Session, l'Assistant IA)
 #include "ProjectExchange.hpp"   // 1.12.30 : attendre-echanges
 #include "tutorial/TutorialApp.hpp"
 #include "tutorial/TutorialStageApp.hpp"
@@ -700,6 +701,9 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //  ia apprentissage voir "chemin"      au journal : ce que ferait l'import (ajoutees, remplacees, gardees, ignorees)
     //  ia apprentissage importer "chemin" [remplacer]                   au journal : le rapport
     //  ia limite                           au journal : la bande de la limite (ses lignes) et les cumuls
+    //  ---- 1.50.1 : repondre, reduire, copier dans la discussion (ScriptChat.hpp ; N : le N-ieme message) ----
+    //  ia repondre N | ia citation N ["debut"] | ia reduit N oui|non | ia reduire N|tout | ia deballer N
+    //  ia copier N [auteur|ctrl+c|code] | ia presse-papiers ["texte"] | ia discussion | ia survoler N | ia menu N
     if (cmd == "ia") {
         const std::string sub = lower(arg(1));
         if (auto* pv = dynamic_cast<ai::AiPreviewDialog*>(app_.menus().top())) {
@@ -910,6 +914,14 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             std::fflush(stdout);
             return Step::Next;
         }
+        if (scriptchat::isAiCommand(sub)) {   // 1.50.1 : ia repondre, citation, reduit, reduire, deballer, copier... (ScriptChat.hpp)
+            const auto r = scriptchat::ai(*panel, w);
+            for (const auto& l : r.lines) std::printf("[script] %s\n", l.c_str());
+            std::fflush(stdout);
+            if (r.move) moveTo({r.x, r.y}, {});
+            if (r.kind == scriptchat::Result::Kind::Failed) fail(r.why);
+            return Step::Yield;
+        }
         fail("ia " + sub + " : sous-commande inconnue");
         return Step::Next;
     }
@@ -1097,6 +1109,9 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   dupliquer-regle GROUPE fixe|varie|FORMULE 1.50.0 : la regle d'une profondeur ("Departs", "Adresses", "Textes"...)
     //   dupliquer-apart REPERE FORMULE [PROF]    1.50.0 : un repere a part ; FORMULE "-" : comme sa profondeur
     //   dupliquer-exemple                        1.50.0 : (dans une vue ouverte) un depart fictif a reperes, tout choisi
+    //   dupliquer-grouper profondeur|objet|rien|profondeur>objet|objet>profondeur   1.50.1 : « Grouper par »
+    //   dupliquer-deplier tout|GROUPE ; dupliquer-replier tout|GROUPE              1.50.1 : a tous les niveaux
+    //   dupliquer-regle-repere REPERE FORMULE|garder|-   1.50.1 : sa regle, dans la liste (il reste dans son groupe)
     // dupliquer-exemple vit plus loin (il lui faut la vue ouverte, pas la fenetre)
     if (cmd.rfind("dupliquer-", 0) == 0 && cmd != "dupliquer-exemple") {
         auto* d = dynamic_cast<HmiDuplicateDialog*>(app_.menus().top());
@@ -1141,6 +1156,18 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         else if (cmd == "dupliquer-apart") {    // 1.50.0
             const bool ok = arg(2) == "-" ? d->resetOwn(arg(1)) : d->setOwnFormula(arg(1), arg(2), arg(3));
             if (!ok) fail(cmd + " : " + arg(1) + " / " + arg(3));
+        }
+        else if (cmd == "dupliquer-grouper") {   // 1.50.1
+            if (const auto g = HmiDuplicateDialog::groupingNamed(arg(1))) d->setGrouping(*g);
+            else fail(cmd + " : profondeur, objet, rien, profondeur>objet ou objet>profondeur (pas " + arg(1) + ")");
+        }
+        else if (cmd == "dupliquer-deplier" || cmd == "dupliquer-replier") {   // 1.50.1
+            const bool open = cmd == "dupliquer-deplier";
+            if (lower(arg(1)) == "tout" || arg(1).empty()) d->expandAll(open);
+            else if (!d->setGroupExpanded(arg(1), open)) fail(cmd + " : pas de groupe " + arg(1));
+        }
+        else if (cmd == "dupliquer-regle-repere") {   // 1.50.1
+            if (!d->setMarkerRule(arg(1), arg(2) == "-" ? std::string{} : arg(2))) fail(cmd + " : pas de rep\xC3\xA8re " + arg(1));
         }
         else if (cmd == "dupliquer-ligne") d->chooseRow(std::atoi(arg(1).c_str()) - 1);
         else if (cmd == "dupliquer-verifier") {
@@ -4457,6 +4484,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   choix-type-forme "Liste" (1.12.2 : Simple, Tableau, Tableau 2D, Liste, Vecteur, Dictionnaire (MAP), Tuple)
     //   choix-type-etat "ARRAY[1..4] OF T_Four" (le type qu'on choisirait ; echoue s'il differe)
     //   choix-type-acces "POINTER TO" (1.50.0 : Direct, REF_TO, POINTER TO) | choix-type-vise tout|element
+    //   choix-type-dimension plus|moins (1.50.1 : + Dimension, une de moins ; Tableau -> Tableau a N dimensions)
     //   choix-type-valider | choix-type-definition | choix-type-annuler
     if (cmd.rfind("choix-type-", 0) == 0) {
         auto* picker = dynamic_cast<HmiTypePicker*>(app_.menus().top());
@@ -4471,6 +4499,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         // 1.50.0 (planche 03) : l'Acces (Direct, REF_TO, POINTER TO) ; ce que le pointeur vise avec une forme (tout, element).
         else if (cmd == "choix-type-acces") { if (!picker->setAccess(arg(1))) fail("acc\xC3\xA8s inconnu ou gris\xC3\xA9 ici : " + arg(1) + " " + picker->accessProblem(arg(1))); }
         else if (cmd == "choix-type-vise") picker->setPointsWhole(arg(1) == "tout");
+        else if (cmd == "choix-type-dimension") { if (arg(1) == "moins") picker->removeDimension(); else picker->addDimension(); }   // 1.50.1 : plus|moins
         else if (cmd == "choix-type-etat") {
             std::printf("[script] choix de type : %s%s\n", picker->result().c_str(),
                         picker->resultProblem().empty() ? "" : (" (" + picker->resultProblem() + ")").c_str());
@@ -6603,6 +6632,10 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //                                                                deplace (x3)" ; l'hote, a la fin : le fichier enregistre
     //   session-onglet                                               l'onglet Session du panneau du bas (le panneau s'ouvre) ;
     //                                                                "[script] session-onglet : N ligne(s) . M message(s) . K au journal"
+    // 1.50.1 : repondre, reduire, copier par l'onglet Session (ScriptChat.hpp) - session-ecrire, session-repondre N "texte",
+    //   session-cite N "debut", session-reduit N oui|non, session-reduire N|tout, session-deballer N, session-copier N
+    //   [auteur|ctrl+c], session-presse-papiers ["texte"], session-discussion ; session-demarrer ... port=N decouverte=N et
+    //   session-rejoindre ADRESSE decouverte=N (les ports de l'essai de bout en bout, sessione2e).
     if (cmd.rfind("session-", 0) == 0) {
         auto& s = app_.session();
         const auto findObject = [&](const std::string& viewName, const std::string& objName, hmi::Id& view, hmi::Id& obj) {
@@ -6631,6 +6664,10 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             o.internet = arg(2) == "internet";   // 1.44.0 : par Internet (il faut le code)
             o.entry = arg(2) == "code" || o.internet ? session::Entry::Code : session::Entry::Accept;
             o.role = arg(3) == "regarder" ? session::Role::Watch : session::Role::Edit;
+            for (const auto& word : w) {   // 1.50.1 : port=N (0 : un port libre), decouverte=N - l'essai de bout en bout (sessione2e)
+                if (word.rfind("port=", 0) == 0) o.port = std::atoi(word.c_str() + 5);
+                if (word.rfind("decouverte=", 0) == 0) o.discoveryPort = std::atoi(word.c_str() + 11);
+            }
             std::string why;
             if (retries_ == 0 && !s.start(o, &why)) {
                 std::printf("[script] session-demarrer : %s\n", why.c_str());
@@ -6647,8 +6684,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             if (s.internet())
                 std::printf("[script] session-demarrer : \xC2\xAB %s \xC2\xBB d\xC3\xA9marr\xC3\xA9" "e par Internet ; code %s\n", s.sessionName().c_str(), s.codeText().c_str());
             else
-                std::printf("[script] session-demarrer : \xC2\xAB %s \xC2\xBB d\xC3\xA9marr\xC3\xA9" "e (port %d, d\xC3\xA9" "couverte %d)%s%s\n", s.sessionName().c_str(), s.port(),
-                            s.discoveryPort(), s.code().empty() ? "" : " ; code ", s.code().empty() ? "" : s.codeText().c_str());
+                std::printf("[script] session-demarrer : \xC2\xAB %s \xC2\xBB d\xC3\xA9marr\xC3\xA9" "e (port %d, d\xC3\xA9" "couverte %d)%s\n", s.sessionName().c_str(), s.port(),
+                            s.discoveryPort(), s.code().empty() ? "" : " ; avec un code (jamais au journal : code-session.txt des captures)");   // 1.50.1
             // Le code pour l'equipier (l'essai le lit) : a cote des captures, jamais ailleurs. 1.44.0 : par Internet, montre
             // ("K7Q4-M2XP-T9" : session-rejoindre internet @fichier le relit).
             if (!s.code().empty() && !capturesDir_.empty()) {
@@ -6709,7 +6746,11 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             }
             const std::string target = arg(1).empty() ? std::string("1") : arg(1);
             const bool byIndex = std::all_of(target.begin(), target.end(), [](char c) { return c >= '0' && c <= '9'; });
-            if (retries_ == 0) s.search(byIndex ? std::vector<std::string>{} : std::vector<std::string>{target});
+            int discovery = session::kDiscoveryPort;   // 1.50.1 : decouverte=N (l'essai de bout en bout : sessione2e)
+            for (const auto& word : w)
+                if (word.rfind("decouverte=", 0) == 0) discovery = std::atoi(word.c_str() + 11);
+            if (code.rfind("decouverte=", 0) == 0) code.clear();
+            if (retries_ == 0) s.search(byIndex ? std::vector<std::string>{} : std::vector<std::string>{target}, discovery);
             if (s.searching()) return retries_ < 600 ? Step::Retry : (fail("session-rejoindre : la recherche ne finit pas"), Step::Next);
             const std::size_t i = byIndex ? static_cast<std::size_t>(std::max(1, std::atoi(target.c_str()))) - 1 : 0;
             if (i >= s.found().size()) {
@@ -6923,6 +6964,14 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                             m.machineId.c_str(), session::roleText(m.role).c_str(), s.viewName(m.view).c_str(), m.selection.size());
             const auto& log = s.log();
             for (std::size_t i = log.size() > 8 ? log.size() - 8 : 0; i < log.size(); ++i) std::printf("[script]   . %s\n", log[i].c_str());
+            return Step::Yield;
+        }
+        if (scriptchat::isSessionCommand(cmd)) {   // 1.50.1 : session-ecrire, -repondre, -cite, -reduit, -copier... (ScriptChat.hpp)
+            const auto r = scriptchat::session(app_, top(), w, retries_);
+            if (r.kind == scriptchat::Result::Kind::Retry) return Step::Retry;
+            for (const auto& l : r.lines) std::printf("[script] %s\n", l.c_str());
+            std::fflush(stdout);
+            if (r.kind == scriptchat::Result::Kind::Failed) fail(r.why);
             return Step::Yield;
         }
         fail("commande inconnue : " + cmd);
@@ -8773,41 +8822,15 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     // FICTIF (Depart_0_0, Afficheur_P, Titre_0) dont les reperes ont trois profondeurs ($Armoires[0].Departs[0].Voies[5].Etat$,
     // ...Mesures[0..3]...), des adresses ($%MW1000$, $%M200$) et un texte ($Titre 1.1$) ; les variables IHM Armoires
     // (ARRAY[0..3]) et Compteur (%MW1037, une adresse deja prise). Tout est choisi ; une commande (Ctrl+Z la retire).
+    // 1.50.1 : des TYPES IHM fictifs qui tiennent chaque chemin ecrit (T_Armoire : Nom, Departs ARRAY[0..7] OF T_Depart ;
+    // T_Depart : Nom, Voies ARRAY[0..31] OF T_Voie, Mesures ARRAY[0..3] OF T_Mesure ; T_Voie ; T_Mesure) - avant,
+    // Armoires etait ARRAY[0..3] OF INT : « Armoires[0].Nom n'existe pas », Dupliquer gris. Les voies sur deux objets de
+    // plus (Voyant_V5, Afficheur_I5), deux textes de plus (Legende_0, Code_0) : la liste se groupe par objet, chaque
+    // texte peut avoir sa regle. Seul avertissement : %MW1037, deja a Compteur.
     if (cmd == "dupliquer-exemple") {
         std::vector<hmi::Id> made;
-        const bool ok = editor->canvas().edit("Exemple : un d\xC3\xA9part", [&made](hmi::Project& p, hmi::View& v) {
-            const auto variable = [&p](const std::string& name, const std::string& type, const std::string& address) {
-                for (const auto& x : p.programs.variables)
-                    if (x.name == name) return;
-                hmi::Variable var;
-                var.id = p.allocate();
-                var.name = name;
-                var.type = type;
-                var.address = address;
-                p.programs.variables.push_back(var);
-            };
-            variable("Armoires", "ARRAY[0..3] OF INT", {});
-            variable("Compteur", "INT", "%MW1037");
-            const auto object = [&](hmi::Kind k, const std::string& name, double x, double y) -> hmi::Object& {
-                const hmi::Id id = hmi::edit::add(p, v, k, x, y);
-                made.push_back(id);
-                auto* o = v.object(id);
-                o->name = name;
-                return *o;
-            };
-            auto& depart = object(hmi::Kind::Rectangle, "Depart_0_0", 40, 40);
-            depart.setExpr("fill", "$Armoires[0].Departs[0].Voies[5].Etat$ > 0");
-            for (const char* m : {"Courant", "Tension", "Seuil", "Alarme", "Defaut", "Marche"})
-                depart.setExpr(std::string("voie_") + m, std::string("$Armoires[0].Departs[0].Voies[5].") + m + "$");
-            for (int k = 0; k < 4; ++k)
-                depart.setExpr("mesure_" + std::to_string(k), "$Armoires[0].Departs[0].Mesures[" + std::to_string(k) + "].Valeur$");
-            depart.setExpr("armoire", "$Armoires[0].Nom$");
-            auto& adresse = object(hmi::Kind::Rectangle, "Afficheur_P", 40, 110);
-            adresse.setExpr("fill", "$%MW1000$ > 0");
-            adresse.setExpr("visible", "$%M200$");
-            auto& titre = object(hmi::Kind::Text, "Titre_0", 40, 170);
-            titre.set("text", "$Titre 1.1$");
-        });
+        // 1.50.1 : l'exemple vit dans la fenetre (HmiDuplicateDialog::addExample : l'essai hmidupliquer le verifie).
+        const bool ok = editor->canvas().edit("Exemple : un d\xC3\xA9part", [&made](hmi::Project& p, hmi::View& v) { made = HmiDuplicateDialog::addExample(p, v); });
         if (!ok || made.empty()) { fail("dupliquer-exemple : la vue refuse"); return Step::Next; }
         editor->canvas().setSelection(made);
         return Step::Yield;

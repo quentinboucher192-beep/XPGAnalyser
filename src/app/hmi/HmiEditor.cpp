@@ -276,6 +276,7 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     tools->add(ActStretch, HmiGlyph::DistributeH,
                "\xC3\x89tirer : jusqu'aux bords de la vue (Ctrl+Alt+Maj+fl\xC3\xA8" "che), jusqu'\xC3\xA0 un voisin, au bord de la "
                "s\xC3\xA9lection, \xC3\xA0 un rep\xC3\xA8re, \xC3\xA0 une colonne", "\xC3\x89tirer \xE2\x96\xBE");
+    tools->setBadge(ActStretch, "nv");   // 1.50.1 : << Etirer v NV >> en violet, comme la maquette
     tools->separator();
     tools->add(ActRotateLeft, HmiGlyph::RotateLeft, "Tourner de -90\xC2\xB0");
     tools->add(ActRotateRight, HmiGlyph::RotateRight, "Tourner de +90\xC2\xB0");
@@ -472,7 +473,7 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
     links_ += canvas_->stretchRequested->connect([this](unsigned edge) {
         hmi::stretch::Request r;
         r.edges = edge;
-        r.keepMargins = stretchMargins_;
+        r.keepMargins = stretchKeepMargins();   // 1.50.1 : le reglage du projet
         (void)stretch(r);
     });
     // 1.10.2 (chantier D) : le clic droit sur la vue. 1.12.18 : le menu de ce qui est vise
@@ -2092,6 +2093,17 @@ bool HmiEditor::commitView(const std::string& field, const std::string& value) {
             }
             (field == "col_marge" ? vv.columns.margin : vv.columns.gutter) = n;
             vv.columns.visible = true;
+        }
+        // 1.50.1 : les marges de la vue (Etirer les garde).
+        else if (field == "marge_haut" || field == "marge_bas" || field == "marge_gauche" || field == "marge_droite") {
+            double n = 0;
+            if (!hmi::parseNumber(value, n) || n < 0 || n > 10000) {
+                ok = false;
+                why = "Marge : un nombre de pixels, 0 au moins";
+                return;
+            }
+            (field == "marge_haut" ? vv.margins.top : field == "marge_bas" ? vv.margins.bottom
+             : field == "marge_gauche" ? vv.margins.left : vv.margins.right) = n;
         }
         else if (field == "calque_actif") {
             for (const auto& l : vv.layers) if (l.name == value) vv.activeLayer = l.id;
