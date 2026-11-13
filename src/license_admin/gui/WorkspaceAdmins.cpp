@@ -1102,7 +1102,14 @@ OpResult Workspace::inviteAdmin(const std::string& nameIn, const std::string& em
     const Seconds expires = static_cast<Seconds>(r.json.integer("expire"));
     if (got.empty() || got != r.json.str("code") || id.empty()) return OpResult::fail("le service rend un code d'invitation illisible");
     code = got;
-    AdminInvitation inv{name, email, profile, "code", now(), id, expires};
+    AdminInvitation inv;
+    inv.name = name;
+    inv.email = email;
+    inv.profile = profile;
+    inv.via = "code";
+    inv.at = now();
+    inv.id = id;
+    inv.expires = expires;
     inv.rights = rights;
     inv.rightsSet = true;
     const OpResult kept = noteAdminInvitation(inv);
@@ -2166,8 +2173,14 @@ std::vector<AdminInvitation> Workspace::adminInvitations() const {
     if (const Value* a = v.find("invitations"); a && a->isArray())
         for (const auto& o : a->items())
             if (o.isObject()) {
-                AdminInvitation i{clip(o.str("nom"), 60), clip(o.str("courriel"), 120), clip(o.str("profil"), 60), clip(o.str("par"), 20),
-                                  static_cast<Seconds>(o.integer("le")), clip(o.str("id"), 40), static_cast<Seconds>(o.integer("expire"))};
+                AdminInvitation i;
+                i.name = clip(o.str("nom"), 60);
+                i.email = clip(o.str("courriel"), 120);
+                i.profile = clip(o.str("profil"), 60);
+                i.via = clip(o.str("par"), 20);
+                i.at = static_cast<Seconds>(o.integer("le"));
+                i.id = clip(o.str("id"), 40);
+                i.expires = static_cast<Seconds>(o.integer("expire"));
                 if (const Value* d = o.find("droits"); d && d->isArray()) {   // 1.51.0 : les droits notes a la creation
                     i.rightsSet = true;
                     for (const auto& x : d->items())
