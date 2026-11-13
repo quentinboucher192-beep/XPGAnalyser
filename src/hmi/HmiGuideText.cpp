@@ -18629,6 +18629,27 @@ const std::vector<Topic>& topics() {
                          "m\xC3\xA9thodes du type ; un appel \xC3\xA9" "crit ailleurs (`Pompe1.Demarrer()` "
                          "dans un script) garde l'ancien nom, et Compiler le signale (\xC2\xAB Pompe1 "
                          "(T_Pompe) n'a pas de membre Demarrer \xC2\xBB).", {}, "1.13.0"},
+             {K::Bullet, "**Essayer** (la barre, comme pour une fonction) appelle la m\xC3\xA9thode sur une "
+                         "**instance d'essai** du type : la fen\xC3\xAAtre demande un argument par param\xC3\xA8tre, "
+                         "puis la valeur de chaque membre de **SELF avant** l'appel (vide : sa valeur initiale), "
+                         "comme \xC2\xAB SELF avant \xC2\xBB de l'onglet Tests. Les Sorties du panneau du bas disent "
+                         "le r\xC3\xA9sultat, **SELF apr\xC3\xA8s** (chaque membre) et ce qui a chang\xC3\xA9 "
+                         "(`SELF.Debit : 0.0 \xE2\x86\x92 4.0`), le journal, les sorties ; le projet n'est pas "
+                         "touch\xC3\xA9 (une m\xC3\xA9thode priv\xC3\xA9" "e s'essaie aussi).", {}, "1.50.1"},
+             {K::Bullet, "Des **surcharges**, comme les fonctions : plusieurs m\xC3\xA9thodes d'un type "
+                         "peuvent porter le m\xC3\xAAme nom si leurs param\xC3\xA8tres diff\xC3\xA8rent "
+                         "(`Regler(v : REAL)` et `Regler(a : INT; b : INT)`). Un nom d\xC3\xA9j\xC3\xA0 pris dans "
+                         "\xC2\xAB Nouvelle m\xC3\xA9thode \xC2\xBB fait une surcharge (dit sous le nom) ; "
+                         "**Nouvelle surcharge** (la barre) cr\xC3\xA9" "e la m\xC3\xA9thode du m\xC3\xAAme nom et "
+                         "ouvre son onglet Param\xC3\xA8tres. La liste les montre c\xC3\xB4te \xC3\xA0 "
+                         "c\xC3\xB4te, Genre \xC2\xAB surcharge \xC2\xBB. Chaque appel (`Pompe1.Regler(2.5)`, "
+                         "`Regler(1, 2)` dans le type) prend la sienne par ses arguments - la r\xC3\xA8gle des "
+                         "fonctions, la m\xC3\xAAme \xC3\xA0 Compiler et en marche ; un appel ambigu, ou "
+                         "qu'aucune ne prend, est dit (\xC2\xAB appel ambigu de T_Pompe.Mixer (INT, INT) : "
+                         "\xE2\x80\xA6 conviennent autant \xC2\xBB). Deux surcharges de la m\xC3\xAAme forme "
+                         "sont refus\xC3\xA9" "es (le retour seul ne les distingue pas) ; une m\xC3\xA9thode "
+                         "virtuelle ne se surcharge pas (ses red\xC3\xA9" "finitions la d\xC3\xA9signent par son "
+                         "nom). Renommer l'une renomme ses surcharges avec elle.", {}, "1.50.1"},
              {K::Bullet, "La marge \xC3\xA0 gauche du corps pose les **points d'arr\xC3\xAAt** comme dans un "
                          "script (voir \xC2\xAB D\xC3\xA9" "boguer les scripts IHM \xC2\xBB) : en "
                          "simulation, l'appel `Pompe1.Demarrer()` s'arr\xC3\xAAte sur la ligne, la pile "
@@ -18697,6 +18718,14 @@ const std::vector<Topic>& topics() {
                          "param\xC3\xA8tre d'une LAMBDA (`p.Moteur.Heures`), une LAMBDA \xC3\xA9" "crite "
                          "dans une autre LAMBDA -, le moteur le refuse en marche. Le d\xC3\xA9" "bogueur et "
                          "les expressions ajout\xC3\xA9" "es en simulation lisent tout, priv\xC3\xA9 compris.", {}},
+             {K::Tip, "L'**aide \xC3\xA0 la saisie** propose les m\xC3\xA9thodes apr\xC3\xA8s tout chemin "
+                         "vers une instance - une variable IHM, une locale, un param\xC3\xA8tre, le membre d'un "
+                         "autre type (`Station1.Pompe.`), une case (`Pompes[i].`), un pointeur (`p^.`), le "
+                         "r\xC3\xA9sultat d'un appel (`PompeDe(1).`). Une m\xC3\xA9thode **priv\xC3\xA9" "e** y "
+                         "est **gris\xC3\xA9" "e**, la raison dite (\xC2\xAB priv\xC3\xA9" "e : seulement depuis "
+                         "une m\xC3\xA9thode de T_Pompe \xC2\xBB), l\xC3\xA0 o\xC3\xB9 le moteur la refuserait ; "
+                         "dans une m\xC3\xA9thode du type (`SELF.`, son nom nu) ou d'un type qui en "
+                         "h\xC3\xA9rite, elle ne l'est pas.", {}, "1.50.1"},
              {K::Heading, "H\xC3\xA9ritage : EXTENDS, VIRTUAL, OVERRIDE, SUPER", {}},
              {K::Paragraph, "Dans l'onglet **H\xC3\xA9ritage et interfaces** du type (1.13.1 ; avant : ses "
                          "propri\xC3\xA9t\xC3\xA9s), **H\xC3\xA9rite de\xE2\x80\xA6 (EXTENDS)** choisit un "
@@ -18718,6 +18747,16 @@ const std::vector<Topic>& topics() {
                          "(\xC2\xAB une red\xC3\xA9" "finition ne peut pas \xC3\xAAtre plus priv\xC3\xA9" "e "
                          "que la m\xC3\xA9thode qu'elle red\xC3\xA9" "finit \xC2\xBB) : un appel par la "
                          "m\xC3\xA9thode publique du parent y m\xC3\xA8nerait depuis hors du type.", {}, "1.13.1"},
+             {K::Bullet, "Changer la **signature d'une virtuelle** du parent (dans son onglet Param\xC3\xA8tres : "
+                         "renommer, retyper, ajouter, retirer, d\xC3\xA9placer un param\xC3\xA8tre ; ou son "
+                         "retour) la fait suivre dans **ses red\xC3\xA9" "finitions** des sous-types, \xC3\xA0 toute "
+                         "profondeur : une question les nomme d'abord (\xC2\xAB Changer la signature de "
+                         "T_Pompe.EnDefaut ? \xC2\xBB), puis tout se fait en une commande - un seul Ctrl+Z. "
+                         "Un param\xC3\xA8tre renomm\xC3\xA9 l'est aussi dans leur corps (comme un renommage dans "
+                         "l'onglet), `SUPER.EnDefaut(\xE2\x80\xA6)` suit l'ordre et les noms de ses arguments, "
+                         "leurs cas de test gardent leurs arguments : leurs corps se lisent encore. Un nom "
+                         "qu'une red\xC3\xA9" "finition emploie d\xC3\xA9j\xC3\xA0 (une locale) est refus\xC3\xA9, "
+                         "la raison dite.", {}, "1.50.1"},
              {K::Code, "TYPE T_PompeDoublee EXTENDS T_Pompe\n    Secours : BOOL;\n    METHOD PUBLIC "
                          "OVERRIDE EnDefaut : BOOL\nEND_TYPE\n\n(* corps de EnDefaut red\xC3\xA9" "finie "
                          "*)\nEnDefaut := SUPER.EnDefaut() AND NOT Secours;", "ST"},

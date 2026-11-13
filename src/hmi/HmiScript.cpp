@@ -581,7 +581,7 @@ std::vector<ScriptDiagnostic> checkScript(ScriptLang lang, std::string_view code
                 out.insert(out.end(), tr.errors.begin(), tr.errors.end());
             } else {
                 // 1.50.1 : les struct et les classes du script sont des types connus (le moteur les tient de la traduction)
-                const TypeKnown known = !knownType ? knownType : TypeKnown([&](std::string_view t) { return cscript::isScriptType(t) || knownType(t); });
+                const TypeKnown known = [&](std::string_view t) { return cscript::isScriptType(t) || (knownType && knownType(t)); };
                 for (auto d : checkScript(ScriptLang::ST, tr.st, name, known)) {
                     if (d.severity == ScriptDiagnostic::Severity::Info) continue;
                     cscript::placeFault(tr, d);

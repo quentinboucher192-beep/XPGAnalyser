@@ -41,7 +41,7 @@ void structures() {
         {C, "DINT",
          "struct P { int x, y; };\nstruct P milieu(struct P a, struct P b) {\n  struct P m;\n  m.x = (a.x + b.x) / 2;\n  m.y = (a.y + b.y) / 2;\n"
          "  return m;\n}\nstruct P a = {0, 0}, b = {10, 20};\nstruct P c = milieu(a, b);\nR = c.x * 100 + c.y;\n",
-         "520", "struct par valeur, rendue par une fonction"},
+         "510", "struct par valeur, rendue par une fonction"},
         {C, "DINT", "struct P { int x, y; };\nstruct P a = {1, 2};\nstruct P b;\nb = a;\nb.x = 9;\nR = a.x * 100 + b.x * 10 + b.y;\n", "192",
          "struct copiee (b = a), b changee seule"},
         {C, "DINT",
@@ -354,7 +354,8 @@ void debogueur() {
             check(n && n->value == "4" && vv && vv->type == "const int*", "les parametres de somme : n = 4, v : const int* : " + localsText(h2.stack.back().locals));
         }
         check(b.rt.debugStep(DebugStep::Over) && b.rt.paused() && b.rt.debugHit()->line == 4, "Suivant : ligne 4");
-        check(b.rt.debugStep(DebugStep::Out) && b.rt.paused() && b.rt.debugHit()->line == 13, "Sortir : de retour ligne 13 de main");
+        check(b.rt.debugStep(DebugStep::Out) && b.rt.paused() && b.rt.debugHit()->line == 14 && b.rt.debugHit()->stack.back().label.rfind("main", 0) == 0,
+              "Sortir : de retour dans main, ligne 14");
         check(b.rt.debugContinue() && !b.rt.paused(), "Continuer");
         sim::Value r;
         check(b.rt.environment().read("R", r) && r.asInteger() == 20, "le script va au bout : R = 10 + 7 + 3");

@@ -202,6 +202,21 @@ void methodes1501() {
         const bool madeVirtual = methods->setVirtual(r2, true, &why);
         check(!madeVirtual && why.find("virtuelle et surcharg\xC3\xA9" "e") != std::string::npos,
               "une surcharge ne devient pas virtuelle (" + why + ")");
+        {
+            // Le fichier : rien de neuf (deux lignes methode_type du meme nom) - enregistre puis relu a l'identique.
+            namespace fs = std::filesystem;
+            const fs::path dir = fs::temp_directory_path() / ("xpg_m1501_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            std::error_code ec;
+            fs::create_directories(dir, ec);
+            const bool saved = static_cast<bool>(hmi::save(p, dir.string()));
+            const auto loaded = hmi::load(dir.string());
+            const auto* lt = loaded ? loaded->hmiType(pompeId) : nullptr;
+            const auto* l2 = loaded ? hmi::methodById(*loaded, r2) : nullptr;
+            check(saved && lt && hmi::ownMethods(*lt, "Regler").size() == 2 && l2 && hmi::methodParamsText(*l2) == "a : INT; b : INT"
+                      && hmi::methodParamsText(*hmi::methodById(*loaded, r1)) == "v : REAL",
+                  "enregistr\xC3\xA9 puis relu : les deux Regler, chacune ses param\xC3\xA8tres (le format ne change pas)");
+            fs::remove_all(dir, ec);
+        }
         methods->refresh();
         std::size_t rows = 0, kinds = 0;
         const auto model = methods->methodTable().model();

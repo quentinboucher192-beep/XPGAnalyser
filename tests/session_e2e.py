@@ -87,6 +87,7 @@ session-attendre message "Vérifications faites"
 attendre 10
 session-discussion
 session-cite 2 "Début du long message"
+session-attendre message "a quitté la session"
 session-arreter
 attendre 20
 quitter
@@ -113,7 +114,7 @@ session-presse-papiers "Bien reçu : je purge P2"
 session-copier 1 ctrl+c
 session-presse-papiers "Début du long message"
 session-ecrire "Vérifications faites, je pars."
-attendre 30
+attendre 10
 session-quitter
 session-attendre accueil
 quitter
@@ -127,6 +128,7 @@ HOST_EXPECTS = [
     "session-repondre 1 : En réponse à ",
     "session-repondre 1 : envoyée (la barre : partie)",
     "session-cite 2 : « ",
+    "session-attendre message : oui",
     "session-arreter",
 ]
 GUEST_EXPECTS = [
@@ -295,13 +297,11 @@ def main():
             if CODE_RE.search(text):
                 failures.append(who + " : un code de session est écrit dans le journal")
             print("%s : %d ligne(s) au journal du script" % (who, len([l for l in text.splitlines() if l.startswith("[script] ")])))
-        # Ce que l'equipier a vu (la discussion, la citation, le presse-papiers) - au journal de l'essai.
-        for l in shown(gtext).splitlines():
-            if l.startswith("[script] session-") and not l.startswith("[script] session-attendre"):
-                print("  équipier " + l[len("[script] "):])
-        for l in shown(htext).splitlines():
-            if l.startswith("[script] session-discussion") or l.startswith("[script]   ") and "message" not in l or l.startswith("[script] session-cite"):
-                print("  hôte " + l[len("[script] "):])
+        # Ce que chacun a vu (la discussion, la citation, le presse-papiers) - au journal de l'essai.
+        for who, text in (("\u00e9quipier", gtext), ("h\u00f4te", htext)):
+            for l in shown(text).splitlines():
+                if (l.startswith("[script] session-") and not l.startswith("[script] session-attendre")) or l.startswith("[script]   "):
+                    print("  %s %s" % (who, l[len("[script] "):]))
         if failures:
             for f in failures:
                 print("ECHEC : " + f)

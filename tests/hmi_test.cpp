@@ -14355,11 +14355,14 @@ void typesLot16() {
     std::string why;
     check(!parseSpec("ARRAY[9..0] OF INT", s, &why) && why.find("haute") != std::string::npos, "bornes \xC3\xA0 l'envers : refus\xC3\xA9 (" + why + ")");
     check(!parseSpec("ARRAY[0..9] REAL", s, &why) && why.find("OF") != std::string::npos, "sans OF : refus\xC3\xA9");
-    check(!parseSpec("ARRAY[0..1, 0..1, 0..1] OF INT", s, &why), "trois dimensions : refus\xC3\xA9 (" + why + ")");
+    // 1.50.1 : autant de dimensions qu'on veut (tests/tableaux_test.cpp, tableaux_ndim.inl).
+    check(parseSpec("ARRAY[0..1, 0..1, 0..1] OF INT", s, &why) && s.dims == 3 && s.length() == 8, "trois dimensions : permis (1.50.1) (" + why + ")");
     // 1.50.0 : un tableau de tableaux est permis (comme deux dimensions) : ses cases sont un tableau (tests/tableaux_test.cpp).
     check(parseSpec("ARRAY[0..9] OF ARRAY[0..1] OF INT", s, &why) && s.dims == 1 && s.element == "ARRAY[0..1] OF INT",
           "un tableau de tableaux : permis (1.50.0), ses cases sont ARRAY[0..1] OF INT");
-    check(!parseSpec("ARRAY[0..999999] OF INT", s, &why), "un million de cases : refus\xC3\xA9 (" + why + ")");
+    // 1.50.1 : un grand tableau vit dans la memoire de l'IHM, range serre ; seul ce qui n'y tiendrait pas est refuse.
+    check(parseSpec("ARRAY[0..999999] OF INT", s, &why) && isBigArray("ARRAY[0..999999] OF INT"), "un million de cases : permis, un grand tableau (" + why + ")");
+    check(!parseSpec("ARRAY[0..999999999] OF LREAL", s, &why) && why.find("trop grand") != std::string::npos, "un milliard de LREAL : refus\xC3\xA9 (" + why + ")");
     check(isElementary("real") && !isElementary("T_Four") && isComposite("T_Four") && isComposite("ARRAY[0..1] OF INT") && !isComposite("INT"),
           "\xC3\xA9l\xC3\xA9mentaire ou compos\xC3\xA9");
 
@@ -14447,7 +14450,7 @@ void typesLot16() {
     {
         const auto probs = pathProblems(p, "(* Consignes[99] dans un commentaire *)\n"
                                            "x := Consignes[12];\n"
-                                           "y := Four1.Temprature + Matrice[1];\n"
+                                           "y := Four1.Temprature + Matrice[1, 2, 3];\n"
                                            "Consignes.Length := 3;\n"
                                            "z := Fours[0].Vannes[4].Position;\n"
                                            "s := 'Four1.Rien';\n"
@@ -14456,7 +14459,8 @@ void typesLot16() {
             return std::any_of(probs.begin(), probs.end(), [&](const PathProblem& pp) { return pp.line == line && pp.message.find(text) != std::string::npos; });
         };
         check(has(2, "l'indice 12 est hors des bornes du tableau (0..9)"), "Compiler : Consignes[12] hors des bornes (ligne 2)");
-        check(has(3, "n'a pas de membre Temprature") && has(3, "Matrice a 2 dimensions : 2 indices"), "un membre mal \xC3\xA9" "crit ; un seul indice pour Matrice (ligne 3)");
+        // 1.50.1 : Matrice[1] seul est une ligne (permis) ; trois indices pour deux dimensions, non.
+        check(has(3, "n'a pas de membre Temprature") && has(3, "Matrice a 2 dimensions : 2 indices"), "un membre mal \xC3\xA9" "crit ; trois indices pour Matrice (ligne 3)");
         check(has(4, "se lit seulement"), "Consignes.Length := 3 : lecture seule (ligne 4)");
         check(has(5, "l'indice 0 est hors") && has(5, "l'indice 4 est hors"), "Fours[0] et Vannes[4] hors des bornes (ligne 5)");
         check(probs.size() == 6, "ni le commentaire, ni la cha\xC3\xAEne, ni la derni\xC3\xA8re ligne (juste) : " + std::to_string(probs.size()) + " probl\xC3\xA8mes");

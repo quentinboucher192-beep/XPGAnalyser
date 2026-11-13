@@ -28,6 +28,10 @@
 //  d'une reponse, un message a l'ancienne, l'etat reduit qui suit le message,
 //  le texte copie (session_ui_discussion.inl).
 //
+//  1.50.1 : la discussion de l'Assistant IA a les memes gestes (les widgets des sessions) : la barre << En reponse a
+//  Assistant : ... >>, l'extrait cite dans la bulle, une longue reponse reduite, les pictogrammes du survol - dans le
+//  cadre du volet, de 280 a 460 px (session_ui_assistant.inl).
+//
 //  --captures <dossier> [--prefixe P] [--ancien] : en plus, des images PNG (le meme dessin
 //  logiciel, rasterise : ce n'est PAS une capture de la fenetre de l'application)
 //  aux tailles etroite, moyenne et large, avec des noms et des messages longs
@@ -35,6 +39,9 @@
 //  session et l'onglet Session, recopies dans session_ui_ancien.inl) - les images << avant >>.
 // =============================================================================
 #include "../src/app/Capture.hpp"
+#include "../src/app/ai/AiChatReply.hpp"   // 1.50.1 : la discussion de l'Assistant IA (session_ui_assistant.inl)
+#include "../src/app/ai/AiPanel.hpp"
+#include "../src/app/ai/AiPaths.hpp"
 #include "../src/app/SessionMarks.hpp"
 #include "../src/app/StartPage.hpp"
 #include "../src/app/hmi/HmiSessionPane.hpp"
@@ -554,6 +561,7 @@ void encartLicence(SoftRenderer& r) {
 #include "session_ui_ancien.inl"   // la fenetre telle qu'en 1.46 : l'image << avant >> seulement
 #endif
 #include "session_ui_discussion.inl"   // 1.50.0 : repondre, reduire, copier (deux membres)
+#include "session_ui_assistant.inl"    // 1.50.1 : les memes gestes dans la discussion de l'Assistant IA
 
 } // namespace
 
@@ -582,6 +590,7 @@ int main(int argc, char** argv) {
     ongletSession(r);
     encartLicence(r);
     discussion150(r);   // 1.50.0
+    assistantDiscussion(r);   // 1.50.1
 #ifdef XPG_SESSION_WINDOW
     fenetreSession(r);
     fenetresDemarrerRejoindre(r);

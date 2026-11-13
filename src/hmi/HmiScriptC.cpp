@@ -1283,17 +1283,40 @@ private:
             int paren = 0;
             std::size_t e = k + 1;
             std::size_t params = 0;
-            bool any = false;
+            bool any = false, expression = false;
+            std::size_t pieceTokens = 0;
+            bool pieceType = false;
+            const auto endPiece = [&] {
+                // un parametre : un type et un nom (int x, T* p), ou un type seul (int) ; un nom seul : une valeur (Pompe p(n);)
+                if (pieceTokens == 1 && !pieceType) expression = true;
+                pieceTokens = 0;
+                pieceType = false;
+            };
             for (; e < toks_.size(); ++e) {
                 const Tok& x = toks_[e];
                 if (x.k == Tok::K::Punct && x.text == "(") ++paren;
                 else if (x.k == Tok::K::Punct && x.text == ")") {
-                    if (--paren == 0) break;
+                    if (--paren == 0) {
+                        endPiece();
+                        break;
+                    }
                 } else if (paren == 1) {
-                    if (x.k == Tok::K::Punct && x.text == ",") ++params;
-                    else if (!(x.k == Tok::K::Name && x.text == "void")) any = true;
+                    if (x.k == Tok::K::Punct && x.text == ",") {
+                        ++params;
+                        endPiece();
+                    } else if (!(x.k == Tok::K::Name && x.text == "void")) {
+                        any = true;
+                        ++pieceTokens;
+                        if (x.k == Tok::K::Number || x.k == Tok::K::String || x.k == Tok::K::Char) expression = true;
+                        if (x.k == Tok::K::Punct && x.text != "*" && x.text != "&" && x.text != "[" && x.text != "]" && x.text != "..." && x.text != "="
+                            && x.text != "(" && x.text != ")" && x.text != "::")
+                            expression = true;
+                        if (x.k == Tok::K::Name && (typeKeyword(x.text) || cNamedTypes().count(x.text) || stElementary().count(x.text))) pieceType = true;
+                        if (x.k == Tok::K::Punct && (x.text == "*" || x.text == "&")) pieceType = true;
+                    }
                 }
             }
+            if (expression) continue;
             if (e + 1 >= toks_.size()) continue;
             std::size_t after = e + 1;
             while (toks_[after].k == Tok::K::Name && (toks_[after].text == "const" || toks_[after].text == "noexcept")) ++after;
@@ -1356,7 +1379,10 @@ private:
         for (const auto& h : cur_->hoisted)
             if (upperOf(h.st) == upperOf(name)) same = &h;
         const bool reuse = same && !visible && same->type == type->st && !same->keep && !forEach;
-        if (reservedSt(name) || visible || (cur_->taken.count(upperOf(name)) && !reuse) || isFunction(name)) st = fresh(name, cur_->taken);
+        // le ST ne distingue pas r et R (une variable IHM) : un nom ecrit aussi autrement dans le script se renomme
+        const auto sp = spellings_.find(upperOf(name));
+        const bool otherCase = sp != spellings_.end() && sp->second.size() > 1;
+        if (reservedSt(name) || visible || (cur_->taken.count(upperOf(name)) && !reuse) || isFunction(name) || otherCase) st = fresh(name, cur_->taken);
         Var v;
         v.st = st;
         v.type = type;
@@ -1441,11 +1467,14 @@ private:
     bool startsType(std::size_t k = 0) const {
         const Tok& t = peek(k);
         if (t.k != Tok::K::Name) return false;
+        static const std::set<std::string> statements = {"return", "delete", "new", "goto", "case", "default", "else", "do", "if", "while",
+                                                         "for", "switch", "break", "continue", "throw", "sizeof", "this", "using", "typedef",
+                                                         "true", "false", "nullptr", "NULL", "static_cast", "const_cast", "printf", "puts"};
+        if (statements.count(t.text)) return false;
         if (typeKeyword(t.text) && t.text != "struct" && t.text != "enum" && t.text != "union" && t.text != "class") return true;
         if (t.text == "struct" || t.text == "enum" || t.text == "class" || t.text == "union") return true;
         if (cNamedTypes().count(t.text) || stElementary().count(t.text)) return true;
-        if (knownTypeName(t.text)) return !(peek(k + 1).k == Tok::K::Punct && (peek(k + 1).text == "(" || peek(k + 1).text == "{") && isCpp()
-                                            && records_.count(t.text) && !(peek(k + 2).k == Tok::K::Punct && peek(k + 2).text == "*"));
+        if (knownTypeName(t.text)) return !(peek(k + 1).k == Tok::K::Punct && (peek(k + 1).text == "(" || peek(k + 1).text == "{"));
         if (t.text.rfind("std::", 0) == 0 && punct("<", k + 1)) return true;        // std::vector<int>, std::array<int, 3>
         // T x ; T *x ; T &x : un type du projet
         if (isFunction(t.text) || findVar(t.text) || enumerators_.count(t.text)) return false;
@@ -1559,7 +1588,9 @@ private:
         if (w == "std::array") {
             const CTP elem = typeName();
             expect(",", "dans std::array<T, N>");
+            ++templateArg_;
             const std::int64_t n = constantSize(peek().line);
+            --templateArg_;
             if (n <= 0 || n > 100000) fail("std::array<T, " + std::to_string(n) + "> : de 1 \xC3\xA0 100000 cases");
             closeAngle("apr\xC3\xA8s std::array<T, N");
             return arrayCT(elem, n, true);
@@ -1647,10 +1678,16 @@ private:
             if (t->isChar && t->k == CT::K::Int) t = tText();
             else {
                 if (t->k == CT::K::Void) fail("void* : un pointeur sans type n'est pas pris en charge (T* p)", d.line);
+                const bool constTarget = s == 0 && base.isConst;
                 t = pointerCT(t);
+                if (constTarget) {                                   // const int* p : montre tel quel
+                    CT c = *t;
+                    c.shown = "const " + c.shown;
+                    t = makeCT(std::move(c));
+                }
             }
         }
-        if (punct("(") && !parameter) {
+        if (punct("(") && !parameter && (punct(")", 1) || startsType(1) || word("void", 1) || punct("...", 1) || !isCpp())) {
             d.function = true;
             parameters(d.params, d.modes);
             d.type = t;
@@ -2536,6 +2573,14 @@ private:
         CTP type = d.type;
         const std::string pathMark = "\x01";                     // le nom ST de la variable, mis a la fin
         const bool classType = isRec(type) && !type->rec.empty() && record(type->rec)->cpp && hasConstructors(type->rec);
+        struct Expect {
+            std::vector<CTP>& v;
+            bool              on;
+            ~Expect() {
+                if (on) v.pop_back();
+            }
+        } expectGuard{expectPtr_, isPtr(type)};
+        if (isPtr(type)) expectPtr_.push_back(type);
         if (accept("=")) {
             hasInit = true;
             if (punct("{")) {
@@ -3678,7 +3723,9 @@ private:
         const std::string op = next().text;
         if (!lhs.lvalue) fail(op + " : une affectation vise une variable" + (lhs.st.empty() ? std::string{} : " (" + lhs.st + " n'en est pas une)"), line);
         if (lhs.isConst) fail((lhs.varC.empty() ? lhs.st : lhs.varC) + " est const : elle ne s'\xC3\xA9" "crit pas", line);
+        if (isPtr(lhs.ty)) expectPtr_.push_back(lhs.ty);
         X rhs = assignment(false);
+        if (isPtr(lhs.ty)) expectPtr_.pop_back();
         std::string text;
         if (plain) {
             if (isArr(lhs.ty) && !lhs.ty->stdArray && !(isText(lhs.ty))) fail("un tableau ne s'affecte pas en entier en C (une boucle, ou memcpy)", line);
@@ -3770,6 +3817,7 @@ private:
             const auto& ops = levels[static_cast<std::size_t>(level)];
             const std::string op = peek().text;
             if (std::find(ops.begin(), ops.end(), op) == ops.end()) break;
+            if (templateArg_ > 0 && (op == ">" || op == ">>")) break;          // std::array<int, N> : le > ferme le modele
             const int line = next().line;
             X rhs = op == "||" || op == "&&" ? conditional([&] { return logical(level + 1); }, ("dans la partie droite de " + op).c_str())
                                              : logical(level + 1);
@@ -5045,10 +5093,12 @@ private:
     std::vector<Frag>                      frags_;
     int                                    last_{1};
     std::set<std::string>                  allNames_;
+    std::map<std::string, std::set<std::string>> spellings_;   // un nom (majuscules) -> ses ecritures dans le script
     std::map<std::string, std::vector<FnInfo>> functions_;
     std::set<std::string>                  definedNow_;
     std::map<std::string, std::int64_t>    constInts_;
     std::vector<CTP>                       expectPtr_;          // le type du pointeur qui recoit (malloc)
+    int                                    templateArg_{0};     // dans std::array<T, N> : > ferme le modele
     std::string                            endPrefix_;          // un destructeur : celui du parent, avant END_FUNCTION
     Code                                   script_;
     struct Global {
@@ -5090,7 +5140,10 @@ Translation Translator::run() {
             toks_.push_back(end);
         }
         for (const auto& tk : toks_)
-            if (tk.k == Tok::K::Name) allNames_.insert(upperOf(tk.text));
+            if (tk.k == Tok::K::Name) {
+                allNames_.insert(upperOf(tk.text));
+                spellings_[upperOf(tk.text)].insert(tk.text);
+            }
         scanFunctions();
         cur_ = &script_;
         script_.scopes.emplace_back();
@@ -5492,6 +5545,7 @@ void showLocals(const Translation& t, std::string_view stFunction, std::vector<s
     const DebugInfo& d = *t.debug;
     std::vector<sim::LineProbe::Local> out;
     for (auto& l : locals) {
+        if (!stFunction.empty() && upperOf(l.name) == upperOf(stFunction)) continue;     // le resultat de la fonction (son nom ST)
         const DebugVar* v = findDebugVar(d, stFunction, l.name);
         if (v && v->hidden) continue;
         if (!v) {

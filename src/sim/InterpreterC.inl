@@ -39,6 +39,9 @@
         o->bound = true;
         o->map = array;
         o->intKey = flat;
+        // 1.50.1 (D1) : un grand tableau range serre (sim::packFrom() cases et plus) sort ses cases pour etre parcouru par
+        // un pointeur (items) - les memes objets que ses indices lisent ; au-dela d'un million, il reste serre.
+        if (array->packed && array->items.empty()) (void)unpack(*array, 1000000, nullptr);
         if (flat >= 0 && flat < static_cast<std::int64_t>(array->items.size())) {
             o->target = array->items[static_cast<std::size_t>(flat)];
             if (!t->element && array->items[static_cast<std::size_t>(flat)]) t->element = array->items[static_cast<std::size_t>(flat)]->type;
@@ -142,6 +145,7 @@
                 return core::Result<RV>(dialectError("CPTR_AT : un tableau est attendu"));
             std::int64_t flat = *i;
             if (array->type->bounds.size() == 1) flat -= array->type->bounds.front().first;
+            if (array->packed && array->items.empty()) (void)unpack(*array, 1000000, nullptr);   // 1.50.1 (D1) : range serre
             const auto count = static_cast<std::int64_t>(array->items.size());
             if (flat < 0 || flat > count)
                 return core::Result<RV>(dialectError("pointeur hors du tableau : la case " + std::to_string(*i) + " (" + cArrayWord(*array) + ")"));

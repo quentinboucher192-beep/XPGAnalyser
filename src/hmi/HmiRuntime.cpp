@@ -2831,6 +2831,7 @@ const Runtime::Prepared& Runtime::prepare(const std::string& code, const std::st
     // 1.10 : une locale peut etre d'un type IHM du projet (structure).
     auto parts = splitDeclarations(st, function, [this, generics](std::string_view type) {
         if (project_ && types::knownTypeName(*project_, type)) return true;   // 1.12.20 : un rappel nomme aussi
+        if (cscript::isScriptType(type)) return true;                          // 1.50.1 : une struct d'un script C/C++
         // 1.13.0 (seconde passe) : un generique de la fonction (T, LIST OF T) - son exemple dans la contrainte decide,
         // comme au controle (checkFunction) ; la valeur recue garde son type (T vaut ce qu'on lui passe).
         if (!generics || generics->empty()) return false;

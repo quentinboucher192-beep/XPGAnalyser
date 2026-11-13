@@ -225,27 +225,26 @@ std::string term(long long n, long long stride, const std::string& k) {
     return n == 0 ? step : std::to_string(n) + " + " + step;
 }
 
-// Le rang d'une case dans l'ordre des cases (ligne par ligne) : "i", "(i - 1)", "(i * 10 + j)".
+// Le rang d'une case dans l'ordre des cases (ligne par ligne) : "i", "(i - 1)", "(i * 10 + j)" ; 1.50.1 : trois ou quatre
+// indices (i, j, k, l), "((i * 8 + j) * 16 + k)".
 bool ordinalOf(const std::vector<Cell>& cells, std::string& out, std::string* why) {
     const std::size_t dims = cells.front().idx.size();
     if (dims == 0) return fail(why, "pas d'indice [*] : rien ne varie d'une case \xC3\xA0 l'autre");
-    if (dims > 2) return fail(why, "\xC3\xA0 la suite : deux indices au plus (i et j)");
-    long long lowI = cells.front().idx[0], lowJ = dims > 1 ? cells.front().idx[1] : 0, highJ = lowJ;
+    if (dims > 4) return fail(why, "\xC3\xA0 la suite : quatre indices au plus (i, j, k et l)");
+    std::vector<long long> low(cells.front().idx), high(cells.front().idx);
     for (const auto& c : cells) {
         if (c.idx.size() != dims) return fail(why, "des cases aux indices diff\xC3\xA9rents");
-        lowI = std::min(lowI, c.idx[0]);
-        if (dims > 1) {
-            lowJ = std::min(lowJ, c.idx[1]);
-            highJ = std::max(highJ, c.idx[1]);
+        for (std::size_t d = 0; d < dims; ++d) {
+            low[d] = std::min(low[d], c.idx[d]);
+            high[d] = std::max(high[d], c.idx[d]);
         }
     }
-    const std::string i = lowI == 0 ? std::string("i") : "(i - " + std::to_string(lowI) + ")";
-    if (dims == 1) {
-        out = i;
-        return true;
-    }
-    const std::string j = lowJ == 0 ? std::string("j") : "(j - " + std::to_string(lowJ) + ")";
-    out = "(" + i + " * " + std::to_string(highJ - lowJ + 1) + " + " + j + ")";
+    static const char* const kNames[] = {"i", "j", "k", "l"};
+    const auto name = [&](std::size_t d) {
+        return low[d] == 0 ? std::string(kNames[d]) : "(" + std::string(kNames[d]) + " - " + std::to_string(low[d]) + ")";
+    };
+    out = name(0);
+    for (std::size_t d = 1; d < dims; ++d) out = "(" + out + " * " + std::to_string(high[d] - low[d] + 1) + " + " + name(d) + ")";
     return true;
 }
 
@@ -334,7 +333,7 @@ Shape shape(const Project& p, const Variable& v, std::string_view pattern) {
             (void)ty::patternIndices(pt.substr(0, k + 3), relOf(v, leaves[c.leaves.front()]), mine, &upTo);
             const std::size_t here = mine.size() - static_cast<std::size_t>(next);
             path += "[";
-            for (std::size_t q = 0; q < here; ++q) path += (q ? ", " : "") + std::string(next == 0 ? "i" : next == 1 ? "j" : "k"), ++next;
+            for (std::size_t q = 0; q < here; ++q) path += (q ? ", " : "") + std::string(next == 0 ? "i" : next == 1 ? "j" : next == 2 ? "k" : "l"), ++next;
             path += "]";
             k += 2;
         }

@@ -118,6 +118,18 @@ void lesTypesND() {
         check(!types::parseSpec("ARRAY[0..3, 0..7, 9..1] OF INT", bad, &why) && why.find("haute avant la basse") != std::string::npos,
               "une borne fausse de la troisieme dimension : " + why);
     }
+    // une adresse par formule : i, j, k (et l) - les indices des [*] d'une case a trois dimensions
+    {
+        std::vector<long long> idx;
+        std::string cell, why;
+        check(types::patternIndices("[*]", "[1,2,3]", idx, &cell) && idx.size() == 3 && idx[2] == 3 && cell == "[1,2,3]",
+              "patternIndices : [*] couvre [1,2,3] (i, j, k)");
+        const std::string a = types::formulaAddress("%MW(1000 + 128 * i + 16 * j + k)", idx, &why);
+        check(a == "%MW1163", "%MW(1000 + 128 * i + 16 * j + k) pour [1,2,3] : " + a + " " + why);
+        why.clear();
+        check(types::formulaAddress("%MW(1000 + l)", idx, &why).empty() && why.find("l inconnu") != std::string::npos,
+              "l sur trois dimensions : dit (" + why + ")");
+    }
     // l'en-tete C du projet : la declaration a toutes ses dimensions
     {
         Project q;

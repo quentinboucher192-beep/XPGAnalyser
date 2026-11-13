@@ -166,6 +166,7 @@ protected:
         } else {
             help = d_.shape_.indices + "  \xC2\xB7  + \xE2\x88\x92 * / MOD ( )";
             if (d_.shape_.dims < 2) help += "  \xC2\xB7  deux dimensions : i et j";
+            else if (d_.shape_.dims == 2) help += "  \xC2\xB7  trois dimensions : i, j et k";     // 1.50.1
             help += "  \xC2\xB7  la formule : " + d_.formula_;
         }
         ctx.r.drawText({left, helpY_}, help, kSmall, d_.following_ && !d_.followWhy_.empty() ? ctx.theme.color.error : c.textMuted);
