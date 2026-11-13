@@ -4787,8 +4787,10 @@ private:
         // 1.50.1 : le C traduit - la case qui suit la derniere d'un tableau ne se lit pas ; un objet libere (delete) non plus.
         if (const auto array = o->map.lock(); array && !t && array->type && array->type->kind == TypeDesc::Kind::Array)
             return dialectError("pointeur hors du tableau : la case " + std::to_string(o->intKey) + " (le tableau en a "
-                                + std::to_string(array->items.size()) + ", de 0 \xC3\xA0 " + std::to_string(static_cast<std::int64_t>(array->items.size()) - 1) + ")");
+                                + std::to_string(cellCount(*array)) + ", de 0 \xC3\xA0 " + std::to_string(static_cast<std::int64_t>(cellCount(*array)) - 1) + ")");
         if (t && cFreedObj(*t)) return dialectError("pointeur vers un objet lib\xC3\xA9r\xC3\xA9 (delete) : il ne s'emploie plus");
+        if (const auto array = o->map.lock(); t && array && cFreedObj(*array))     // une case d'un tableau libere (delete[])
+            return dialectError("pointeur vers un tableau lib\xC3\xA9r\xC3\xA9 (delete) : il ne s'emploie plus");
         if (!t) return dialectError(o->type && o->type->kind == TypeDesc::Kind::Ref
                                         ? "r\xC3\xA9" "f\xC3\xA9rence vers une variable disparue (la variable locale d'une fonction termin\xC3\xA9" "e ?)"
                                         : "pointeur vers une variable disparue (la variable locale d'une fonction termin\xC3\xA9" "e ?)");

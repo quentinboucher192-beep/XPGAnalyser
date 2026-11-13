@@ -17658,7 +17658,7 @@ const std::vector<Topic>& topics() {
                          "g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA Variables IHM.", {}},
              {K::Heading, "Structures et tableaux", {}},
              {K::Paragraph, "Une variable peut \xC3\xAAtre une **structure** (un type IHM : voir \xC2\xAB Les "
-                         "types IHM \xC2\xBB) ou un **tableau** \xC3\xA0 une ou deux dimensions, de types "
+                         "types IHM \xC2\xBB) ou un **tableau** \xC3\xA0 une, deux dimensions ou plus, de types "
                          "simples ou de structures (voir \xC2\xAB Les tableaux et leurs "
                          "propri\xC3\xA9t\xC3\xA9s \xC2\xBB). Dans le tableau, la fl\xC3\xA8" "che la "
                          "d\xC3\xA9plie ; dans un script, une vue, un texte \xC3\xA0 trous, ses membres et "
@@ -18874,19 +18874,25 @@ const std::vector<Topic>& topics() {
          {}, "1.13.0"},
         // ---- Programmer  Variables et types / tableaux-ihm
         {"tableaux-ihm", "Les tableaux et leurs propri\xC3\xA9t\xC3\xA9s", "Programmer \xE2\x80\xBA Variables et types",
-         "Une variable IHM peut \xC3\xAAtre un tableau \xC3\xA0 une ou deux dimensions, aux bornes libres "
-         "(ARRAY[0..9] OF REAL, ARRAY[1..4] OF T_Four, ARRAY[0..3, 0..9] OF INT). Ses "
+         "Une variable IHM peut \xC3\xAAtre un tableau \xC3\xA0 une, deux dimensions ou plus, aux bornes libres "
+         "(ARRAY[0..9] OF REAL, ARRAY[1..4] OF T_Four, ARRAY[0..3, 0..9] OF INT, ARRAY[0..3, 0..7, 0..15] OF BOOL). Ses "
          "propri\xC3\xA9t\xC3\xA9s publiques - Length, Low, High, Rows, Columns, Bytes, Words... - se lisent "
          "partout : scripts, expressions, textes \xC3\xA0 trous.",
          {
              {K::Heading, "D\xC3\xA9" "clarer", {}},
              {K::Paragraph, "Le dialogue Nouvelle variable IHM (champ **Tableau**), ou la case Type "
-                         "\xE2\x80\xBA **Tableau...** : les bornes (`0..9` ; deux dimensions : `0..3, 0..9`) "
+                         "\xE2\x80\xBA **Tableau...** : les bornes (`0..9` ; deux dimensions : `0..3, 0..9` ; trois : "
+                         "`0..3, 0..7, 0..15`, et ainsi de suite - **+ Dimension** en ajoute une) "
                          "et le type des cases (un type simple ou un type IHM). Les bornes sont libres : "
-                         "`1..4`, `-5..5`. Au plus 100 000 cases.", {}},
+                         "`1..4`, `-5..5`.", {}},
+             {K::Bullet, "Pas de nombre de cases impos\xC3\xA9 : seule la m\xC3\xA9moire compte (1 Go au plus "
+                         "par variable ; un tableau trop grand est refus\xC3\xA9 avec son estimation). Au-del\xC3\xA0 "
+                         "de 100 000 cases, le tableau vit dans la m\xC3\xA9moire de l'IHM, rang\xC3\xA9 en bloc compact "
+                         "(un BOOL : 1 bit) : il ne se lie pas \xC3\xA0 un \xC3\xA9quipement.", {}, "1.50.1"},
              {K::Heading, "Les cases", {}},
-             {K::Bullet, "une dimension : `Consignes[i]` ; deux : `Matrice[i, j]` ; un tableau de structures "
-                         ": `Fours[f].Consigne` ;", {}},
+             {K::Bullet, "une dimension : `Consignes[i]` ; deux : `Matrice[i, j]` ; trois : `Cube[i, j, k]` ; un "
+                         "tableau de structures : `Fours[f].Consigne` ; moins d'indices que de dimensions donne "
+                         "une partie : `Matrice[1]` est une ligne, `Cube[1]` une couche ;", {}},
              {K::Bullet, "l'indice est une expression : `Consignes[i + 1]`, `Fours[Four_Choisi]` ;", {}},
              {K::Bullet, "un indice **hors des bornes** : la lecture rend la valeur par d\xC3\xA9" "faut, "
                          "l'\xC3\xA9" "criture est refus\xC3\xA9" "e, et le journal le dit une fois (Erreur, "
@@ -18896,7 +18902,7 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Elles se lisent comme des membres, en lecture seule (les \xC3\xA9" "crire est "
                          "refus\xC3\xA9) :", {}},
              {K::Table, "Propri\xC3\xA9t\xC3\xA9\tType\tCe qu'elle dit\nLength\tDINT\tle nombre de cases "
-                         "(toutes, pour deux dimensions : Rows \xC3\x97 Columns)\nSize\tDINT\tle m\xC3\xAAme "
+                         "(toutes, dans toutes les dimensions)\nSize\tDINT\tle m\xC3\xAAme "
                          "que Length, sous son autre nom\nMaxSize\tDINT\tla capacit\xC3\xA9 "
                          "d\xC3\xA9" "clar\xC3\xA9" "e ; un tableau a une taille fixe : \xC3\xA9gale "
                          "\xC3\xA0 Length\nLow, High\tDINT\tles bornes de la premi\xC3\xA8re "

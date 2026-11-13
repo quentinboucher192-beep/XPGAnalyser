@@ -132,6 +132,10 @@ void pointeurs() {
         {C, "DINT", "void echange(int *a, int *b) {\n  int t = *a;\n  *a = *b;\n  *b = t;\n}\nint x = 1, y = 2;\nechange(&x, &y);\nR = x * 10 + y;\n", "21",
          "echange(&x, &y)"},
         {C, "DINT", "int m[2][3] = {{1, 2, 3}, {4, 5, 6}};\nint *ligne = m[1];\nR = ligne[2] + *(ligne + 1) * 10;\n", "56", "un pointeur sur une ligne d'un tableau de tableaux"},
+        {C, "DINT", "int t[100000];\nint *p = t + 99990;\nfor (int i = 0; i < 10; i++) p[i] = i;\nint *q = &t[99999];\nR = *q + (int)(q - t) + t[99995];\n",
+         "100013", "un grand tableau (range serre par le moteur) parcouru par un pointeur"},
+        {Cpp, "DINT", "int* g = new int[200000];\nint* e = g + 199999;\n*e = 7;\nR = g[199999] + (int)(e - g);\ndelete[] g;\n", "200006",
+         "new int[200000] (range serre), le pointeur de sa derniere case"},
         {C, "DINT", "int add(int a, int b) { return a + b; }\nint mul(int a, int b) { return a * b; }\ntypedef int (*Op)(int, int);\nint (*op)(int, int) = add;\n"
                     "int r1 = op(2, 3);\nop = &mul;\nOp autre = add;\nR = r1 * 100 + op(2, 3) * 10 + autre(1, 1);\n",
          "562", "un pointeur de fonction (et son typedef)"},

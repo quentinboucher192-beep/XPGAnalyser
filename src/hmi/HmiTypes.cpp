@@ -2016,12 +2016,16 @@ std::string privateUse(const Project& p, std::string_view typeName, std::string_
                 if (declaredBy) *declaredBy = fullName(*t);
                 return m.name + " est priv\xC3\xA9 dans " + t->name + " : seules ses m\xC3\xA9thodes le lisent et l'\xC3\xA9" "crivent";
             }
-    const HmiType* owner = nullptr;
-    if (const HmiFunction* f = effectiveMethod(p, fullName(*ty), member, &owner); f && owner && f->visibility == Visibility::Private) {
-        if (declaredBy) *declaredBy = fullName(*owner);
-        return f->name + " est une m\xC3\xA9thode priv\xC3\xA9" "e de " + owner->name + " : seules ses m\xC3\xA9thodes l'appellent";
-    }
-    return {};
+    // 1.50.1 : DES SURCHARGES - sans les arguments, on ne sait pas laquelle sera prise : le nom n'est refuse que si
+    // TOUTES ses surcharges sont privees ; melangees, le moteur juge celle qu'il choisit (callMethod : privateWhy).
+    const auto all = effectiveMethods(p, fullName(*ty), member);
+    if (all.empty()) return {};
+    for (const auto& om : all)
+        if (!om.method || !om.owner || om.method->visibility != Visibility::Private) return {};
+    const HmiType* owner = all.front().owner;
+    const HmiFunction* f = all.front().method;
+    if (declaredBy) *declaredBy = fullName(*owner);
+    return f->name + " est une m\xC3\xA9thode priv\xC3\xA9" "e de " + owner->name + " : seules ses m\xC3\xA9thodes l'appellent";
 }
 } // namespace
 

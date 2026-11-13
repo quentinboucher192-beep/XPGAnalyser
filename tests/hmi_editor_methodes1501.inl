@@ -309,6 +309,20 @@ void methodes1501() {
               "renommer une surcharge : les deux Regler deviennent Ajuster " + why);
         (void)stack.undo();
         check(hmi::methodById(p, r1)->name == "Regler" && hmi::methodById(p, r2)->name == "Regler", "Ctrl+Z : Regler et Regler");
+        // Le prive d'une methode surchargee (le controle des scripts, sans les arguments) : refuse seulement si TOUTES
+        // ses surcharges sont privees ; melangees, le moteur juge celle qu'il prend.
+        const auto setVis = [&](Id id, bool priv) {
+            for (auto& m : p.hmiType(pompeId)->methods)
+                if (m.id == id) m.visibility = priv ? hmi::Visibility::Private : hmi::Visibility::Public;
+        };
+        setVis(r1, true);
+        const std::string mixed = hmi::types::privateMemberUse(p, "T_Pompe", "Regler");
+        setVis(r2, true);
+        const std::string allPriv = hmi::types::privateMemberUse(p, "T_Pompe", "Regler");
+        setVis(r1, false);
+        setVis(r2, false);
+        check(mixed.empty() && allPriv.find("m\xC3\xA9thode priv\xC3\xA9" "e de T_Pompe") != std::string::npos,
+              "le priv\xC3\xA9 des surcharges : une priv\xC3\xA9" "e sur deux, permis au contr\xC3\xB4le ; les deux, refus\xC3\xA9 (" + allPriv + ")");
     }
 
     // ---- 3. LA SIGNATURE D'UNE VIRTUELLE SUIT DANS SES REDEFINITIONS ----

@@ -42,9 +42,12 @@
         // 1.50.1 (D1) : un grand tableau range serre (sim::packFrom() cases et plus) sort ses cases pour etre parcouru par
         // un pointeur (items) - les memes objets que ses indices lisent ; au-dela d'un million, il reste serre.
         if (array->packed && array->items.empty()) (void)unpack(*array, 1000000, nullptr);
-        if (flat >= 0 && flat < static_cast<std::int64_t>(array->items.size())) {
-            o->target = array->items[static_cast<std::size_t>(flat)];
-            if (!t->element && array->items[static_cast<std::size_t>(flat)]) t->element = array->items[static_cast<std::size_t>(flat)]->type;
+        // plus grand : la case sortie seule (cellAt), tenue tant qu'un pointeur la vise (pin)
+        if (flat >= 0 && flat < static_cast<std::int64_t>(cellCount(*array))) {
+            ObjRef cell = cellAt(*array, static_cast<std::size_t>(flat));
+            pin(cell);
+            o->target = cell;
+            if (!t->element && cell) t->element = cell->type;
         }
         return RV{{}, o};
     }
@@ -79,7 +82,8 @@
     }
 
     static std::string cArrayWord(const Obj& array) {
-        return "le tableau de " + std::to_string(array.items.size()) + " case" + (array.items.size() > 1 ? "s" : "");
+        const std::size_t n = cellCount(array);
+        return "le tableau de " + std::to_string(n) + " case" + (n > 1 ? "s" : "");
     }
 
     // p avance de n cases (n < 0 : recule).
@@ -88,7 +92,7 @@
         if (auto array = p->map.lock(); array && array->type && array->type->kind == TypeDesc::Kind::Array) {
             if (cFreedObj(*array)) return dialectError("pointeur vers un tableau lib\xC3\xA9r\xC3\xA9 (delete) : il ne s'emploie plus");
             const std::int64_t to = p->intKey + n;
-            const auto count = static_cast<std::int64_t>(array->items.size());
+            const auto count = static_cast<std::int64_t>(cellCount(*array));
             if (to < 0 || to > count)
                 return dialectError("pointeur hors du tableau : la case " + std::to_string(to) + " (" + cArrayWord(*array) + ", de 0 \xC3\xA0 "
                                     + std::to_string(count - 1) + ")");
@@ -146,7 +150,7 @@
             std::int64_t flat = *i;
             if (array->type->bounds.size() == 1) flat -= array->type->bounds.front().first;
             if (array->packed && array->items.empty()) (void)unpack(*array, 1000000, nullptr);   // 1.50.1 (D1) : range serre
-            const auto count = static_cast<std::int64_t>(array->items.size());
+            const auto count = static_cast<std::int64_t>(cellCount(*array));
             if (flat < 0 || flat > count)
                 return core::Result<RV>(dialectError("pointeur hors du tableau : la case " + std::to_string(*i) + " (" + cArrayWord(*array) + ")"));
             return core::Result<RV>(cPointerAt(array, flat));
