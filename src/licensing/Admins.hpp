@@ -77,15 +77,8 @@ bool parseAdminList(std::string_view json, AdminList& out, std::string* why);
 // L'empreinte d'une cle, lue a voix haute : les 24 premiers hexadecimaux (majuscules) du SHA-256 de la cle publique,
 // en 6 groupes de 4 : "B7E2 48A9 1D3C 90F6 5A2E C471". Vide : pas une cle.
 [[nodiscard]] std::string fingerprint(std::string_view keyHex);
-// 1.49.0 : L'INVITATION PAR CODES (docs/ADMINS.md, par. 12). Le code de confirmation d'une cle (6 chiffres, l'Admin
-// classique l'affiche, l'admin+ le tape) : n = uint64 big-endian des 8 premiers octets de
-// SHA-256("xpg-confirmation-1" || cle publique brute, 32 octets) ; code = n % 1000000, sur 6 chiffres, << 123 456 >>.
-// L'essai du service (service/test/invitations.test.js) refait le meme calcul : une valeur connue est verifiee des deux cotes. Vide : pas
-// une cle.
-[[nodiscard]] std::string confirmationCode(std::string_view keyHex);
-// Ce qu'a tape l'admin+ (<< 123 456 >>, << 123456 >>, des espaces) est-il le code de cette cle ? Faux : autre chose que
-// 6 chiffres, ou d'autres chiffres.
-[[nodiscard]] bool confirmationMatches(std::string_view keyHex, std::string_view typed);
+// 1.49.0 : L'INVITATION PAR CODES (docs/ADMINS.md, par. 4 et 12). 1.51.0 : plus de code de confirmation (6 chiffres) -
+// le code d'invitation suffit : la cle qui le sert est inscrite, l'Admin+ la signe d'office.
 // Un code d'invitation tape (ou lu d'invitation.txt) remis en forme : << INV-XXXX-XXXX >> (8 caracteres de l'alphabet
 // Crockford sans I L O U ; minuscules, espaces, tirets toleres ; O lu 0, I et L lus 1). Vide : pas un code.
 [[nodiscard]] std::string normalizeInvitationCode(std::string_view typed);

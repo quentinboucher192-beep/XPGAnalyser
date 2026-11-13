@@ -1,0 +1,138 @@
+(* GenererModes
+
+   Ecrit la section qui fait tourner les modes. Elle se lit en deux moitiees,
+   et la separation est le coeur de l'affaire :
+
+     DFB_MODE_MANAGER decide QUEL mode est actif. C'est de la donnee - une
+     condition, une priorite, un temps minimum - et ca vit dans un DDT.
+
+     CETTE SECTION decide CE QUI TOURNE dans chaque mode. C'est une suite de
+     noms de sous-routines dans un ORDRE, et une suite ordonnee de noms ne se
+     range pas dans un DDT. C'est du code, et il faut donc l'ecrire.
+
+   Ce que la macro produit :
+
+       GestionModes(Count := 4, CycleMs := 20, Def := Modes, ...);
+
+       CASE Modes_Courant OF
+           0:  Init_Systeme;
+               Acquisition;
+           1:  Acquisition;
+               Production;
+       END_CASE;
+
+   Relancee, elle REECRIT la section entiere plutot que d'y ajouter : une
+   section de modes a moitie ancienne et a moitie nouvelle est pire que les
+   deux. *)
+
+section  := Ask('section', 'Nom de la section des modes', 'Modes');
+table    := Ask('table', 'Nom du tableau de modes', 'Modes');
+instance := Ask('instance', 'Nom de l instance du gestionnaire', 'GestionModes');
+courant  := Ask('courant', 'Variable du mode courant', 'Mode_Courant');
+combien  := AskNumber('combien', 'Combien de modes ?', 1, 16, '4');
+cycle    := Ask('cycle', 'Periode de la tache, en ms', '20');
+AskNow();
+
+n := REAL_TO_INT(combien);
+
+(* Les noms et les appels, un tour de questions par mode. Poser les seize d'un
+   coup quand on en veut quatre remplirait l'ecran de champs vides. *)
+FOR m := 0 TO n - 1 DO
+    cle := 'm' + DINT_TO_STRING(m);
+    nomMode := Ask(cle + 'nom', 'Mode ' + DINT_TO_STRING(m) + ' : son nom',
+                   'MODE' + DINT_TO_STRING(m));
+    appels := Ask(cle + 'sr', 'Mode ' + DINT_TO_STRING(m)
+                  + ' : sous-routines a appeler, dans l ordre, separees par des virgules', '');
+END_FOR;
+AskNow();
+
+IF NOT TypeExists('ST_MODE_Def') AND LibHasItem('ST_MODE_Def') THEN
+    LibImport('ST_MODE_Def');
+END_IF;
+IF NOT PouExists('DFB_MODE_MANAGER') AND LibHasItem('DFB_MODE_MANAGER') THEN
+    LibImport('DFB_MODE_MANAGER');
+END_IF;
+
+IF NOT VariableExists(table) THEN
+    AddVariable(table, 'ARRAY[0..15] OF ST_MODE_Def', 'Global', '');
+END_IF;
+IF NOT VariableExists(instance) THEN
+    AddVariable(instance, 'DFB_MODE_MANAGER', 'Global', '');
+END_IF;
+IF NOT VariableExists(courant) THEN
+    AddVariable(courant, 'INT', 'Global', '');
+END_IF;
+IF NOT VariableExists(courant + '_Prec') THEN
+    AddVariable(courant + '_Prec', 'INT', 'Global', '');
+END_IF;
+IF NOT VariableExists(courant + '_Ms') THEN
+    AddVariable(courant + '_Ms', 'DINT', 'Global', '');
+END_IF;
+
+IF NOT SectionExists(section) THEN
+    AddSection(section, 'MAST', 'ST', '');
+END_IF;
+
+ClearSection(section);
+AppendToSection(section, '(* Section generee par la macro GenererModes.');
+AppendToSection(section, '   Les conditions d entree se calculent AILLEURS et');
+AppendToSection(section, '   arrivent ici par ' + table + '[i].Req. *)');
+AppendToSection(section, '');
+AppendToSection(section, instance + '(Count := ' + DINT_TO_STRING(n)
+    + ', CycleMs := ' + cycle + ', Def := ' + table
+    + ', Current := ' + courant + ', PrevMode := ' + courant + '_Prec'
+    + ', CurrentMs := ' + courant + '_Ms);');
+AppendToSection(section, '');
+AppendToSection(section, 'CASE ' + courant + ' OF');
+
+vides := 0;
+FOR m := 0 TO n - 1 DO
+    cle := 'm' + DINT_TO_STRING(m);
+    nomMode := Ask(cle + 'nom', '', 'MODE' + DINT_TO_STRING(m));
+    appels := Ask(cle + 'sr', '', '');
+
+    AppendToSection(section, '    ' + DINT_TO_STRING(m) + ':  (* ' + nomMode + ' *)');
+
+    depart := 0;
+    poses := 0;
+    WHILE depart < LEN(appels) DO
+        virgule := FIND(appels, ',', depart);
+        IF virgule < 0 THEN
+            sr := MID(appels, depart);
+            depart := LEN(appels);
+        ELSE
+            sr := MID(appels, depart, virgule - depart);
+            depart := virgule + 1;
+        END_IF;
+        WHILE LEN(sr) > 0 AND MID(sr, 0, 1) = ' ' DO
+            sr := MID(sr, 1);
+        END_WHILE;
+
+        IF sr <> '' THEN
+            IF NOT SectionExists(sr) THEN
+                (* Ecrite quand meme, et signalee : refuser tout le mode parce
+                   qu'une SR n est pas encore creee obligerait a les creer dans
+                   un ordre impose. *)
+                Warn('mode ' + nomMode + ' : la sous-routine ' + sr
+                     + ' n existe pas encore');
+            ELSIF NOT IsSubroutine(sr) THEN
+                Warn('mode ' + nomMode + ' : ' + sr + ' est une SECTION. Elle tourne '
+                     + 'deja a chaque cycle, l appeler ici la ferait tourner deux fois.');
+            END_IF;
+            AppendToSection(section, '        ' + sr + ';');
+            poses := poses + 1;
+        END_IF;
+    END_WHILE;
+
+    IF poses = 0 THEN
+        AppendToSection(section, '        ;   (* rien a faire dans ce mode *)');
+        vides := vides + 1;
+    END_IF;
+END_FOR;
+
+AppendToSection(section, 'END_CASE;');
+
+IF vides > 0 THEN
+    Warn(DINT_TO_STRING(vides) + ' mode(s) n appellent aucune sous-routine.');
+END_IF;
+Log('section ' + section + ' generee pour ' + DINT_TO_STRING(n) + ' mode(s)');

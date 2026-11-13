@@ -1435,15 +1435,15 @@ OpResult Workspace::sendAdminInstaller(const std::string& device, const std::str
     }
     const std::string name = trimmed(adminName);
     const std::string code = adm::normalizeInvitationCode(invitationCode);
-    // 1.49.0 : avec un code d'invitation, l'installateur XPG Admin le demande ; l'Admin montre ensuite 6 chiffres a dire.
+    // 1.49.0 : avec un code d'invitation, l'installateur XPG Admin le demande. 1.51.0 : plus de demande, ni de 6 chiffres -
+    // le code accepte, il est admin (l'Admin+ signe sa cle d'office).
     const std::string text = (name.empty() ? std::string("Bonjour,") : "Bonjour " + clip(name, 60) + ",") +
-                             (code.empty() ? std::string("\n\nL'admin+ t'invite \xC3\xA0 devenir admin des licences. Installe XPG License Manager Admin (le fichier joint), "
-                                                         "puis choisis \xC2\xAB Demander \xC3\xA0 devenir admin \xC2\xBB et lis ton empreinte \xC3\xA0 l'admin+ au t\xC3\xA9l\xC3\xA9phone.\n\n")
-                                           : "\n\nL'admin+ t'invite \xC3\xA0 devenir admin des licences. Installe XPG Admin (le fichier joint).\n\n" +
-                                                 invitationSentence(code) +
-                                                 ".\n\nAu premier lancement, l'Admin te montre un code de 6 chiffres : dis-le \xC3\xA0 l'admin+ au t\xC3\xA9l\xC3\xA9phone.\n\n") +
+                             "\n\nL'admin+ t'invite \xC3\xA0 devenir admin des licences. Installe XPG Admin (le fichier joint).\n\n" +
+                             (code.empty() ? std::string("L'admin+ t'envoie ton code d'invitation : tape-le dans l'installateur. ")
+                                           : invitationSentence(code) + ".\n\nTape-le dans l'installateur (la page \xC2\xAB Code d'invitation \xC2\xBB) : d\xC3\xA8s qu'il est "
+                                                                        "accept\xC3\xA9, tu es admin, sans rien d'autre \xC3\xA0 faire. ") +
                              "Le lien du fichier vaut 48 heures.";
-    OpResult r = sendMessageToPc(device, code.empty() ? "Installer XPG License Manager Admin" : "Installer XPG Admin", text, {f}, "admin");
+    OpResult r = sendMessageToPc(device, "Installer XPG Admin", text, {f}, "admin");
     if (r.ok) r.details.insert(r.details.begin(), "Fichier : " + whence + ".");
     if (r.ok && !code.empty()) r.details.push_back(invitationSentence(code) + " : dans le message.");
     return r;

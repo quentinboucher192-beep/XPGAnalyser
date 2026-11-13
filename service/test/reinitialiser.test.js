@@ -5,7 +5,7 @@
 // -----------------------------------------------------------------------------
 //  Un monde d'essai par les routes ordinaires (licences, PC actives, une
 //  Decouverte, une demande, un etat de poste, l'archive, un admin et son
-//  trousseau, une demande d'admin, une invitation, le journal, un message et son
+//  trousseau, un admin inscrit par son code, une invitation, le journal, un message et son
 //  fichier joint, une version et son fichier, le catalogue et une commande PAYEE,
 //  le releve des statistiques), puis : les refus (un admin, sans le mot, sans
 //  sauvegarde, une liste qui n'est pas vide ou pas plus recente, le registre
@@ -91,7 +91,7 @@ after(async () => {
 });
 
 describe("un monde d'essai, par les routes ordinaires", () => {
-    it("le certificat, le registre (signe par l'admin), une revocation, un admin, son trousseau, une demande d'admin, une invitation, le journal", async () => {
+    it("le certificat, le registre (signe par l'admin), une revocation, un admin, son trousseau, un admin inscrit (1.51.0), une invitation, le journal", async () => {
         ok(await appel(A, "PUT", "/admin/certificat", { cle: editeur, corps: { certificat: certificat(editeur, cleService) } }));
         ok(await appel(A, "PUT", "/admin/registre", { cle: editeur, corps: { registre: registre(3, editeur) } }));
         ok(await appel(A, "PUT", "/admin/revocations", { cle: editeur, corps: { revocations: revocations(2, [{ license_id: "XPG-2026-Z0001" }]) } }));
@@ -100,7 +100,10 @@ describe("un monde d'essai, par les routes ordinaires", () => {
         // l'admin signe le registre (le droit << offres >>) : la remise a zero devra le re-signer par l'editeur
         ok(await appel(A, "PUT", "/admin/registre", { cle: lea, corps: { registre: registre(4, lea) } }));
         ok(await appel(A, "PUT", "/admin/trousseau", { cle: editeur, corps: { cle: lea.hex, scelle: "c2NlbGzDqQ==" } }));
-        ok(await appel(A, "POST", "/v1/admins/demande", { cle: nouvelleCle(), corps: { nom: "Hugo Essai", courriel: "hugo@exemple.invalid", pc: "PC-HUGO", poste: hasard(16), logiciel: "1.49.0" } }), 201);
+        // 1.51.0 : un admin inscrit par son code d'invitation (pas encore signe par l'Admin+), et une invitation pas servie
+        const invHugo = await appel(A, "POST", "/admin/admins/invitation", { cle: editeur, corps: { nom: "Hugo Essai", courriel: "hugo@exemple.invalid", profil: "Admin LV1" } });
+        ok(invHugo, 201);
+        ok(await appel(A, "POST", "/v1/admins/inscription", { cle: nouvelleCle(), corps: { invitation: invHugo.json.code, pc: "PC-HUGO", poste: hasard(16), logiciel: "1.51.0" } }), 201);
         ok(await appel(A, "POST", "/admin/admins/invitation", { cle: editeur, corps: { nom: "Nina Essai", courriel: "nina@exemple.invalid", profil: "Admin LV1" } }), 201);
         const texte = JSON.stringify({ quand: now(), action: "connexion", objet: "", resume: "s'est connectée", detail: {}, nonce: hasard(16) });
         ok(await appel(A, "POST", "/admin/journal", { cle: lea, corps: { entree: texte, signature: lea.signer(Buffer.from("XPG-JOURNAL-1\n" + texte)).toString("hex") } }), 201);
@@ -285,7 +288,7 @@ describe("la remise a zero", () => {
         assert.equal((await appel(A, "GET", "/admin/demandes?depuis=0", { cle: editeur })).json.demandes.length, 0);
         assert.equal((await appel(A, "GET", "/admin/commandes", { cle: editeur })).json.commandes.length, 0);
         assert.equal((await appel(A, "GET", "/admin/archive", { cle: editeur })).json.fichiers.length, 0);
-        assert.equal((await appel(A, "GET", "/admin/admins/demandes?toutes=1", { cle: editeur })).json.demandes.length, 0);
+        assert.equal((await appel(A, "GET", "/admin/admins/inscrits", { cle: editeur })).json.inscrits.length, 0);
         const adm = await appel(A, "GET", "/admin/admins", { cle: editeur });
         assert.deepEqual(adm.json.admins, []);
         assert.equal(adm.json.numero, avant.admins + 1);

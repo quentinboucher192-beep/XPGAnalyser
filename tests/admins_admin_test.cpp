@@ -4,8 +4,9 @@
 //  Worker lance sur ce poste (tests/service_local.hpp)
 // -----------------------------------------------------------------------------
 //  L'admin+ (une cle d'ESSAI de l'editeur) et un second poste (un autre dossier)
-//  qui demande a devenir admin : la meme empreinte des deux cotes, l'acceptation
-//  avec un profil, le role << admin >>, la cle de synchro recue par le trousseau,
+//  qui devient admin par son code d'invitation (1.51.0 : plus de demande - l'admin+
+//  l'invite avec un profil, le code l'inscrit, l'admin+ le signe d'office), le role
+//  << admin >>, la cle de synchro recue par le trousseau,
 //  une licence signee par l'admin (le fichier porte la liste des admins d'abord)
 //  qu'un PC client (qui ne croit que la cle de l'editeur) installe, valide ; un
 //  droit qui manque (les offres) : refuse ici, et 403 par le service si on force ;
@@ -265,37 +266,9 @@ int main(int argc, char** argv) {
         check(plus.journalWaiting() == 0, "le journal a envoyer est parti avec les appels au service");
     }
 
-    std::printf("-- devenir admin\n");
-    std::string fp;
+    std::printf("-- devenir admin : l'admin+ invite Lea avec un profil, son code l'inscrit (1.51.0 : plus de demande)\n");
     gui::Workspace leaWs(U(root / "lea2"));   // le poste de Lea : un autre dossier, aucune cle
     {
-        check(leaWs.role() == gui::Role::None, "le poste de Lea : pas encore admin");
-        check(leaWs.serviceConfigure(svc.url()).ok, "le poste de Lea : l'adresse du service");
-        check(!leaWs.requestAdmin("", "lea@exemple.invalid", &fp).ok, "sans nom : refuse");
-        const auto r = leaWs.requestAdmin(kLea, "lea@exemple.invalid", &fp);
-        check(r.ok && !fp.empty(), "la demande pour devenir admin envoyee (" + r.text() + ")");
-        leaWs.reload();
-        check(leaWs.role() == gui::Role::Pending && leaWs.adminKey().present && leaWs.adminKey().fingerprint == fp,
-              "en attente : sa cle d'admin, l'empreinte montree est la sienne");
-        check(fp.size() == 29 && fp == adm::fingerprint(leaWs.adminKey().keyHex), "l'empreinte : 6 groupes de 4 (" + fp + ")");
-        check(!leaWs.signer() && has(leaWs.whyNot("licence_creer"), "attend"), "en attente : rien ne signe (" + leaWs.whyNot("licence_creer") + ")");
-        check(!leaWs.createKey("essai", true).ok, "un poste qui a une cle d'admin ne cree pas la cle de l'editeur");
-        check(!leaWs.syncKeyCreate(nullptr).ok && !ar::hasSyncKey(U(root / "lea2")), "ni sa propre cle de synchro (celle de l'admin+ viendra)");
-        std::string state;
-        check(leaWs.adminRequestState(state).ok && state == "attente", "l'etat de la demande : attente");
-        gui::AdminRefresh x;
-        (void)leaWs.refreshAdminState(nullptr, &x);
-        check(x.requestState == "attente" && !x.accepted, "le regard en attente : toujours en attente");
-    }
-
-    std::printf("-- l'admin+ accepte, avec un profil\n");
-    {
-        std::vector<gui::AdminRequest> reqs;
-        const auto p = plus.pendingAdminRequests(reqs);
-        check(p.ok && reqs.size() == 1 && reqs[0].fingerprint == fp && !reqs[0].fingerprintMismatch && reqs[0].name == kLea &&
-                  reqs[0].key == leaWs.adminKey().keyHex && reqs[0].machine.size() == 32,
-              "l'admin+ voit la demande, avec la MEME empreinte (" + p.text() + ")");
-        check(!leaWs.pendingAdminRequests(reqs).ok, "un poste en attente ne voit pas les demandes d'admin");
         adm::Profile lv2;
         lv2.name = "Admin LV2";
         lv2.rights = {"licence_creer", "licence_prolonger", "demandes", "codes", "options"};
@@ -303,22 +276,48 @@ int main(int argc, char** argv) {
         adm::Profile all;
         all.name = adm::kAllRightsProfile;
         check(!plus.saveProfile(all).ok, "le profil << Tous les droits >> ne se modifie pas");
-        check(!plus.acceptAdmin(leaWs.adminKey().keyHex, "Admin LV2", nullptr, false).ok, "sans << J'ai verifie l'empreinte >> : refuse");
-        check(!plus.acceptAdmin(leaWs.adminKey().keyHex, "Profil inconnu").ok, "un profil inconnu : refuse");
-        const auto a = plus.acceptAdmin(leaWs.adminKey().keyHex, "Admin LV2");
-        check(a.ok && has(a.text(), "trousseau"), "accepte : la liste signee, publiee, la cle de synchro deposee (" + a.text() + ")");
+        std::string code;
+        check(!plus.inviteAdmin(kLea, "lea@exemple.invalid", "Profil inconnu", code).ok && code.empty(), "un profil inconnu : pas d'invitation");
+        const auto inv = plus.inviteAdmin(kLea, "lea@exemple.invalid", "Admin LV2", code);
+        check(inv.ok && !code.empty(), "l'invitation de Lea (" + inv.text() + ")");
+        check(leaWs.role() == gui::Role::None, "le poste de Lea : pas encore admin");
+        check(leaWs.serviceConfigure(svc.url()).ok, "le poste de Lea : l'adresse du service");
+        bool refused = false;
+        check(!leaWs.joinWithInvitation("", &refused).ok && refused && !leaWs.adminKey().present, "sans code : refuse, pas de cle");
+        const auto r = leaWs.joinWithInvitation(code, &refused);
+        check(r.ok && !refused && r.output == "inscrit", "son code accepte : inscrite (" + r.text() + ")");
+        leaWs.reload();
+        check(leaWs.role() == gui::Role::Pending && leaWs.adminKey().present, "ajout en cours : sa cle d'admin");
+        check(leaWs.adminKey().fingerprint.size() == 29 && leaWs.adminKey().fingerprint == adm::fingerprint(leaWs.adminKey().keyHex),
+              "l'empreinte de sa cle : 6 groupes de 4 (Mon compte)");
+        check(!leaWs.signer() && has(leaWs.whyNot("licence_creer"), "d'office"), "pas encore signee : rien ne signe (" + leaWs.whyNot("licence_creer") + ")");
+        check(!leaWs.createKey("essai", true).ok, "un poste qui a une cle d'admin ne cree pas la cle de l'editeur");
+        check(!leaWs.syncKeyCreate(nullptr).ok && !ar::hasSyncKey(U(root / "lea2")), "ni sa propre cle de synchro (celle de l'admin+ viendra)");
+        std::string state;
+        check(leaWs.joinState(state).ok && state == "inscrit", "ou en est sa cle : inscrite");
+        gui::AdminRefresh x;
+        (void)leaWs.refreshAdminState(nullptr, &x);
+        check(x.joinState == "inscrit" && !x.admitted, "le regard : pas encore signee");
+    }
+
+    std::printf("-- l'admin+ la signe d'office, avec le profil de l'invitation\n");
+    {
+        check(!leaWs.admitInvitedAdmins().ok, "un poste en cours d'ajout ne signe personne");
+        const auto a = plus.admitInvitedAdmins();
+        check(a.ok && has(a.text(), "cl\xC3\xA9 de synchro d\xC3\xA9pos\xC3\xA9" "e"), "signee : la liste signee, publiee, la cle de synchro deposee (" + a.text() + ")");
         plus.reload();
         const adm::Admin* l = plus.adminList() ? plus.adminList()->byKey(leaWs.adminKey().keyHex) : nullptr;
         check(plus.adminList() && plus.adminList()->number == 1 && l && l->active() && l->profile == "Admin LV2" && l->rights.size() == 5 && l->name == kLea,
               "la liste n. 1 : Lea, son profil, ses 5 droits");
-        check(!plus.acceptAdmin(leaWs.adminKey().keyHex, "Admin LV2").ok, "deja admin : plus de demande a accepter");
+        std::vector<std::string> names;
+        check(plus.admitInvitedAdmins(&names).ok && names.empty(), "deja admin : plus rien a signer");
     }
 
     std::printf("-- l'admin : son role, ses droits, la cle de synchro par le trousseau\n");
     {
         gui::AdminRefresh x;
         const auto r = leaWs.refreshAdminState(nullptr, &x);
-        check(x.accepted && x.syncKeyReceived && x.listAdopted, "le regard : acceptee, la liste gardee, la cle de synchro recue (" + r.text() + ")");
+        check(x.admitted && x.syncKeyReceived && x.listAdopted, "le regard : admise, la liste gardee, la cle de synchro recue (" + r.text() + ")");
         leaWs.reload();
         check(leaWs.role() == gui::Role::Admin && leaWs.signer() && leaWs.signer()->keyId() == leaWs.adminKey().id && leaWs.myRights().size() == 5,
               "admin : sa cle signe, ses 5 droits");
@@ -329,8 +328,8 @@ int main(int argc, char** argv) {
         leaWs.reload();
         check(s.ok && leaWs.hasRegistry() && leaWs.registry().number == plus.registry().number, "l'archive recue : le registre de l'editeur (" + s.text() + ")");
         check(!leaWs.saveProfile(adm::Profile{"Pas permis", {}, false, 0}).ok, "les profils : l'admin+ seulement");
-        std::vector<gui::AdminRequest> reqs;
-        check(!leaWs.pendingAdminRequests(reqs).ok && !leaWs.acceptAdmin(leaWs.adminKey().keyHex, "Admin LV2").ok, "gerer les admins : l'admin+ seulement");
+        std::string none;
+        check(!leaWs.admitInvitedAdmins().ok && !leaWs.inviteAdmin("Autre Essai", "", "Admin LV2", none).ok && none.empty(), "gerer les admins : l'admin+ seulement");
         gui::AdminsView view;
         const auto v = leaWs.serviceAdmins(view);
         check(v.ok && view.number == 1 && view.admins.size() == 1 && view.admins[0].admin.name == kLea && view.editors.size() == 1,
@@ -427,11 +426,11 @@ int main(int argc, char** argv) {
         check(v.problems.empty(), "toutes les lignes verifiees, la chaine entiere" + problemsOf(v));
         const auto* creer = rowOf(v, "licence_creer", kLea);
         const auto* ajout = rowOf(v, "admin_ajouter", "admin+");
-        const auto* demande = rowOf(v, "demande_admin", "le service");
         check(creer && creer->verified && creer->line.parsed.object == "XPG-ESSAI-LEA-1" && creer->line.key == leaWs.adminKey().keyHex,
               "la licence de Lea : sa ligne, signee par sa cle");
-        check(ajout && ajout->verified && ajout->level == adm::Level::Critical && ajout->notify, "l'ajout de l'admin : par l'admin+, critique");
-        check(demande && demande->verified, "la demande d'admin : ecrite par le service (sa cle certifiee)");
+        check(ajout && ajout->verified && ajout->level == adm::Level::Critical && ajout->notify && has(ajout->line.parsed.summary, "code d'invitation"),
+              "l'ajout de l'admin : par l'admin+ (code d'invitation), critique");
+        check(rowOf(v, "demande_admin", "le service") == nullptr, "1.51.0 : plus de ligne << demande_admin >> (plus de demande)");
         check(rowOf(v, "options", kLea) != nullptr, "l'option changee par Lea");
         const auto alerts = plus.newAlerts();
         check(!alerts.empty() && plus.newAlerts().empty(), "les alertes : une fois (" + std::to_string(alerts.size()) + ")");
@@ -577,11 +576,13 @@ int main(int argc, char** argv) {
     {
         gui::Workspace hugo(U(root / "hugo"));
         check(hugo.serviceConfigure(svc.url()).ok, "le poste de Hugo");
-        check(hugo.requestAdmin("Hugo Essai", "hugo@exemple.invalid", nullptr).ok, "sa demande");
-        hugo.reload();
         const std::vector<std::string> rights{"licence_creer"};
-        const auto a = plus.acceptAdmin(hugo.adminKey().keyHex, "", &rights);
-        check(a.ok, "accepte avec des droits choisis (sans profil) (" + a.text() + ")");
+        std::string code;
+        check(plus.inviteAdmin("Hugo Essai", "hugo@exemple.invalid", "", code, nullptr, &rights).ok, "son invitation, des droits choisis (sans profil)");
+        check(hugo.joinWithInvitation(code).ok, "son code : inscrit");
+        hugo.reload();
+        const auto a = plus.admitInvitedAdmins();
+        check(a.ok && has(a.text(), "Hugo Essai"), "signe d'office avec ses droits (" + a.text() + ")");
         (void)hugo.refreshAdminState(nullptr, nullptr);
         hugo.reload();
         check(hugo.role() == gui::Role::Admin && hugo.myRights() == rights && hugo.archiveSync(true, false).ok, "Hugo : admin, l'archive recue");

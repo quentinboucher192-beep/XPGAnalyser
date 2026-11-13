@@ -1,0 +1,4 @@
+# Watch tables.
+# table ; name ; owning POU
+# entry ; symbol   (une variable de l'automate)
+# ihm ; name      (une variable de l'IHM : jamais exportee vers Control Expert)

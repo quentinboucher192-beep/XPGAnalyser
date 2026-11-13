@@ -151,7 +151,7 @@ namespace project::ladder {
         bool simple{ true };                                // la variable se lit / s'ecrit telle quelle
         std::shared_ptr<const sim::Expression> expr;        // compare ; contact a indice calcule
         std::shared_ptr<sim::Program> stmt;                 // operate ; bobine a indice calcule (X[i] := __LDP0)
-        int jumpTarget{ -1 };
+        int jumpTarget{ -1 };                               // l'unite ou reprendre
         bool broken{ false };                               // illisible : ne conduit pas
     };
 
@@ -159,7 +159,8 @@ namespace project::ladder {
         std::shared_ptr<const sim::Expression> expr;        // entree : son parametre effectif
         bool simple{ true };
         std::shared_ptr<sim::Program> assign;               // sortie a indice calcule
-        bool connected{ false };                            // un fil arrive (entree) ou part (sortie)
+        bool connected{ false };                            // un fil arrive (entree)
+        bool en{ false }, eno{ false };                     // EN / ENO
     };
 
     struct CBlock {
@@ -175,7 +176,14 @@ namespace project::ladder {
         int rows{ 0 }, cols{ 0 };
         std::vector<CCell> cells;                           // rows * cols
         std::vector<CBlock> blocks;                         // tries par colonne puis rangee
-        std::string label;
+    };
+
+    // UNE LIGNE (un « reseau » au sens de Control Expert) : des rangees reliees
+    // entre elles (liaisons verticales, blocs sur plusieurs rangees). Les lignes
+    // s'executent de haut en bas, chacune entiere avant la suivante.
+    struct CUnit {
+        int network{ 0 }, r0{ 0 }, r1{ 0 };
+        std::vector<std::size_t> blocks;                    // dans CNetwork::blocks
     };
 
     class Program {
@@ -184,26 +192,54 @@ namespace project::ladder {
         std::string              name;
         std::vector<std::string> warnings;
         std::vector<CNetwork>    networks;
+        std::vector<CUnit>       units;
         int                      edges{ 0 };
     };
 
     const std::vector<std::string>& compileWarnings(const Program& p) noexcept { return p.warnings; }
     const Diagram& diagramOf(const Program& p) noexcept { return p.diagram; }
     const std::string& sectionNameOf(const Program& p) noexcept { return p.name; }
+    int edgeMemories(const Program& p) noexcept { return p.edges; }
+
+    namespace {
+        bool isFormal(const Pin& p, std::string_view f) { return sameName(trimmed(p.formal), f); }
+    } // namespace
 
     core::Result<std::shared_ptr<const Program>> compile(const Diagram& d, std::string sectionName) {
         auto prog = std::make_shared<Program>();
         prog->diagram = d;
         prog->name = std::move(sectionName);
-        auto warn = [&](int net, std::string what) {
-            prog->warnings.push_back("r\xC3\xA9seau " + std::to_string(net + 1) + " : " + std::move(what));
+        auto warn = [&](int net, int row, std::string what) {
+            prog->warnings.push_back((d.networks.size() > 1 ? "r\xC3\xA9seau " + std::to_string(net + 1) + ", " : std::string{})
+                                     + "rang\xC3\xA9" "e " + std::to_string(row + 1) + " : " + std::move(what));
         };
 
-        std::unordered_map<std::string, int> labels;   // etiquette (majuscules) -> reseau
-        for (std::size_t ni = 0; ni < d.networks.size(); ++ni)
-            for (const auto& row : d.networks[ni].cells)
-                for (const auto& c : row)
-                    if (c.kind == Kind::Label && !c.name.empty()) labels.emplace(upper(trimmed(c.name)), static_cast<int>(ni));
+        // Les lignes de chaque reseau, dans l'ordre ; une etiquette -> sa ligne.
+        std::unordered_map<std::string, int> labels;
+        for (std::size_t ni = 0; ni < d.networks.size(); ++ni) {
+            const auto& n = d.networks[ni];
+            const int rows = n.rows();
+            auto joined = [&](int r) {          // la rangee r est-elle reliee a r + 1 ?
+                if (r + 1 >= rows) return false;
+                for (auto l : n.links[static_cast<std::size_t>(r)]) if (l) return true;
+                for (const auto& b : n.blocks) if (b.y <= r && r + 1 < b.y + b.height) return true;
+                return false;
+            };
+            int r = 0;
+            while (r < rows) {
+                CUnit u;
+                u.network = static_cast<int>(ni);
+                u.r0 = r;
+                while (joined(r)) ++r;
+                u.r1 = r;
+                const int index = static_cast<int>(prog->units.size());
+                for (int k = u.r0; k <= u.r1; ++k)
+                    for (const auto& c : n.cells[static_cast<std::size_t>(k)])
+                        if (c.kind == Kind::Label && !c.name.empty()) labels.emplace(upper(trimmed(c.name)), index);
+                prog->units.push_back(std::move(u));
+                ++r;
+            }
+        }
 
         for (std::size_t ni = 0; ni < d.networks.size(); ++ni) {
             const auto& n = d.networks[ni];
@@ -220,13 +256,13 @@ namespace project::ladder {
                     switch (cell.kind) {
                     case Kind::Contact: {
                         const auto name = trimmed(cell.name);
-                        if (name.empty()) { cc.broken = true; warn(net, "un contact sans variable"); break; }
+                        if (name.empty()) { cc.broken = true; warn(net, r, "un contact sans variable"); break; }
                         if (cell.contact == ContactType::Rising || cell.contact == ContactType::Falling) cc.edge = prog->edges++;
                         cc.simple = simplePath(name);
                         if (!cc.simple) {
                             auto e = sim::parseExpression(name);
                             if (e) cc.expr = *e;
-                            else { cc.broken = true; warn(net, "contact " + name + " : " + e.error().message()); }
+                            else { cc.broken = true; warn(net, r, "contact " + name + " : " + e.error().message()); }
                         }
                         break;
                     }
@@ -234,41 +270,38 @@ namespace project::ladder {
                         if (cell.coil == CoilType::Rising || cell.coil == CoilType::Falling) cc.edge = prog->edges++;
                         if (cell.coil == CoilType::Halt) break;
                         const auto name = trimmed(cell.name);
-                        if (name.empty()) { cc.broken = true; warn(net, "une bobine sans variable"); break; }
+                        if (name.empty()) { cc.broken = true; warn(net, r, "une bobine sans variable"); break; }
                         if (cell.coil == CoilType::Call) break;
                         cc.simple = simplePath(name);
                         if (!cc.simple) {
-                            auto s = sim::parse(name + " := " + std::string(kPinPrefix) + "0;", prog->name);
-                            if (s) cc.stmt = *s;
-                            else { cc.broken = true; warn(net, "bobine " + name + " : " + s.error().message()); }
+                            auto st = sim::parse(name + " := " + std::string(kPinPrefix) + "0;", prog->name);
+                            if (st) cc.stmt = *st;
+                            else { cc.broken = true; warn(net, r, "bobine " + name + " : " + st.error().message()); }
                         }
                         break;
                     }
                     case Kind::Compare: {
                         auto e = sim::parseExpression(trimmed(cell.text));
                         if (e) cc.expr = *e;
-                        else { cc.broken = true; warn(net, "comparaison [" + cell.text + "] : " + e.error().message()); }
+                        else { cc.broken = true; warn(net, r, "comparaison [" + cell.text + "] : " + e.error().message()); }
                         break;
                     }
                     case Kind::Operate: {
                         auto text = trimmed(cell.text);
                         if (!text.empty() && text.back() != ';') text += ';';
-                        auto s = sim::parse(text, prog->name);
-                        if (s) cc.stmt = *s;
-                        else { cc.broken = true; warn(net, "op\xC3\xA9ration [" + cell.text + "] : " + s.error().message()); }
+                        auto st = sim::parse(text, prog->name);
+                        if (st) cc.stmt = *st;
+                        else { cc.broken = true; warn(net, r, "op\xC3\xA9ration [" + cell.text + "] : " + st.error().message()); }
                         break;
                     }
                     case Kind::Jump: {
                         const auto it = labels.find(upper(trimmed(cell.name)));
-                        if (it == labels.end()) { cc.broken = true; warn(net, "saut vers " + cell.name + " : \xC3\xA9tiquette introuvable"); }
+                        if (it == labels.end()) { cc.broken = true; warn(net, r, "saut vers " + cell.name + " : \xC3\xA9tiquette introuvable"); }
                         else cc.jumpTarget = it->second;
                         break;
                     }
-                    case Kind::Label:
-                        if (cn.label.empty()) cn.label = cell.name;
-                        break;
                     case Kind::Raw:
-                        warn(net, "un \xC3\xA9l\xC3\xA9ment inconnu (" + cell.element + ") ne conduit pas");
+                        warn(net, r, "un \xC3\xA9l\xC3\xA9ment inconnu (" + cell.element + ") ne conduit pas");
                         break;
                     default: break;
                     }
@@ -284,7 +317,7 @@ namespace project::ladder {
                 const auto& b = n.blocks[bi];
                 CBlock cb;
                 cb.index = bi;
-                cb.instance = !trimmed(b.instance).empty();
+                cb.instance = !b.isFunction();
                 cb.pins.resize(b.pins.size());
                 std::size_t inputs = 0;
                 for (std::size_t pi = 0; pi < b.pins.size(); ++pi) {
@@ -292,8 +325,10 @@ namespace project::ladder {
                     auto& cp = cb.pins[pi];
                     const int row = b.pinRow(pi);
                     const auto eff = trimmed(pin.effective);
+                    cp.en = pin.dir == PinDir::In && isFormal(pin, "EN");
+                    cp.eno = pin.dir == PinDir::Out && isFormal(pin, "ENO");
                     if (pin.dir != PinDir::Out) {
-                        ++inputs;
+                        if (!cp.en) ++inputs;
                         // Un fil arrive : la case a gauche de la broche, ou une liaison verticale a sa frontiere.
                         if (row >= 0 && row < cn.rows) {
                             const int left = b.x - 1;
@@ -302,26 +337,24 @@ namespace project::ladder {
                                 const auto& lc = n.cells[static_cast<std::size_t>(row)][static_cast<std::size_t>(left)];
                                 cp.connected = (lc.kind != Kind::Empty && lc.kind != Kind::Covered) || n.link(row, b.x)
                                     || (row > 0 && n.link(row - 1, b.x));
-                                // la sortie d'un autre bloc
-                                for (const auto& o : n.blocks)
-                                    if (o.x + o.width == b.x && row >= o.y && row < o.y + o.height) cp.connected = true;
+                                for (const auto& o : n.blocks)   // la sortie d'un autre bloc
+                                    if (o.x + o.cols == b.x && row > o.y && row < o.y + o.height) cp.connected = true;
                             }
                         }
                         if (!eff.empty()) {
                             auto e = sim::parseExpression(eff);
                             if (e) cp.expr = *e;
-                            else { cb.broken = true; warn(net, "bloc " + b.type + ", " + pin.formal + " : " + e.error().message()); }
+                            else { cb.broken = true; warn(net, b.y, "bloc " + b.type + ", " + pin.formal + " : " + e.error().message()); }
                         }
                     }
                     if (pin.dir != PinDir::In) {
-                        if (cb.resultPin < 0 && pin.dir == PinDir::Out) cb.resultPin = static_cast<int>(pi);
-                        cp.connected = true;
-                        if (!eff.empty()) {
+                        if (cb.resultPin < 0 && pin.dir == PinDir::Out && !cp.eno) cb.resultPin = static_cast<int>(pi);
+                        if (!eff.empty() && !cp.eno) {
                             cp.simple = simplePath(eff);
                             if (!cp.simple) {
-                                auto s = sim::parse(eff + " := " + std::string(kPinPrefix) + "0;", prog->name);
-                                if (s) cp.assign = *s;
-                                else { cb.broken = true; warn(net, "bloc " + b.type + ", " + pin.formal + " : " + s.error().message()); }
+                                auto st = sim::parse(eff + " := " + std::string(kPinPrefix) + "0;", prog->name);
+                                if (st) cp.assign = *st;
+                                else { cb.broken = true; warn(net, b.y, "bloc " + b.type + ", " + pin.formal + " : " + st.error().message()); }
                             }
                         }
                     }
@@ -335,11 +368,20 @@ namespace project::ladder {
                     }
                     auto e = sim::parseExpression(text);
                     if (e) cb.fn = *e;
-                    else { cb.broken = true; warn(net, "bloc " + b.type + " : " + e.error().message()); }
+                    else { cb.broken = true; warn(net, b.y, "bloc " + b.type + " : " + e.error().message()); }
                 }
                 cn.blocks.push_back(std::move(cb));
             }
             prog->networks.push_back(std::move(cn));
+        }
+        // Chaque bloc dans la ligne de sa rangee du haut.
+        for (auto& u : prog->units) {
+            const auto& cn = prog->networks[static_cast<std::size_t>(u.network)];
+            const auto& n = d.networks[static_cast<std::size_t>(u.network)];
+            for (std::size_t k = 0; k < cn.blocks.size(); ++k) {
+                const int y = n.blocks[cn.blocks[k].index].y;
+                if (y >= u.r0 && y <= u.r1) u.blocks.push_back(k);
+            }
         }
         return std::shared_ptr<const Program>(std::move(prog));
     }
@@ -360,12 +402,13 @@ namespace project::ladder {
             const RunOptions& opt;
             RunResult         result;
             int               network{ 0 };
+            int               row{ 0 };
 
             void fail(std::string message) {
                 sim::Diagnostic d;
                 d.severity = sim::Diagnostic::Severity::Error;
                 d.message = std::move(message);
-                d.line = static_cast<std::uint32_t>(network + 1);
+                d.line = static_cast<std::uint32_t>(row + 1);
                 d.section = prog.name;
                 env.report(d);
                 result.diagnostics.push_back(std::move(d));
@@ -377,7 +420,7 @@ namespace project::ladder {
                 sim::Diagnostic d;
                 d.severity = sim::Diagnostic::Severity::Warning;
                 d.message = std::move(message);
-                d.line = static_cast<std::uint32_t>(network + 1);
+                d.line = static_cast<std::uint32_t>(row + 1);
                 d.section = prog.name;
                 env.report(d);
                 result.diagnostics.push_back(std::move(d));
@@ -410,7 +453,7 @@ namespace project::ladder {
             }
 
             bool writeValue(const std::string& name, const std::shared_ptr<sim::Program>& assign, const sim::Value& v) {
-                if (opt.captureCoil.size() && sameName(name, opt.captureCoil)) {
+                if (!opt.captureCoil.empty() && sameName(name, opt.captureCoil)) {
                     result.captured = true;
                     result.value = result.value || v.isTruthy();
                     return true;
@@ -559,17 +602,37 @@ namespace project::ladder {
                 }
             }
 
-            bool block(const Network& n, const CNetwork& cn, const CBlock& cb, const std::vector<std::uint8_t>& node,
-                       std::vector<std::uint8_t>& pending, LiveBlock* live) {
+            // Les noeuds d'une ligne : [rangee - r0][frontiere].
+            struct Grid {
+                int r0{ 0 }, rows{ 0 }, stride{ 0 };
+                std::vector<std::uint8_t> node, pending;
+                [[nodiscard]] bool has(int r, int b) const { return r >= r0 && r < r0 + rows && b >= 0 && b < stride; }
+                std::uint8_t& at(std::vector<std::uint8_t>& v, int r, int b) {
+                    return v[static_cast<std::size_t>((r - r0) * stride + b)];
+                }
+            };
+
+            bool block(const Network& n, const CBlock& cb, Grid& g, LiveBlock* live) {
                 const auto& b = n.blocks[cb.index];
-                const int stride = cn.cols + 1;
-                auto nodeAt = [&](int row, int boundary) -> bool {
-                    if (row < 0 || row >= cn.rows || boundary < 0 || boundary > cn.cols) return false;
-                    return node[static_cast<std::size_t>(row * stride + boundary)] != 0;
-                };
+                auto nodeAt = [&](int r, int boundary) -> bool { return g.has(r, boundary) && g.at(g.node, r, boundary) != 0; };
                 if (live) live->pinValues.assign(b.pins.size(), std::string{});
                 if (!count()) return false;
-                const bool en = b.enEno ? nodeAt(b.y, b.x) : true;
+                row = b.y;
+
+                // EN : son fil, son parametre ; absent ou non cable : vrai.
+                bool en = true;
+                for (std::size_t pi = 0; pi < b.pins.size(); ++pi) {
+                    const auto& cp = cb.pins[pi];
+                    if (!cp.en) continue;
+                    if (cp.expr) {
+                        auto r = sim::evaluate(*cp.expr, env);
+                        if (!r) { fail(b.type + ".EN : " + r.error().message()); return false; }
+                        en = r->isTruthy();
+                    }
+                    else if (cp.connected) en = nodeAt(b.pinRow(pi), b.x);
+                    if (b.pins[pi].inverted) en = !en;
+                    if (live) live->pinValues[pi] = en ? "TRUE" : "FALSE";
+                }
                 if (live) live->ran = en && !cb.broken;
                 if (!en || cb.broken) return true;
 
@@ -579,7 +642,7 @@ namespace project::ladder {
                 for (std::size_t pi = 0; pi < b.pins.size(); ++pi) {
                     const auto& pin = b.pins[pi];
                     const auto& cp = cb.pins[pi];
-                    if (pin.dir == PinDir::Out) continue;
+                    if (pin.dir == PinDir::Out || cp.en) continue;
                     sim::Value v;
                     bool given = true;
                     if (cp.expr) {
@@ -591,10 +654,11 @@ namespace project::ladder {
                     else { given = false; v = sim::Value::boolean(false); }
                     if (pin.inverted) v = sim::Value::boolean(!v.isTruthy());
                     values.push_back(v);
-                    if (given) named.emplace_back(pin.formal, v);
+                    if (given) named.emplace_back(trimmed(pin.formal), v);
                     if (live && given) live->pinValues[pi] = v.display();
                 }
 
+                const int to = b.x + b.cols;
                 auto output = [&](std::size_t pi, sim::Value v) -> bool {
                     const auto& pin = b.pins[pi];
                     const auto& cp = cb.pins[pi];
@@ -602,10 +666,8 @@ namespace project::ladder {
                     if (live) live->pinValues[pi] = v.display();
                     const auto eff = trimmed(pin.effective);
                     if (!eff.empty() && !writeValue(eff, cp.assign, v)) return false;
-                    const int row = b.pinRow(pi);
-                    const int to = b.x + b.width;
-                    if (row >= 0 && row < cn.rows && to <= cn.cols && v.isTruthy())
-                        pending[static_cast<std::size_t>(row * stride + to)] = 1;
+                    const int r = b.pinRow(pi);
+                    if (g.has(r, to) && v.isTruthy()) g.at(g.pending, r, to) = 1;
                     return true;
                 };
 
@@ -617,9 +679,9 @@ namespace project::ladder {
                         return false;
                     }
                     for (std::size_t pi = 0; pi < b.pins.size(); ++pi) {
-                        if (b.pins[pi].dir == PinDir::In) continue;
+                        if (b.pins[pi].dir == PinDir::In || cb.pins[pi].eno) continue;
                         sim::Value v;
-                        if (!env.read(inst + "." + b.pins[pi].formal, v)) continue;
+                        if (!env.read(inst + "." + trimmed(b.pins[pi].formal), v)) continue;
                         if (!output(pi, v)) return false;
                     }
                 }
@@ -630,85 +692,87 @@ namespace project::ladder {
                     if (cb.resultPin >= 0 && !output(static_cast<std::size_t>(cb.resultPin), *r)) return false;
                 }
                 // ENO : vrai quand le bloc s'est execute.
-                if (b.enEno && b.y >= 0 && b.y < cn.rows && b.x + b.width <= cn.cols)
-                    pending[static_cast<std::size_t>(b.y * stride + b.x + b.width)] = 1;
+                for (std::size_t pi = 0; pi < b.pins.size(); ++pi)
+                    if (cb.pins[pi].eno && !output(pi, sim::Value::boolean(true))) return false;
                 return true;
             }
 
-            // Un reseau. Rend le reseau suivant (un saut), -1 : le suivant dans l'ordre, -2 : arreter.
-            int runNetwork(int ni) {
-                network = ni;
-                const auto& n = prog.diagram.networks[static_cast<std::size_t>(ni)];
-                const auto& cn = prog.networks[static_cast<std::size_t>(ni)];
-                const int stride = cn.cols + 1;
-                std::vector<std::uint8_t> node(static_cast<std::size_t>(cn.rows * stride), 0);
-                std::vector<std::uint8_t> pending(node.size(), 0);
-                std::vector<std::uint8_t> cellLive(static_cast<std::size_t>(cn.rows * std::max(1, cn.cols)), 0);
+            // Une ligne. Rend l'unite ou reprendre (un saut), -1 : la suivante, -2 : arreter.
+            int runUnit(int ui) {
+                const auto& u = prog.units[static_cast<std::size_t>(ui)];
+                network = u.network;
+                row = u.r0;
+                const auto& n = prog.diagram.networks[static_cast<std::size_t>(u.network)];
+                const auto& cn = prog.networks[static_cast<std::size_t>(u.network)];
+                // une ligne vide : rien a faire
+                bool any = !u.blocks.empty();
+                for (int r = u.r0; r <= u.r1 && !any; ++r)
+                    for (const auto& c : n.cells[static_cast<std::size_t>(r)])
+                        if (c.kind != Kind::Empty && c.kind != Kind::Covered) { any = true; break; }
+                if (!any) return -1;
+
+                Grid g;
+                g.r0 = u.r0;
+                g.rows = u.r1 - u.r0 + 1;
+                g.stride = cn.cols + 1;
+                g.node.assign(static_cast<std::size_t>(g.rows * g.stride), 0);
+                g.pending.assign(g.node.size(), 0);
                 LiveNetwork* live = nullptr;
                 if (opt.recordLive) {
-                    auto& nets = state.live.networks;
-                    if (nets.size() < prog.networks.size()) nets.resize(prog.networks.size());
-                    live = &nets[static_cast<std::size_t>(ni)];
+                    live = &state.live.networks[static_cast<std::size_t>(u.network)];
                     live->ran = true;
-                    live->blocks.assign(n.blocks.size(), LiveBlock{});
                 }
-                for (int r = 0; r < cn.rows; ++r) pending[static_cast<std::size_t>(r * stride)] = 1;   // le rail de gauche
+                for (int r = u.r0; r <= u.r1; ++r) g.at(g.pending, r, 0) = 1;   // le rail de gauche
 
                 int jump = -1;
                 bool stop = false;
                 std::size_t nextBlock = 0;
                 for (int b = 0; b <= cn.cols && result.ok; ++b) {
-                    for (int r = 0; r < cn.rows; ++r)
-                        node[static_cast<std::size_t>(r * stride + b)] = pending[static_cast<std::size_t>(r * stride + b)];
+                    for (int r = u.r0; r <= u.r1; ++r) g.at(g.node, r, b) = g.at(g.pending, r, b);
                     // les liaisons verticales a cette frontiere : un groupe de rangees, un seul noeud
-                    for (int r = 0; r < cn.rows;) {
-                        int s = r;
-                        std::uint8_t v = node[static_cast<std::size_t>(r * stride + b)];
-                        while (r + 1 < cn.rows && n.link(r, b)) {
+                    for (int r = u.r0; r <= u.r1;) {
+                        const int s = r;
+                        std::uint8_t v = g.at(g.node, r, b);
+                        while (r + 1 <= u.r1 && n.link(r, b)) {
                             ++r;
-                            v = static_cast<std::uint8_t>(v | node[static_cast<std::size_t>(r * stride + b)]);
+                            v = static_cast<std::uint8_t>(v | g.at(g.node, r, b));
                         }
-                        for (int k = s; k <= r; ++k) node[static_cast<std::size_t>(k * stride + b)] = v;
+                        for (int k = s; k <= r; ++k) g.at(g.node, k, b) = v;
                         ++r;
                     }
                     // les blocs de cette colonne
-                    while (nextBlock < cn.blocks.size() && n.blocks[cn.blocks[nextBlock].index].x <= b) {
-                        const auto& cb = cn.blocks[nextBlock];
+                    while (nextBlock < u.blocks.size() && n.blocks[cn.blocks[u.blocks[nextBlock]].index].x <= b) {
+                        const auto& cb = cn.blocks[u.blocks[nextBlock]];
                         if (n.blocks[cb.index].x == b) {
                             LiveBlock* lb = live ? &live->blocks[cb.index] : nullptr;
-                            if (!block(n, cn, cb, node, pending, lb)) break;
+                            if (!block(n, cb, g, lb)) break;
                         }
                         ++nextBlock;
                     }
                     if (!result.ok || b >= cn.cols) continue;
                     // les elements de cette colonne, de haut en bas
-                    for (int r = 0; r < cn.rows && result.ok; ++r) {
+                    for (int r = u.r0; r <= u.r1 && result.ok; ++r) {
                         const auto& rowCells = n.cells[static_cast<std::size_t>(r)];
                         if (b >= static_cast<int>(rowCells.size())) continue;
                         const auto& c = rowCells[static_cast<std::size_t>(b)];
                         if (c.kind == Kind::Empty || c.kind == Kind::Covered || c.kind == Kind::Raw) continue;
                         if (n.blockAt(r, b) >= 0) continue;
+                        row = r;
                         const auto& cc = cn.cells[static_cast<std::size_t>(r * cn.cols + b)];
-                        const bool in = node[static_cast<std::size_t>(r * stride + b)] != 0;
+                        const bool in = g.at(g.node, r, b) != 0;
                         bool out = false;
                         std::uint8_t lv = 0;
                         if (!cell(c, cc, in, out, lv, jump, stop)) break;
-                        cellLive[static_cast<std::size_t>(r * cn.cols + b)] = lv;
+                        if (live) live->cell[static_cast<std::size_t>(r)][static_cast<std::size_t>(b)] = lv;
                         const int end = std::min(cn.cols, b + std::max(1, c.width));
-                        if (out) pending[static_cast<std::size_t>(r * stride + end)] = 1;
+                        if (out) g.at(g.pending, r, end) = 1;
                     }
                 }
                 ++result.networksRun;
-                if (live) {
-                    live->node.assign(static_cast<std::size_t>(cn.rows), std::vector<std::uint8_t>(static_cast<std::size_t>(stride), 0));
-                    live->cell.assign(static_cast<std::size_t>(cn.rows), std::vector<std::uint8_t>(static_cast<std::size_t>(std::max(0, cn.cols)), 0));
-                    for (int r = 0; r < cn.rows; ++r) {
-                        for (int b = 0; b < stride; ++b)
-                            live->node[static_cast<std::size_t>(r)][static_cast<std::size_t>(b)] = node[static_cast<std::size_t>(r * stride + b)];
-                        for (int c = 0; c < cn.cols; ++c)
-                            live->cell[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)] = cellLive[static_cast<std::size_t>(r * cn.cols + c)];
-                    }
-                }
+                if (live)
+                    for (int r = u.r0; r <= u.r1; ++r)
+                        for (int b = 0; b < g.stride; ++b)
+                            live->node[static_cast<std::size_t>(r)][static_cast<std::size_t>(b)] = g.at(g.node, r, b);
                 if (!result.ok || stop) return -2;
                 return jump;
             }
@@ -717,40 +781,37 @@ namespace project::ladder {
     } // namespace
 
     RunResult run(const Program& program, sim::Environment& env, State& state, const RunOptions& options) {
-        Runner run{ program, env, state, options, {}, 0 };
+        Runner runner{ program, env, state, options, {}, 0, 0 };
         if (options.recordLive) {
             ++state.live.pass;
             auto& nets = state.live.networks;
             nets.resize(program.networks.size());
-            for (auto& n : nets) n.ran = false;
+            for (std::size_t i = 0; i < nets.size(); ++i) {
+                const auto& cn = program.networks[i];
+                auto& ln = nets[i];
+                ln.ran = false;
+                ln.node.assign(static_cast<std::size_t>(cn.rows), std::vector<std::uint8_t>(static_cast<std::size_t>(cn.cols) + 1, 0));
+                ln.cell.assign(static_cast<std::size_t>(cn.rows), std::vector<std::uint8_t>(static_cast<std::size_t>(cn.cols), 0));
+                ln.blocks.assign(program.diagram.networks[i].blocks.size(), LiveBlock{});
+            }
         }
-        const int count = static_cast<int>(program.networks.size());
-        int ni = 0;
+        const int count = static_cast<int>(program.units.size());
+        int ui = 0;
         int jumps = 0;
-        while (ni >= 0 && ni < count) {
-            const int next = run.runNetwork(ni);
+        while (ui >= 0 && ui < count) {
+            const int next = runner.runUnit(ui);
             if (next == -2) break;
             if (next >= 0) {
                 if (++jumps > 100000) {
-                    run.network = ni;
-                    run.fail("too many jumps in one pass (a loop between labels?)");
+                    runner.fail("too many jumps in one pass (a loop between labels?)");
                     break;
                 }
-                ni = next;
+                ui = next;
                 continue;
             }
-            ++ni;
+            ++ui;
         }
-        // Un reseau saute ou apres un RETURN : rien n'y est sous tension.
-        if (options.recordLive)
-            for (std::size_t i = 0; i < state.live.networks.size(); ++i) {
-                auto& ln = state.live.networks[i];
-                if (ln.ran) continue;
-                for (auto& r : ln.node) std::fill(r.begin(), r.end(), 0);
-                for (auto& r : ln.cell) std::fill(r.begin(), r.end(), 0);
-                for (auto& b : ln.blocks) b.ran = false;
-            }
-        return std::move(run.result);
+        return std::move(runner.result);
     }
 
     core::Result<bool> evaluateCondition(const Program& program, sim::Environment& env, State& state,

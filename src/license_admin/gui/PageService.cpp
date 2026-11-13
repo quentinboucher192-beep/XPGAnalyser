@@ -1111,7 +1111,7 @@ void ServicePage::syncEnabled() {
     const bool key = ws().signer() != nullptr;
     const bool plus = ws().key().present;
     // 1.47.0 : gerer le service - l'admin+, ou un admin sous derogation ; un poste sans role (ou en attente) tape encore
-    // l'adresse s'il n'a recu aucune connexion signee (sa demande d'admin en a besoin).
+    // l'adresse s'il n'a recu aucune connexion signee (son inscription par code d'invitation en a besoin).
     const bool manage = ws().mayManageService();
     const Role role = ws().role();
     const bool urlFree = manage || role == Role::None || role == Role::Pending;

@@ -1,0 +1,6 @@
+# Task sections, in execution order.
+# name ; task ; language ; order ; activation ; logic ; file
+Reports_TC ; MAST ; ST ; 0 ;  ;  ; Reports_TC.st
+Reports_TM_TA ; MAST ; ST ; 1 ;  ;  ; Reports_TM_TA.st
+Horloge ; MAST ; ST ; 2 ;  ;  ; Horloge.st
+Grafcets ; MAST ; ST ; 3 ;  ;  ; Grafcets.st

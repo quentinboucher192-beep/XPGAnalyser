@@ -153,6 +153,13 @@ Les grafcets de ce type de projet **ne sont pas des sections SFC** : chacun est 
 - **Contrôles** : pas d'étape initiale, étape sans sortie non finale, étape jamais atteinte, numéros en double, variable inexistante dans une réceptivité… (`src/project/GrafcetCheck.*`).
 - **En simulation** : étapes actives et leur durée, transitions validées, actions en cours ; commandes du moteur (initialiser, forcer une étape) ; historique des franchissements.
 
+**1.51.0 — les GRAFCET natifs de Control Expert (sections SFC)** se dessinent, se modifient et se simulent (`src/project/Sfc.hpp`, `SfcEdit.hpp`, `SfcDiagram.hpp`, `src/sim/SfcRun.hpp`, `src/app/SfcPane.hpp`) :
+
+- **Où** : ouvrir la section SFC ; le bouton **Schéma** de sa barre montre le dessin (enfoncé, par défaut) ou la lecture en texte (relâché). « Aller à » et les références croisées choisissent l'élément dans le dessin.
+- **Dessin** : la grille de Control Expert (chaque objet dans sa case) peinte par la même vue que les grafcets en ST : étapes (initiale : double carré ; macro-étape), transitions et réceptivités (variable, section ST, section LD), divergences et convergences en OU (trait simple) et en ET (double trait), sauts, liens (et leurs coudes), textes, actions à droite de l'étape (qualificatif N, S, R, L, D, P, P1, P0, DS…, durée, variable ou section) ; zoom, défilement, mini-carte, chercher (Ctrl+F), export PNG.
+- **Modifier** : + Étape (une transition et une étape sous la sélection, ce qui est dessous descend), Divergence OU, Divergence ET, Saut, Réceptivité (une variable, `NOT` variable, ou une expression qui part dans une section de transition ST), Action, Étape… (nom, initiale, temps min / max, retard, commentaire), Supprimer (Suppr), glisser une étape dans une autre case ; volet **Code** : la section de transition ou d'action ST se modifie, une section LD se lit. Chaque geste réécrit le XML de la section (seuls les éléments touchés changent) et s'annule d'un Ctrl+Z. **Nouvelle section › SFC** crée un GRAFCET à une étape initiale.
+- **Simulation** (F5) : sémantique de Control Expert — étapes initiales au premier cycle, une évolution par cycle, priorité à gauche dans une divergence en OU, `Étape.x`, `Étape.t`, `Étape.tminErr`, `Étape.tmaxErr` lisibles en ST et en LD, actions selon leur qualificatif, retard d'étape ; réceptivités en ST et en LD. Sur le dessin : étapes actives et leur temps, transitions validées et vraies (1) ou fausses (0), actions en cours, supervision en défaut ; Initialiser, Activer / Désactiver l'étape choisie.
+
 ---
 
 <a id="analyse"></a>
@@ -176,6 +183,7 @@ Les grafcets de ce type de projet **ne sont pas des sections SFC** : chacun est 
 - Pendant la simulation, les valeurs se lisent au survol (infobulle du bouton Simuler, `src/app/TopBar.cpp`).
 - La simulation appartient à l'application : elle continue quand on change d'onglet ou d'écran (`src/app/SimulationHost.hpp`).
 - Seules les sections ST sont simulées ; les sections LD, FBD, IL et SFC ne sont pas compilables ici.
+- 1.51.0 : les sections **SFC** (GRAFCET natifs) sont simulées, leurs réceptivités en ST et en LD comprises (§ 9).
 
 ---
 
@@ -222,6 +230,7 @@ Vérifiées dans le code de ce commit :
 - **`.XDB`** : lecteur déclaré qui renvoie « non implémenté ».
 - **`.STU`** (fichier de travail binaire) : refusé, avec la consigne d'exporter en `.XEF` ou `.XPG`.
 - **LD, FBD, SFC** : conservés et lisibles, ni modifiables ni simulés.
+- 1.51.0 : les **SFC** se modifient et se simulent (§ 9) ; une macro-étape s'y simule comme une étape (son contenu n'est pas déroulé), une réceptivité ou une action en FBD ou IL n'est pas simulée (fausse, et dit).
 - La simulation ne couvre que le sous-ensemble du ST listé au § 11.
 - Le verrou LOCK n'est pas un chiffrement ; la clé maîtresse de récupération est dérivée d'une adresse MAC et n'est pas une frontière de sécurité (le code le dit, `src/project/Security.hpp`).
 - L'Assistant IA n'existe pas dans API Studio.

@@ -6,8 +6,9 @@
 //  Node ni wrangler : SAUTE pour cette partie).
 // -----------------------------------------------------------------------------
 //  Sans reseau :
-//   - sans cle : le premier ecran offre les deux chemins (la cle de l'editeur,
-//     devenir admin) ; en attente : l'empreinte en 6 groupes ;
+//   - sans cle : le premier ecran offre les deux chemins (la cle de l'editeur ;
+//     XPG Admin : son code d'invitation) ; une cle d'admin sans inscription : la
+//     carte du code (1.51.0 : plus d'empreinte a lire, plus de demande) ;
 //   - l'admin+ : une liste des admins signee ici (Lea, Hugo, Paul retire), le
 //     tableau, la fiche, << Voir son journal >> ; la page Droits (un profil
 //     modifie, enregistre, duplique, supprime ; les differences d'un admin
@@ -16,9 +17,11 @@
 //     criticite des actions) ; la coquille : le toast d'une alerte, << Voir >> ;
 //   - un admin (Lea) : la page en lecture seule, ses droits, le menu sans le
 //     journal, un bouton grise qui dit pourquoi.
-//  Le service local : Nina demande a devenir admin (la page), l'admin+ la voit,
-//  ouvre << Verifier et accepter... >>, coche l'empreinte, accepte ; Nina devient
-//  admin ; puis l'admin+ la retire (la confirmation).
+//  Le service local (1.51.0) : l'admin+ invite Nina ; XPG Admin (Nina) tape son code
+//  dans la page (<< Devenir admin >>) : ajout en cours, rien a dire ; l'admin+
+//  << Relever >> : elle est signee d'office et apparait dans la liste ; Nina se voit
+//  admin ; le journal dit << code d'invitation >> ; puis l'admin+ la retire (la
+//  confirmation). Nulle part une demande d'admin a accepter.
 //  Des noms d'essai seulement (Lea, Hugo, Paul, Nina, << Atelier d'essai >>).
 // =============================================================================
 #include "../src/ui/widgets/FilterBar.hpp"   // 1.47.0 : la barre de filtres du journal
@@ -100,12 +103,6 @@ bool setSwitch(ui::Widget& root, std::string_view id, bool on) {
     auto* s = find<ui::ToggleButton>(root, id);
     if (!s || !s->enabled()) return false;
     s->setChecked(on);
-    return true;
-}
-bool setCheck(ui::Widget& root, std::string_view id, bool on) {
-    auto* c = find<ui::Checkbox>(root, id);
-    if (!c || !c->enabled()) return false;
-    c->setState(on ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
     return true;
 }
 // 1.47.0 : le nombre de lignes d'une valeur dans le menu d'une puce de la barre (la puce Admin du journal) ; 0 : absente.
@@ -191,9 +188,10 @@ struct ShellRig {
 const std::string kLea = "L\xC3\xA9" "a";
 // L'empreinte : les deux premiers groupes (la colonne << Sa cle >>), le premier groupe.
 std::string kit_short(const std::string& fp) { return fp.substr(0, 9); }
-std::string groups0(const std::string& fp) { return fp.substr(0, 4); }
 
 } // namespace
+
+#include "admin_pcpicker.inl"   // 1.51.0 : Ajouter un admin en une etape, la recherche du PC (testPcPicker)
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -214,7 +212,7 @@ int main(int argc, char** argv) {
         // 1.49.0 (docs/ADMINS.md, par. 12) : l'Admin+ sans la cle de l'editeur n'a que la cle de l'editeur ; le chemin de
         // l'admin est a XPG Admin (l'edition classique, plus bas)
         check(has(t, "Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur") && !has(t, "Demander \xC3\xA0 devenir admin"), "l'Admin+ : la cle de l'editeur seulement");
-        check(!shown(*page, "admins.demande.nom") && !shown(*page, "admins.demande.envoyer"), "l'Admin+ : pas le formulaire de la demande");
+        check(!shown(*page, "admins.invitation.code") && !shown(*page, "admins.invitation.valider"), "l'Admin+ : pas la carte du code d'invitation");
         check(!shown(*page, "admins.ajouter") && !shown(*page, "admins.table"), "ni Ajouter un admin, ni le tableau");
         check(click(*page, "admins.creer-cle") && !rig.navigations.empty() && rig.navigations.back() == "securite", "Creer la cle de l'editeur -> Parametres de securite");
         auto dash = gui::makeDashboardPage(rig.host());
@@ -224,40 +222,48 @@ int main(int argc, char** argv) {
         {
             auto cpage = gui::makeAdminsPage(rig.host());
             const std::string c = draw(*cpage);
-            check(has(c, "Demander \xC3\xA0 devenir admin") && !has(c, "Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur"), "XPG Admin : le chemin de l'admin seulement");
-            check(shown(*cpage, "admins.demande.nom") && shown(*cpage, "admins.demande.courriel") && shown(*cpage, "admins.demande.envoyer"), "le nom, le courriel, Envoyer");
-            check(!enabledBtn(*cpage, "admins.demande.envoyer") && shown(*cpage, "admins.regler-service") && has(c, "R\xC3\xA9gler le service"),
-                  "sans l'adresse du service : Envoyer grise, Regler le service");
+            check(has(c, "Ton code d'invitation") && !has(c, "Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur") && !has(c, "Demander \xC3\xA0 devenir admin"),
+                  "XPG Admin : le chemin de l'admin seulement (son code d'invitation)");
+            check(shown(*cpage, "admins.invitation.code") && shown(*cpage, "admins.invitation.valider") && !shown(*cpage, "admins.demande.nom"),
+                  "le code, << Devenir admin >> (ni nom ni courriel a taper : ceux de l'invitation)");
+            check(!enabledBtn(*cpage, "admins.invitation.valider") && shown(*cpage, "admins.regler-service") && has(c, "R\xC3\xA9gler le service"),
+                  "sans l'adresse du service : Devenir admin grise, Regler le service");
             auto cdash = gui::makeDashboardPage(rig.host());
             const std::string cd = draw(*cdash);
-            check(has(cd, "Demander \xC3\xA0 devenir admin") && !shown(*cdash, "tableau.creer-cle"), "XPG Admin, le tableau de bord : devenir admin seulement");
-            check(click(*cdash, "tableau.devenir-admin") && rig.navigations.back() == "admins", "Demander a devenir admin... -> Administrateurs");
+            check(has(cd, "Mon code d'invitation") && !shown(*cdash, "tableau.creer-cle") && !has(cd, "Demander \xC3\xA0 devenir admin"),
+                  "XPG Admin, le tableau de bord : son code d'invitation seulement");
+            check(click(*cdash, "tableau.devenir-admin") && rig.navigations.back() == "admins", "Mon code d'invitation... -> Administrateurs");
         }
         la::setEdition(la::Edition::Plus);
     }
 
-    std::printf("-- en attente : l'empreinte a lire au telephone\n");
+    std::printf("-- une cle d'admin pas dans la liste (sans inscription) : la carte du code, rien a lire\n");
     {
         Fixture pf(source, "admins-attente");
         std::string why;
         auto nina = la::createAdminKey(U(pf.admin), "Nina", &why);
         pf.ws->reload();
-        check(nina && pf.ws->role() == gui::Role::Pending, "une cle d'admin pas dans la liste : en attente (" + why + ")");
+        check(nina && pf.ws->role() == gui::Role::Pending, "une cle d'admin pas dans la liste : ajout en cours (" + why + ")");
         HostRig rig(pf);
         auto page = gui::makeAdminsPage(rig.host());
         const std::string t = draw(*page);
         const auto g = adm::fingerprint(pf.ws->adminKey().keyHex);
-        check(has(t, "L'admin+ doit accepter ta cl\xC3\xA9") && has(t, "Lis-lui ton empreinte") && has(t, g.substr(0, 4)) && has(t, g.substr(25, 4)),
-              "l'empreinte en 6 groupes (" + g + ")");
-        check(has(t, "En attendant, l'Admin ne peut rien signer") && shown(*page, "admins.attente.verifier"), "rien ne signe ; Verifier maintenant");
+        check(has(t, "Pas encore de code accept\xC3\xA9 pour ta cl\xC3\xA9") && shown(*page, "admins.invitation.code") && shown(*page, "admins.attente.verifier"),
+              "pas d'inscription : la carte du code ; Verifier maintenant");
+        check(!has(t, "Lis-lui ton empreinte") && !has(t, g.substr(0, 4) + " " + g.substr(5, 4)) && !has(t, "L'admin+ doit accepter") && !has(t, "6 chiffres"),
+              "1.51.0 : ni empreinte a lire, ni acceptation, ni 6 chiffres");
         auto dash = gui::makeDashboardPage(rig.host());
-        check(has(draw(*dash), "Voir mon empreinte"), "le tableau de bord : Voir mon empreinte");
+        const std::string d = draw(*dash);
+        check(has(d, "O\xC3\xB9 en est mon ajout") && !has(d, "Voir mon empreinte") && !has(d, "lis-lui ton empreinte"), "le tableau de bord : Ou en est mon ajout");
         ShellRig shell(pf.admin);
         const std::string s = shell.paint();
-        check(has(s, "Nina \xC2\xB7 en attente") && has(s, "En attente d'acceptation"), "la coquille : << Nina - en attente >>, la cle en attente");
+        check(has(s, "Nina \xC2\xB7 ajout en cours") && has(s, "Admin : ajout en cours") && !has(s, "En attente d'acceptation"),
+              "la coquille : << Nina - ajout en cours >> (plus d'attente d'acceptation)");
     }
 
     // ------------------------------------------------------------------------------------------------
+    testPcPicker(source);   // 1.51.0 (admin_pcpicker.inl)
+
     std::printf("-- l'admin+ : la liste signee, le tableau, la fiche\n");
     Fixture fx(source, "admins-plus");
     check(fx.ready(), "le poste de l'admin+ (cle d'essai, registre)");
@@ -573,23 +579,34 @@ int main(int argc, char** argv) {
     check(nf.ws->serviceConfigure(svc.url()).ok, "le poste de Nina : l'adresse du service");
     nf.ws->reload();
     HostRig nrig(nf);
-    // 1.49.0 : l'Admin+ n'a plus le formulaire et XPG Admin exige un code d'invitation (admin_invitation_test) ; ici, la demande
-    // SANS invitation d'un Admin d'avant la 1.49 (Workspace::requestAdmin, comme lui) : elle reste acceptable avec l'empreinte.
+    // 1.51.0 : l'admin+ invite Nina (le dialogue lui-meme : admin_gui_versions_test, PcPicker plus bas) ; XPG Admin (Nina) tape
+    // son code dans sa page : elle est inscrite, rien a dire ; l'admin+ la signe d'office en relevant.
+    std::string code;
+    {
+        const gui::OpResult inv = wf.ws->inviteAdmin("Nina Essai", "nina@exemple.invalid", adm::kAllRightsProfile, code);
+        check(inv.ok && !code.empty(), "l'admin+ invite Nina (" + inv.text() + ")");
+    }
+    la::setEdition(la::Edition::Classique);
     auto np = gui::makeAdminsPage(nrig.host());
     nrig.refreshers.push_back([&] {
         nf.ws->reload();
         np->refresh();
     });
     {
-        (void)draw(*np);
-        const gui::OpResult r = nf.ws->requestAdmin("Nina Essai", "nina@exemple.invalid");
-        nrig.reports.push_back(r);
-        check(r.ok, "la demande envoyee (sans invitation, comme un Admin 1.48) : " + r.text());
+        std::string t = draw(*np);
+        check(shown(*np, "admins.invitation.code") && enabledBtn(*np, "admins.invitation.valider"), "XPG Admin (Nina) : la carte du code");
+        check(type(*np, "admins.invitation.code", "INV-0000-0000") && click(*np, "admins.invitation.valider") && !lastOk(nrig), "un faux code : refuse");
+        t = draw(*np);
+        check(has(t, "Ce code d'invitation est inconnu.") && shown(*np, "admins.invitation.code"), "la phrase du service, le code se retape");
+        check(type(*np, "admins.invitation.code", code) && click(*np, "admins.invitation.valider") && lastOk(nrig), "le bon code : " + lastText(nrig));
         nf.ws->reload();
         np->refresh();
-        const std::string t = draw(*np);
-        check(nf.ws->role() == gui::Role::Pending && has(t, groups0(nf.ws->adminKey().fingerprint)), "en attente ; son empreinte");
+        t = draw(*np);
+        check(nf.ws->role() == gui::Role::Pending && has(t, "Tu es admin : ajout en cours") && has(t, "Nina Essai") && has(t, adm::kAllRightsProfile) &&
+                  !has(t, nf.ws->adminKey().fingerprint.substr(0, 9)) && !has(t, "6 chiffres"),
+              "ajout en cours : son nom et son profil (ceux de l'invitation), rien a lire ni a dire");
     }
+    la::setEdition(la::Edition::Plus);
     HostRig prig(wf);
     auto pp = gui::makeAdminsPage(prig.host());
     prig.refreshers.push_back([&] {
@@ -598,35 +615,28 @@ int main(int argc, char** argv) {
     });
     {
         check(click(*pp, "admins.relever") && lastOk(prig), "Relever : " + lastText(prig));
+        wf.ws->reload();
+        pp->refresh();
         const std::string t = draw(*pp);
-        check(has(t, "Nina Essai") && has(t, "En attente") && shown(*pp, "admins.verifier.1"), "la demande de Nina : en attente, Verifier et accepter...");
-        const std::size_t d0 = prig.dialogs.size();
-        check(click(*pp, "admins.verifier.1") && prig.dialogs.size() == d0 + 1, "Verifier et accepter... : le dialogue");
-        if (prig.dialogs.size() == d0 + 1) {
-            auto& dlg = *prig.dialogs.back();
-            (void)drawMenu(dlg);   // le releve des demandes (a la premiere image)
-            std::string d = drawMenu(dlg);
-            const std::string fp = nf.ws->adminKey().fingerprint;
-            check(has(d, "Ajouter un admin") && has(d, "Demande re\xC3\xA7ue \xC2\xB7 \xC3\xA0 v\xC3\xA9rifier") && has(d, groups0(fp)), "la demande recue, son empreinte");
-            check(has(d, "Un seul caract\xC3\xA8re diff\xC3\xA8re ?") && has(d, "J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte avec Nina"), "l'avertissement ; la case");
-            auto* accept = find<ui::Button>(*dlg.widgetRoot(), "admins.accepter");
-            check(accept && !accept->enabled() && accept->text() == "Accepter Nina comme admin", "Accepter Nina comme admin : grise sans la case");
-            check(setCheck(*dlg.widgetRoot(), "admins.empreinte.verifiee", true) && accept && accept->enabled(), "la case cochee : Accepter");
-            check(click(*dlg.widgetRoot(), "admins.accepter") && lastOk(prig) && closed(dlg), "Nina acceptee : " + lastText(prig));
-        }
+        const adm::Admin* n = wf.ws->adminList() ? wf.ws->adminList()->byKey(nf.ws->adminKey().keyHex) : nullptr;
+        check(n && n->active() && n->profile == adm::kAllRightsProfile, "Nina : signee d'office dans la liste (son profil)");
+        check(has(t, "Nina Essai") && has(t, "Actif") && !has(t, "En attente") && !has(t, "V\xC3\xA9rifier et accepter") && !shown(*pp, "admins.verifier.1"),
+              "la page de l'admin+ : Nina active ; aucune demande, aucun << Verifier et accepter >>");
     }
     {
+        la::setEdition(la::Edition::Classique);
         check(click(*np, "admins.attente.verifier") && lastOk(nrig), "Nina : Verifier maintenant : " + lastText(nrig));
         nf.ws->reload();
         np->refresh();
         const std::string t = draw(*np);
         check(nf.ws->role() == gui::Role::Admin && has(t, "lecture seule"), "Nina est admin : la page en lecture seule");
+        la::setEdition(la::Edition::Plus);
     }
     {
         check(wf.ws->fetchJournal(nullptr).ok, "l'admin+ releve le journal");
         auto jp = gui::makeJournalPage(prig.host());
         const std::string t = draw(*jp, 1280.f, 800.f);
-        check(has(t, "a ajout\xC3\xA9 l'admin") || has(t, "Nina"), "le journal : l'admin ajoute");
+        check(has(t, "a ajout\xC3\xA9 l'admin Nina Essai (code d'invitation"), "le journal : << a ajoute l'admin Nina Essai (code d'invitation, invite par ...) >>");
         check(click(*pp, "admins.relever") && lastOk(prig), "Relever");
         check(selectRow(*pp, "admins.table", 0, "Nina Essai"), "choisir Nina");
         (void)draw(*pp);

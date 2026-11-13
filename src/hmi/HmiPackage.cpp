@@ -472,16 +472,38 @@ Package collect(const Project& p, const std::vector<Id>& chosen) {
     // 1.51.0 : les types IHM des symboles emportes (HmiType::symbol) partent avec eux, et les types du projet qu'ils
     // emploient (membres, parent, interfaces, parametres du symbole).
     std::set<Id> ownedTypes;
+    // Un texte de type sans les noms complets des types des symboles (S_Pompe.T_Etat : pas le T_Etat du projet).
+    const auto withoutOwned = [&](std::string text) {
+        for (const auto& o : p.programs.types) {
+            if (o.symbol == kNoId) continue;
+            const std::string full = fullName(o);
+            for (std::size_t at = text.find(full); at != std::string::npos; at = text.find(full, at)) text.replace(at, full.size(), " ");
+        }
+        return text;
+    };
+    const auto wantOwnedIn = [&](const std::string& text, const View* sym) {
+        // Dans le symbole, un nom court d'un de ses types est le sien (la portee la plus proche) : pas un type du projet.
+        std::string t = withoutOwned(text);
+        if (sym)
+            for (const auto& o : p.programs.types)
+                if (o.symbol == sym->id) {
+                    design::FindOptions o2;
+                    o2.wholeWord = true;
+                    t = design::replaced(t, o.name, " ", o2, nullptr);
+                }
+        wantTypesIn(t);
+    };
     for (const auto& t : p.programs.types)
         if (t.symbol != kNoId && in.count(t.symbol)) {
             ownedTypes.insert(t.id);
-            for (const auto& m : t.members) wantTypesIn(m.type);
-            wantTypesIn(t.base);
-            for (const auto& i : t.interfaces) wantTypesIn(i);
+            const View* sym = p.view(t.symbol);
+            for (const auto& m : t.members) wantOwnedIn(m.type, sym);
+            wantOwnedIn(t.base, sym);
+            for (const auto& i : t.interfaces) wantOwnedIn(i, sym);
         }
     for (const auto& v : c.views)
         if (isSymbolView(v))
-            for (const auto& prm : v.params) wantTypesIn(prm.type);
+            for (const auto& prm : v.params) wantOwnedIn(prm.type, &v);
     for (std::size_t guard = 0; guard < 8; ++guard) {
         const std::size_t before = wantedTypes.size();
         for (const auto& t : p.programs.types)

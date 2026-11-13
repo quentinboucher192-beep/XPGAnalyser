@@ -573,7 +573,6 @@ Overview overview(const Inputs& in) {
         if (a.retired) ++v.retiredAdmins;
         else ++v.activeAdmins;
     }
-    v.pendingAdmins = static_cast<int>(in.pending.size());
     for (const auto& s : v.admins) {
         v.actions += s.actions;
         v.actionsBefore += s.actionsBefore;
@@ -768,18 +767,6 @@ Overview overview(const Inputs& in) {
             al.gestureId = "journal";
             v.alerts.push_back(std::move(al));
         }
-    }
-    for (const auto& q : in.pending) {
-        Alert al;
-        al.kind = AlertKind::Pending;
-        al.severity = Severity::ToSee;
-        al.adminName = q.name;
-        al.when = q.received;
-        al.text = q.name + " attend depuis le " + dayMonth(localDay(q.received, tz)) + " \xC3\xA0 " + clock(q.received, tz) +
-                  " : son empreinte \xC3\xA0 lire au t\xC3\xA9l\xC3\xA9phone avant de l'accepter";
-        al.gesture = "V\xC3\xA9rifier et accepter\xE2\x80\xA6";
-        al.gestureId = "accepter";
-        v.alerts.push_back(std::move(al));
     }
     std::stable_sort(v.alerts.begin(), v.alerts.end(), [](const Alert& a, const Alert& b) {
         if (a.severity != b.severity) return static_cast<int>(a.severity) < static_cast<int>(b.severity);

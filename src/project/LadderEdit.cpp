@@ -3,7 +3,11 @@
 // =============================================================================
 #include "LadderEdit.hpp"
 
+#include "BlockLibrary.hpp"
+
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <utility>
 
 namespace project::ladder {
@@ -25,6 +29,12 @@ namespace project::ladder {
         }
 
         bool occupied(const Cell& c) { return c.kind != Kind::Empty && c.kind != Kind::Covered; }
+
+        // Un fil dans une case vide.
+        void at_(Network& n, int row, int col) {
+            auto& c = n.cells[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)];
+            if (c.kind == Kind::Empty) c.kind = Kind::Wire;
+        }
 
         // L'element qui commence a gauche de (row, col) et la couvre.
         int anchorCol(const Network& n, int row, int col) {
@@ -76,7 +86,7 @@ namespace project::ladder {
 
         bool overlaps(const Network& n, const Block& b, int ignore) {
             for (int r = b.y; r < b.y + b.height; ++r)
-                for (int c = b.x; c < b.x + b.width; ++c) {
+                for (int c = b.x; c < b.x + b.cols; ++c) {
                     if (r < n.rows() && c < colsOf(n, r) && occupied(n.cells[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)])
                         && n.cells[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)].kind != Kind::Wire)
                         return true;
@@ -98,7 +108,7 @@ namespace project::ladder {
         // Les fils sous un bloc s'effacent (le bloc les remplace).
         void clearUnder(Network& n, const Block& b) {
             for (int r = b.y; r < b.y + b.height && r < n.rows(); ++r)
-                for (int c = b.x; c < b.x + b.width && c < colsOf(n, r); ++c)
+                for (int c = b.x; c < b.x + b.cols && c < colsOf(n, r); ++c)
                     if (at(n, r, c).kind == Kind::Wire) at(n, r, c) = Cell{};
         }
 
@@ -174,26 +184,72 @@ namespace project::ladder {
     }
 
     void fitBlock(Block& b) {
-        const int rows = std::max(b.inputCount(), b.outputCount()) + (b.enEno ? 1 : 0);
-        b.height = std::max(2, rows);
-        b.width = std::max(2, b.width);
+        // EN / ENO : des broches ecrites, les premieres de chaque cote (comme Control Expert).
+        auto has = [&](const char* formal) {
+            for (const auto& p : b.pins)
+                if (p.formal == formal) return true;
+            return false;
+        };
+        if (b.enEno) {
+            if (!has("EN")) b.pins.insert(b.pins.begin(), Pin{ "EN", "", false, PinDir::In, {}, {} });
+            if (!has("ENO")) {
+                auto at = b.pins.begin();
+                while (at != b.pins.end() && at->dir != PinDir::Out) ++at;
+                b.pins.insert(at, Pin{ "ENO", "", false, PinDir::Out, {}, {} });
+            }
+        }
+        // L'en-tete (le type, l'instance), puis une rangee par broche.
+        b.height = 1 + std::max(1, std::max(b.inputCount(), b.outputCount()));
+        b.cols = std::max(2, b.cols);
+        // La largeur dans les unites de Control Expert (il la refait a l'import).
+        std::size_t in = 0, out = 0;
+        for (const auto& p : b.pins) (p.dir == PinDir::Out ? out : in) = std::max(p.dir == PinDir::Out ? out : in, p.formal.size());
+        b.width = std::max<int>(10, static_cast<int>(std::max(in + out + 5, b.type.size() + 4)));
     }
 
     int placeBlock(Diagram& d, Pos p, Block b) {
         auto* n = netOf(d, p.network);
         if (!n || p.row < 0 || p.col < 0) return -1;
+        if (b.height < 2 || b.cols < 1) fitBlock(b);
+        if (p.col + b.cols > d.columns) return -1;
+        // Une fonction (EFB) porte un nom d'instance ".N", libre dans la section.
+        if (b.isFunction()) {
+            int next = 1;
+            for (const auto& net : d.networks)
+                for (const auto& o : net.blocks)
+                    if (o.instance.size() > 1 && o.instance.front() == '.')
+                        next = std::max(next, std::atoi(o.instance.c_str() + 1) + 1);
+            b.instance = "." + std::to_string(next);
+        }
+        // `p` est la rangee de sa premiere broche (la ligne ou le courant arrive) :
+        // le bloc commence une rangee plus haut (son en-tete), comme Control Expert.
+        auto rowFree = [&](int r) {
+            if (r < 0 || r >= n->rows()) return true;
+            for (int c = p.col; c < p.col + b.cols; ++c) {
+                const auto& here = at(*n, r, c);
+                if ((occupied(here) && here.kind != Kind::Wire) || n->blockAt(r, c) >= 0) return false;
+            }
+            return true;
+        };
+        if (p.row == 0 || !rowFree(p.row - 1)) {
+            if (!insertRow(d, p.network, p.row)) return -1;      // un en-tete libre
+            n = netOf(d, p.network);
+            ++p.row;
+        }
+        for (int k = 1; k < b.height - 1; ++k)
+            if (!rowFree(p.row + k)) {
+                if (!insertRow(d, p.network, p.row + k)) return -1;
+                n = netOf(d, p.network);
+            }
         b.x = p.col;
-        b.y = p.row;
-        if (b.height < 1 || b.width < 1) fitBlock(b);
-        if (b.x + b.width > d.columns) return -1;
+        b.y = p.row - 1;
         d.ensureRows(*n, b.y + b.height);
         if (overlaps(*n, b, -1)) return -1;
         clearUnder(*n, b);
         n->blocks.push_back(std::move(b));
         n->modified = true;
-        const auto& placed = n->blocks.back();
-        // Les fils jusqu'a ses broches cablees (rangee du bloc).
-        autoWire(d, p.network, placed.y);
+        // Les fils jusqu'a sa premiere broche, et de sa premiere sortie.
+        autoWire(d, p.network, p.row);
         return static_cast<int>(n->blocks.size()) - 1;
     }
 
@@ -331,7 +387,7 @@ namespace project::ladder {
     // ------------------------------------------------------------------ liaisons
     bool setLink(Diagram& d, int network, int row, int boundary, bool on) {
         auto* n = netOf(d, network);
-        if (!n || row < 0 || row + 1 >= n->rows() || boundary < 0) return false;
+        if (!n || row < 0 || row + 1 >= n->rows() || boundary <= 0) return false;   // 0 : le rail
         auto& l = n->links[static_cast<std::size_t>(row)];
         if (boundary >= static_cast<int>(l.size())) return false;
         const std::uint8_t v = on ? 1 : 0;
@@ -368,7 +424,8 @@ namespace project::ladder {
             wire.kind = Kind::Wire;
             put(*n, t, p.col + k, std::move(wire), 1);
         }
-        n->links[static_cast<std::size_t>(p.row)][static_cast<std::size_t>(p.col)] = 1;
+        // Les deux liaisons verticales ; a gauche, le rail les relie deja (frontiere 0).
+        if (p.col > 0) n->links[static_cast<std::size_t>(p.row)][static_cast<std::size_t>(p.col)] = 1;
         n->links[static_cast<std::size_t>(p.row)][static_cast<std::size_t>(p.col + width)] = 1;
         n->modified = true;
         return Pos{ p.network, t, p.col };
@@ -378,6 +435,8 @@ namespace project::ladder {
     bool insertRow(Diagram& d, int network, int row) {
         auto* n = netOf(d, network);
         if (!n || row < 0 || row > n->rows()) return false;
+        for (const auto& b : n->blocks)
+            if (b.y < row && row < b.y + b.height) return false;    // au milieu d'un bloc
         const int cols = n->rows() ? colsOf(*n, 0) : d.columns;
         n->cells.insert(n->cells.begin() + row, std::vector<Cell>(static_cast<std::size_t>(cols)));
         std::vector<std::uint8_t> links(static_cast<std::size_t>(cols) + 1, 0);
@@ -385,7 +444,8 @@ namespace project::ladder {
         if (row > 0 && row < n->rows()) links = n->links[static_cast<std::size_t>(row - 1)];
         n->links.insert(n->links.begin() + row, std::move(links));
         for (auto& b : n->blocks) if (b.y >= row) ++b.y;
-        for (auto& c : n->comments) if (c.y >= row) ++c.y;
+        for (auto& c : n->comments) if (c.y >= row) { ++c.y; c.changed = true; }
+        if (n->fileRows > row) ++n->fileRows;
         n->modified = true;
         return true;
     }
@@ -417,6 +477,7 @@ namespace project::ladder {
                           n->comments.end());
         for (auto& b : n->blocks) if (b.y > row) --b.y;
         for (auto& c : n->comments) if (c.y > row) { --c.y; c.changed = true; }
+        if (n->fileRows > row) --n->fileRows;
         n->modified = true;
         return true;
     }
@@ -459,7 +520,7 @@ namespace project::ladder {
             const int dx = to.col - from.col, dy = to.row - from.row;
             b.x += dx;
             b.y += dy;
-            if (b.x < 0 || b.y < 0 || b.x + b.width > d.columns) return false;
+            if (b.x < 0 || b.y < 0 || b.x + b.cols > d.columns) return false;
             d.ensureRows(*n, b.y + b.height);
             if (overlaps(*n, b, bi)) return false;
             clearUnder(*n, b);
@@ -482,6 +543,179 @@ namespace project::ladder {
         if (!put(*n, to.row, to.col, std::move(c), w)) return false;
         autoWire(d, to.network, to.row);
         return true;
+    }
+
+    // ------------------------------------------------------------------ lignes
+    void rungRows(const Diagram& d, int network, int row, int& r0, int& r1) {
+        r0 = r1 = row;
+        if (network < 0 || network >= static_cast<int>(d.networks.size())) return;
+        const auto& n = d.networks[static_cast<std::size_t>(network)];
+        auto joined = [&](int r) {
+            if (r < 0 || r + 1 >= n.rows()) return false;
+            for (auto l : n.links[static_cast<std::size_t>(r)]) if (l) return true;
+            for (const auto& b : n.blocks) if (b.y <= r && r + 1 < b.y + b.height) return true;
+            return false;
+        };
+        while (r0 > 0 && joined(r0 - 1)) --r0;
+        while (joined(r1)) ++r1;
+    }
+
+    int insertRung(Diagram& d, int network, int row) {
+        auto* n = netOf(d, network);
+        if (!n) return -1;
+        bool empty = n->blocks.empty();
+        for (const auto& r : n->cells)
+            for (const auto& c : r) empty = empty && c.kind == Kind::Empty;
+        int at = 0;
+        if (!empty) {
+            int r0 = 0, r1 = 0;
+            rungRows(d, network, std::clamp(row, 0, std::max(0, n->rows() - 1)), r0, r1);
+            // la ligne neuve apres la derniere rangee non vide de cette ligne, une rangee vide entre les deux
+            if (!insertRow(d, network, r1 + 1)) return -1;
+            if (!insertRow(d, network, r1 + 2)) return -1;
+            n = netOf(d, network);
+            at = r1 + 2;
+        }
+        d.ensureRows(*n, at + 1);
+        const int cols = colsOf(*n, at);
+        for (int c = 0; c + 1 < cols; ++c) at_(*n, at, c);
+        Cell coil;
+        coil.kind = Kind::Coil;
+        put(*n, at, cols - 1, std::move(coil), 1);
+        n->modified = true;
+        return at;
+    }
+
+    bool deleteRung(Diagram& d, int network, int row) {
+        auto* n = netOf(d, network);
+        if (!n || row < 0 || row >= n->rows()) return false;
+        int r0 = 0, r1 = 0;
+        rungRows(d, network, row, r0, r1);
+        const int count = r1 - r0 + 1;
+        n->blocks.erase(std::remove_if(n->blocks.begin(), n->blocks.end(),
+                                       [&](const Block& b) { return b.y >= r0 && b.y <= r1; }), n->blocks.end());
+        n->comments.erase(std::remove_if(n->comments.begin(), n->comments.end(),
+                                         [&](const Comment& c) { return c.y >= r0 && c.y <= r1; }), n->comments.end());
+        if (n->rows() <= count) {
+            // la derniere ligne du reseau : il reste une rangee vide
+            n->cells.assign(1, std::vector<Cell>(static_cast<std::size_t>(d.columns)));
+            n->links.assign(1, std::vector<std::uint8_t>(static_cast<std::size_t>(d.columns) + 1, 0));
+            n->blocks.clear();
+            n->comments.clear();
+            n->fileRows = std::min(n->fileRows, 1);
+            n->modified = true;
+            return true;
+        }
+        n->cells.erase(n->cells.begin() + r0, n->cells.begin() + r1 + 1);
+        n->links.erase(n->links.begin() + r0, n->links.begin() + r1 + 1);
+        if (r0 > 0) std::fill(n->links[static_cast<std::size_t>(r0 - 1)].begin(), n->links[static_cast<std::size_t>(r0 - 1)].end(), std::uint8_t{ 0 });
+        for (auto& b : n->blocks) if (b.y > r1) b.y -= count;
+        for (auto& c : n->comments) if (c.y > r1) { c.y -= count; c.changed = true; }
+        n->fileRows = std::max(0, n->fileRows - count);
+        n->modified = true;
+        // une rangee vide qui la separait de la precedente
+        auto rowEmpty = [&](int r) {
+            if (r < 0 || r >= n->rows()) return false;
+            for (const auto& c : n->cells[static_cast<std::size_t>(r)]) if (c.kind != Kind::Empty) return false;
+            for (const auto& b : n->blocks) if (b.y <= r && r < b.y + b.height) return false;
+            for (const auto& c : n->comments) if (c.y <= r && r < c.y + c.height) return false;
+            return true;
+        };
+        if (r0 > 0 && rowEmpty(r0 - 1) && n->rows() > 1) deleteRow(d, network, r0 - 1);
+        else if (r0 == 0 && rowEmpty(0) && n->rows() > 1) deleteRow(d, network, 0);
+        return true;
+    }
+
+    // ------------------------------------------------------------------ blocs
+    bool makeBlock(const domain::Project* project, std::string_view type, std::string instance, bool enEno, Block& out) {
+        Block b;
+        b.type = std::string(type);
+        b.enEno = enEno;
+        auto pin = [](std::string name, PinDir dir) { return Pin{ std::move(name), "", false, dir, {}, {} }; };
+        bool found = false;
+        // un DFB du projet
+        if (project)
+            for (const auto& pou : project->pous) {
+                if (pou.kind != domain::PouKind::FunctionBlockType) continue;
+                const auto name = project->strings.text(pou.name);
+                if (name.size() != type.size()) continue;
+                bool same = true;
+                for (std::size_t i = 0; i < name.size(); ++i)
+                    same = same && std::toupper(static_cast<unsigned char>(name[i])) == std::toupper(static_cast<unsigned char>(type[i]));
+                if (!same) continue;
+                b.type = std::string(name);
+                std::vector<Pin> ins, outs;
+                for (auto vi : pou.parameters) {
+                    if (vi >= project->variables.size()) continue;
+                    const auto& v = project->variables[vi];
+                    const auto pn = std::string(project->strings.text(v.name));
+                    if (v.scope == domain::VariableScope::Output) outs.push_back(pin(pn, PinDir::Out));
+                    else if (v.scope == domain::VariableScope::InOut) ins.push_back(pin(pn, PinDir::InOut));
+                    else ins.push_back(pin(pn, PinDir::In));
+                }
+                b.pins = ins;
+                b.pins.insert(b.pins.end(), outs.begin(), outs.end());
+                found = true;
+                break;
+            }
+        if (!found)
+            if (const auto* def = BlockLibrary::shared().find(type)) {
+                b.type = def->name;
+                std::vector<Pin> ins, outs;
+                for (const auto& p : def->parameters) {
+                    if (p.direction == BlockParameter::Direction::Out) outs.push_back(pin(p.name, PinDir::Out));
+                    else if (p.direction == BlockParameter::Direction::InOut) ins.push_back(pin(p.name, PinDir::InOut));
+                    else ins.push_back(pin(p.name, PinDir::In));
+                }
+                if (def->kind == BlockKind::Function && outs.empty()) outs.push_back(pin("OUT", PinDir::Out));
+                b.pins = ins;
+                b.pins.insert(b.pins.end(), outs.begin(), outs.end());
+                if (def->kind == BlockKind::Function) instance.clear();
+                found = true;
+            }
+        if (!found) {
+            // les EF operateurs, meme sans la bibliotheque : ADD, GT_INT, AND_BOOL, MOVE...
+            std::string up(type);
+            for (auto& ch : up) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            const auto base = up.substr(0, up.find('_'));
+            static constexpr std::string_view kTwo[] = { "ADD", "SUB", "MUL", "DIV", "MOD", "AND", "OR", "XOR",
+                                                         "GT", "GE", "EQ", "NE", "LE", "LT" };
+            bool two = false;
+            for (auto k : kTwo) two = two || base == k;
+            if (two) b.pins = { pin("IN1", PinDir::In), pin("IN2", PinDir::In), pin("OUT", PinDir::Out) };
+            else if (base == "NOT" || base == "MOVE") b.pins = { pin("IN", PinDir::In), pin("OUT", PinDir::Out) };
+            else return false;
+            b.type = up;
+            instance.clear();
+        }
+        b.instance = std::move(instance);
+        fitBlock(b);
+        out = std::move(b);
+        return true;
+    }
+
+    std::string freeInstanceName(const domain::Project* project, const Diagram& d, std::string_view type) {
+        auto taken = [&](const std::string& name) {
+            auto same = [&](std::string_view a) {
+                if (a.size() != name.size()) return false;
+                for (std::size_t i = 0; i < a.size(); ++i)
+                    if (std::toupper(static_cast<unsigned char>(a[i])) != std::toupper(static_cast<unsigned char>(name[i]))) return false;
+                return true;
+            };
+            if (project)
+                for (const auto& v : project->variables)
+                    if (same(project->strings.text(v.name))) return true;
+            for (const auto& n : d.networks)
+                for (const auto& b : n.blocks)
+                    if (same(b.instance)) return true;
+            return false;
+        };
+        std::string base(type);
+        for (int k = 1; k < 10000; ++k) {
+            auto name = base + "_" + std::to_string(k);
+            if (!taken(name)) return name;
+        }
+        return base + "_X";
     }
 
     // ------------------------------------------------------------------ commentaire
@@ -534,9 +768,9 @@ namespace project::ladder {
         }
         // Un bloc sur cette rangee : ses broches cablees comptent comme des elements.
         for (const auto& b : n->blocks) {
-            if (row < b.y || row >= b.y + b.height) continue;
+            if (row <= b.y || row >= b.y + b.height) continue;   // ses rangees de broches, pas l'en-tete
             if (first < 0 || b.x < first) first = b.x;
-            last = std::max(last, b.x + b.width - 1);
+            last = std::max(last, b.x + b.cols - 1);
         }
         if (last < 0) return;
         // La rangee du haut part du rail ; une branche, de sa premiere liaison verticale.

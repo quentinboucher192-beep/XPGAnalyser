@@ -1,13 +1,14 @@
 // =============================================================================
-//  tests/admin_gui_compte_test.cpp - 1.47.0 : << MON COMPTE >> ET LES
-//  << DEMANDES D'ADMIN >> (accepter plusieurs demandes d'un coup)
+//  tests/admin_gui_compte_test.cpp - 1.47.0 : << MON COMPTE >> ; 1.51.0 : PLUS
+//  DE << DEMANDES D'ADMIN >> - des admins invites, signes d'office d'un coup
 // -----------------------------------------------------------------------------
 //  Dessinees a blanc (TextRenderer, HostRig), puis contre le VRAI service local
 //  (tests/service_local.hpp ; sans Node ni wrangler : SAUTE pour cette partie).
 //  Sans reseau - Mon compte pour chaque role :
-//   - sans cle : les deux chemins (Demander a devenir admin, la cle de
-//     l'editeur), aucun pouvoir ;
-//   - en attente : l'identifiant, l'empreinte en 6 groupes (Copier), sa demande ;
+//   - sans cle : les deux chemins (XPG Admin : son code d'invitation ; l'Admin+ :
+//     la cle de l'editeur), aucun pouvoir ;
+//   - ajout en cours (1.51.0) : l'identifiant, l'empreinte (Copier), son
+//     invitation (le nom, le courriel, le profil, accepte le ...), rien a faire ;
 //   - l'admin+ : les 13 pouvoirs, ce qu'il fait seul, la derniere fois (le
 //     journal de ce poste), Sauvegarder ma cle ; une derogation en cours (un FAUX
 //     adopte : l'etat que la coquille relit du service) ;
@@ -15,18 +16,14 @@
 //     vigueur, son profil et ses ecarts, l'histoire de ses droits (les listes
 //     vues sur son poste), sa derogation ;
 //   - un admin retire (Nina) : retire le ..., plus aucun pouvoir ;
-//   - la coquille : le bloc d'identite mene a Mon compte ; << Demandes d'admin >>
-//     dans le menu de l'admin+ seulement.
-//  Le service local - les Demandes d'admin :
-//   - Lea (invitee), Hugo et Nina demandent ; la liste (3 en attente), la barre
-//     de filtres, le clic droit (l'ordre de la regle), la ligne depliee ;
-//   - les 3 choisies : UNE fenetre, une case par empreinte ; Nina pas cochee :
-//     rien ne se signe (le bouton grise ; Workspace::acceptAdmins refuse aussi) ;
-//     Nina retiree du lot -> << Accepter les 2 >> : UNE liste (numero + 1) avec
-//     Lea et Hugo, leur profil, la cle de synchro deposee, une ligne au journal
-//     chacun ; Lea et Hugo se voient admins ;
-//   - Nina refusee (une raison) ; puis deux demandes de Nina (deux PC) refusees
-//     d'un coup.
+//   - la coquille : le bloc d'identite mene a Mon compte ; plus de << Demandes
+//     d'admin >> nulle part (1.51.0).
+//  Le service local (1.51.0) - des admins invites :
+//   - l'admin+ invite Lea (LV2), Hugo (LV1), Nina (LV1) ; tous trois tapent leur
+//     code (inscrits) ; << Relever >> dans Administrateurs : UNE liste (numero + 1)
+//     les porte tous, avec le profil de leur invitation, la cle de synchro
+//     deposee, une ligne << admin_ajouter >> (code d'invitation) chacun ; ils se
+//     voient admins ; Mon compte de Lea : actif, son profil, son courriel.
 //  Des noms d'essai seulement (Lea, Hugo et Nina Essai, << exemple.invalid >>).
 // =============================================================================
 #include "../src/ui/widgets/FilterBar.hpp"
@@ -73,62 +70,12 @@ std::string draw(ui::Widget& w, float width = 1400.f, float height = 2400.f) {
     TextRenderer r;
     return paint(w, r, width, height);
 }
-std::string drawMenu(menu::IMenu& m, float width = 1400.f, float height = 900.f) {
-    TextRenderer r;
-    return paintMenu(m, r, width, height);
-}
 bool shown(ui::Widget& root, std::string_view id) {
     auto* w = root.findById(id);
     return w && w->visible();
 }
 bool lastOk(const HostRig& rig) { return rig.last() && rig.last()->ok; }
 std::string lastText(const HostRig& rig) { return rig.last() ? rig.last()->text() : std::string("(rien)"); }
-bool closed(menu::IMenu& m) { return m.widgetRoot() && !m.widgetRoot()->visible(); }
-bool setCheck(ui::Widget& root, std::string_view id, bool on) {
-    auto* c = find<ui::Checkbox>(root, id);
-    if (!c || !c->enabled()) return false;
-    c->setState(on ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
-    return true;
-}
-std::string pickedValue(ui::Widget& root, std::string_view id) {
-    auto* d = find<ui::DropDown>(root, id);
-    const auto* it = d ? d->selectedItem() : nullptr;
-    return it ? it->value : std::string("?");
-}
-std::size_t rowsOf(ui::Widget& page, std::string_view id) {
-    auto* t = find<ui::TableView>(page, id);
-    return t && t->model() ? t->model()->rowCount() : 0;
-}
-int rowOf(ui::TableView& t, std::size_t col, const std::string& text) {
-    for (std::size_t i = 0; t.model() && i < t.model()->rowCount(); ++i)
-        if (t.model()->cellText(static_cast<ui::RowIndex>(i), col) == text) return static_cast<int>(i);
-    return -1;
-}
-std::vector<ui::PopupMenu::Item> rightClick(ui::TableView& t, std::vector<ui::RowIndex> rows) {
-    t.selectModelRows(std::move(rows));
-    t.openContextMenu({200.f, 200.f});
-    return t.contextMenu() ? t.contextMenu()->items() : std::vector<ui::PopupMenu::Item>{};
-}
-std::string topLabels(const std::vector<ui::PopupMenu::Item>& items) {
-    std::string s;
-    for (const auto& it : items) s += it.separator ? std::string("|") : it.label + ";";
-    return s;
-}
-int idOf(const std::vector<ui::PopupMenu::Item>& items, const std::string& parent, const std::string& start) {
-    for (const auto& it : items) {
-        if (parent.empty() && it.label.rfind(start, 0) == 0) return it.enabled ? it.id : -1;
-        if (it.label == parent)
-            for (const auto& c : it.children)
-                if (c.label.rfind(start, 0) == 0) return c.enabled ? c.id : -1;
-    }
-    return -1;
-}
-const ui::PopupMenu::Item* itemOf(const std::vector<ui::PopupMenu::Item>& items, const std::string& start) {
-    for (const auto& it : items)
-        if (!it.separator && it.label.rfind(start, 0) == 0) return &it;
-    return nullptr;
-}
-
 std::string signedList(const lic::SigningKey& editor, const adm::AdminList& list) {
     return lic::writeBlock(lic::signBlock(lic::DocKind::Admins, adm::writeAdminList(list), editor.publicKey(),
                                           [&editor](std::string_view m) { return editor.sign(m); }));
@@ -274,35 +221,42 @@ int main(int argc, char** argv) {
         la::setEdition(la::Edition::Classique);
         auto cpage = gui::makeAccountPage(rig.host());
         (void)draw(*cpage);
-        check(!shown(*cpage, "compte.creer-cle") && click(*cpage, "compte.devenir-admin") && rig.navigations.back() == "admins",
-              "XPG Admin : Demander a devenir admin... -> Administrateurs (pas la cle de l'editeur)");
+        const std::string ct = draw(*cpage);
+        check(!shown(*cpage, "compte.creer-cle") && has(ct, "Mon code d'invitation") && !has(ct, "Demander \xC3\xA0 devenir admin") &&
+                  click(*cpage, "compte.devenir-admin") && rig.navigations.back() == "admins",
+              "XPG Admin : Mon code d'invitation... -> Administrateurs (pas la cle de l'editeur)");
         la::setEdition(la::Edition::Plus);
     }
 
     // ------------------------------------------------------------------------------------------------ en attente
-    std::printf("-- Mon compte : en attente\n");
+    std::printf("-- Mon compte : ajout en cours (inscrit par son code d'invitation)\n");
     {
         Fixture pf(source, "compte-attente");
         std::string why;
-        auto nina = la::createAdminKey(U(pf.admin), kNina, &why);
+        auto nina = la::createAdminKey(U(pf.admin), {}, &why);
         check(nina != nullptr, "la cle d'admin de Nina (" + why + ")");
         if (nina) {
             const std::string fp = adm::fingerprint(nina->publicKeyHex());
-            writeFile(pf.admin / "demande-admin.json", "{\"nom\":\"" + kNina + "\",\"courriel\":\"nina@exemple.invalid\",\"empreinte\":\"" + fp +
-                                                           "\",\"envoyee\":" + std::to_string(g_now - 3600) + "}\n");
+            // l'inscription notee par joinWithInvitation (le nom, le courriel, le profil de l'invitation)
+            writeFile(pf.admin / "inscription-admin.json", "{\"format\":\"xpg-inscription-admin/1\",\"nom\":\"" + kNina +
+                                                               "\",\"courriel\":\"nina@exemple.invalid\",\"profil\":\"Admin LV1\",\"invitation\":\"inv-0011223344556677\",\"empreinte\":\"" +
+                                                               fp + "\",\"inscrit\":" + std::to_string(g_now - 3600) + "}\n");
             pf.ws->reload();
-            check(pf.ws->role() == gui::Role::Pending, "en attente");
+            check(pf.ws->role() == gui::Role::Pending, "ajout en cours");
             HostRig rig(pf);
             auto page = gui::makeAccountPage(rig.host());
             const std::string t = draw(*page);
-            check(has(t, "En attente d'acceptation") && has(t, kNina) && has(t, "nina@exemple.invalid"), "le role, le nom, le courriel de sa demande");
-            check(has(t, nina->keyId()) && has(t, fp.substr(0, 4)) && has(t, fp.substr(25, 4)), "l'identifiant xpg-..., l'empreinte en 6 groupes (" + fp + ")");
-            check(has(t, "en attente d'acceptation par l'admin+") && has(t, "Demande envoy\xC3\xA9" "e le"), "l'etat : en attente, la demande envoyee le");
+            check(has(t, "Admin (ajout en cours)") && has(t, kNina) && has(t, "nina@exemple.invalid"), "le role, le nom, le courriel de son invitation");
+            check(has(t, nina->keyId()) && has(t, fp.substr(0, 4)) && has(t, fp.substr(25, 4)), "l'identifiant xpg-..., l'empreinte (" + fp + ")");
+            check(has(t, "admin, ajout en cours") && has(t, "Code d'invitation accept\xC3\xA9 le") && has(t, "inv-0011223344556677") &&
+                      has(t, "rien : d\xC3\xA8s que l'Admin+ est en ligne"),
+                  "l'etat : ajout en cours, le code accepte le ..., son invitation, rien a faire");
+            check(!has(t, "En attente d'acceptation") && !has(t, "lis ton empreinte") && !has(t, "demande"), "1.51.0 : ni attente d'acceptation, ni empreinte a lire, ni demande");
             check(click(*page, "compte.copier-empreinte") && g_copied == fp, "Copier l'empreinte : " + g_copied);
             check(click(*page, "compte.copier-id") && g_copied == nina->keyId(), "Copier l'identifiant : " + g_copied);
-            check(shown(*page, "compte.attente") && click(*page, "compte.attente") && rig.navigations.back() == "admins", "Voir ma demande -> l'ecran d'attente");
-            check(!shown(*page, "compte.devenir-admin") && !shown(*page, "compte.sauvegarder"), "ni Demander, ni Sauvegarder");
-            check(has(t, "Aucun pouvoir tant que l'admin+ n'a pas accept\xC3\xA9"), "aucun pouvoir tant qu'il n'a pas accepte");
+            check(shown(*page, "compte.attente") && click(*page, "compte.attente") && rig.navigations.back() == "admins", "Ou en est mon ajout -> Administrateurs");
+            check(!shown(*page, "compte.devenir-admin") && !shown(*page, "compte.sauvegarder"), "ni le code, ni Sauvegarder");
+            check(has(t, "Tes pouvoirs s'ouvrent d\xC3\xA8s que l'Admin+ a sign\xC3\xA9 ta cl\xC3\xA9 (profil \xC2\xAB Admin LV1 \xC2\xBB"), "ses pouvoirs : bientot, le profil de l'invitation");
         }
     }
 
@@ -394,16 +348,12 @@ int main(int argc, char** argv) {
         page->refresh();
         t = draw(*page);
         check(has(t, "d\xC3\xA9rogation en cours pour toi : il reste 50 min"), "sa derogation (faux) : pour elle, il reste 50 min");
-        // Demandes d'admin : l'admin+ seul
-        auto rp = gui::makeAdminRequestsPage(rig.host());
-        const std::string r = draw(*rp, 1400.f, 900.f);
-        check(has(r, "Seul l'admin+ accepte un admin") && !shown(*rp, "demandes-admins.accepter") && !shown(*rp, "demandes-admins.relever"),
-              "un admin : la page Demandes d'admin dit que c'est l'admin+, sans bouton");
+        // 1.51.0 : plus de page << Demandes d'admin >>
         ShellRig shell(lf.admin);
         (void)shell.paint();
-        check(!shown(shell.root(), "nav.demandes-admins") && shown(shell.root(), "nav.compte"), "le menu d'un admin : Mon compte, pas Demandes d'admin");
+        check(!shown(shell.root(), "nav.demandes-admins") && shown(shell.root(), "nav.compte"), "le menu d'un admin : Mon compte (plus de Demandes d'admin)");
         shell.shell->navigate("demandes-admins");
-        check(shell.shell->currentPageId() != "demandes-admins", "Demandes d'admin : refuse a un admin");
+        check(shell.shell->currentPageId() != "demandes-admins", "<< demandes-admins >> : une page inconnue");
     }
     {
         writeFile(rf.admin / "admins.xpgadm", b3);
@@ -421,15 +371,17 @@ int main(int argc, char** argv) {
     {
         ShellRig shell(fx.admin);
         (void)shell.paint();
-        check(shown(shell.root(), "nav.compte") && shown(shell.root(), "nav.demandes-admins"), "le menu de l'admin+ : Mon compte, Demandes d'admin");
-        check(gui::Shell::plusOnly("demandes-admins") && !gui::Shell::plusOnly("compte"), "Demandes d'admin : l'admin+ seul ; Mon compte : tous");
+        const std::string m = shell.paint();
+        check(shown(shell.root(), "nav.compte") && !shown(shell.root(), "nav.demandes-admins") && !gui::Shell::entry("demandes-admins") && !has(m, "Demandes d'admin"),
+              "le menu de l'admin+ : Mon compte ; plus de Demandes d'admin (1.51.0)");
+        check(!gui::Shell::plusOnly("compte"), "Mon compte : tous");
         check(click(shell.root(), "shell.compte") && shell.shell->currentPageId() == "compte", "le bloc d'identite (en haut a gauche) -> Mon compte");
         const std::string t = shell.paint();
         check(has(t, "S\xC3\x89" "CURIT\xC3\x89") && has(t, "Mon compte"), "Mon compte : en tete de Securite");
     }
 
     // ------------------------------------------------------------------------------------------------ le vrai service local
-    std::printf("-- le service local : trois demandes, deux acceptees d'un coup, une refusee\n");
+    std::printf("-- le service local : trois admins invites, signes d'office d'un coup (plus de demandes d'admin)\n");
     Fixture wf(source, "compte-service");
     check(wf.ready(), "le poste de l'admin+ (sans liste)");
     xpg_test::LocalService::Options so;
@@ -455,146 +407,51 @@ int main(int argc, char** argv) {
         p2.rights = {"licence_creer", "licence_prolonger", "licence_option", "demandes", "codes", "options"};
         check(wf.ws->saveProfile(p1).ok && wf.ws->saveProfile(p2).ok, "les profils LV1 et LV2");
         wf.ws->reload();
-        check(wf.ws->noteAdminInvitation({kLea, "lea@exemple.invalid", "Admin LV2", "lien", g_now - 86400}).ok, "Lea invitee (profil LV2 prevu)");
     }
     Fixture lsf(source, "compte-svc-lea"), hsf(source, "compte-svc-hugo"), nsf(source, "compte-svc-nina");
     const struct {
         Fixture*    f;
-        std::string name, email;
-    } who[] = {{&lsf, kLea, "lea@exemple.invalid"}, {&hsf, kHugo, "hugo@exemple.invalid"}, {&nsf, kNina, "nina@exemple.invalid"}};
+        std::string name, email, profile;
+    } who[] = {{&lsf, kLea, "lea@exemple.invalid", "Admin LV2"}, {&hsf, kHugo, "hugo@exemple.invalid", "Admin LV1"}, {&nsf, kNina, "nina@exemple.invalid", "Admin LV1"}};
     for (const auto& w : who) {
+        std::string code;
+        check(wf.ws->inviteAdmin(w.name, w.email, w.profile, code).ok && !code.empty(), w.name + " : invite(e), profil " + w.profile);
         check(w.f->ws->serviceConfigure(svc.url()).ok, w.name + " : l'adresse du service");
-        w.f->ws->reload();
-        std::string fp;
-        const auto r = w.f->ws->requestAdmin(w.name, w.email, &fp);
-        check(r.ok && !fp.empty(), w.name + " demande a devenir admin : " + r.text());
+        const auto r = w.f->ws->joinWithInvitation(code);
+        check(r.ok && r.output == "inscrit", w.name + " tape son code : inscrit(e) - " + r.text());
         w.f->ws->reload();
     }
     const std::string leaHex = lsf.ws->adminKey().keyHex, hugoHex = hsf.ws->adminKey().keyHex, ninaHex = nsf.ws->adminKey().keyHex;
+    const int number0 = wf.ws->adminList() ? wf.ws->adminList()->number : 0;
     HostRig prig(wf);
-    auto page = gui::makeAdminRequestsPage(prig.host());   // releve a l'arrivee
+    auto page = gui::makeAdminsPage(prig.host());
     prig.refreshers.push_back([&] {
         wf.ws->reload();
         page->refresh();
     });
-    auto* table = find<ui::TableView>(*page, "demandes-admins.table");
-    auto* bar = find<ui::FilterBar>(*page, "demandes-admins");
-    check(table && bar, "la table, la barre de filtres");
-    if (!table || !bar) return finish();
     {
-        const std::string t = draw(*page, 1400.f, 900.f);
-        check(rowsOf(*page, "demandes-admins.table") == 3 && has(t, kLea) && has(t, kHugo) && has(t, kNina), "la liste : les 3 demandes");
-        check(has(t, "3 demandes en attente") && has(t, "1 invitation not\xC3\xA9" "e sur ce poste"), "3 en attente ; 1 invitation notee");
-        const int il = rowOf(*table, 1, kLea), ih = rowOf(*table, 1, kHugo);
-        check(il >= 0 && ih >= 0 && has(table->model()->cellText(static_cast<ui::RowIndex>(il), 6), "invit\xC3\xA9 le ") &&
-                  has(table->model()->cellText(static_cast<ui::RowIndex>(il), 6), "Admin LV2") &&
-                  table->model()->cellText(static_cast<ui::RowIndex>(ih), 6) == "sans invitation",
-              "l'invitation : Lea << invitee le ... (Admin LV2) >>, Hugo << sans invitation >>");
-        check(il >= 0 && table->model()->cellText(static_cast<ui::RowIndex>(il), 5) == adm::fingerprint(leaHex).substr(0, 9) + "\xE2\x80\xA6" &&
-                  table->model()->cellText(static_cast<ui::RowIndex>(il), 7) == "En attente" && table->model()->cellText(static_cast<ui::RowIndex>(il), 2) == "lea@exemple.invalid",
-              "l'empreinte courte, l'etat, le courriel");
-        // la barre de filtres
-        bar->setSearch("Hugo");
-        check(rowsOf(*page, "demandes-admins.table") == 1, "chercher << Hugo >> : 1 ligne");
-        bar->setSearch("");
-        bar->filterOn(9, "sans invitation");
-        check(rowsOf(*page, "demandes-admins.table") == 2, "Invitation : sans invitation -> 2 lignes (Hugo, Nina)");
-        bar->clearField(9);
-        check(rowsOf(*page, "demandes-admins.table") == 3, "la puce enlevee : les 3");
-        // le clic droit (une ligne) : l'ordre de la regle
-        const int in = rowOf(*table, 1, kNina);
-        auto items = rightClick(*table, {static_cast<ui::RowIndex>(in)});
-        const std::string order = topLabels(items);
-        check(order.rfind("Ouvrir la demande;|Accepter\xE2\x80\xA6;|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|Refuser\xE2\x80\xA6;", 0) == 0,
-              "le clic droit : Ouvrir / Accepter... / Aller a, Filtrer sur / Copier, Exporter / Refuser... : " + order);
-        const auto* refuse = itemOf(items, "Refuser");
-        check(refuse && refuse->danger, "Refuser... : en rouge, a part");
-        const int cp = idOf(items, "Copier", "L'empreinte");
-        if (cp >= 0) table->contextAction->emit(cp);
-        check(cp >= 0 && g_copied == adm::fingerprint(ninaHex), "Copier > L'empreinte : " + g_copied);
-        // plusieurs lignes
-        items = rightClick(*table, {0, 1, 2});
-        const std::string many = topLabels(items);
-        check(has(many, "Accepter les 3 demandes\xE2\x80\xA6;") && has(many, "Refuser les 3 demandes\xE2\x80\xA6;") && !has(many, "Aller \xC3\xA0"),
-              "trois lignes : Accepter les 3, Refuser les 3 : " + many);
-        // la ligne depliee
-        check(table->setUnfolded(static_cast<ui::RowIndex>(il), true), "deplier la demande de Lea");
-        auto* card = dynamic_cast<ui::UnfoldCard*>(table->unfoldWidget(static_cast<ui::RowIndex>(il)));
-        const std::string ct = card ? card->text() : std::string();
-        check(card && has(ct, "L'EMPREINTE") && has(ct, "L'INVITATION") && has(ct, "profil pr\xC3\xA9vu : Admin LV2") && has(ct, lsf.ws->adminKey().id),
-              "depliee : l'empreinte (en grand), la demande, l'invitation et son profil : " + ct);
-        (void)table->setUnfolded(static_cast<ui::RowIndex>(il), false);
-    }
-    const int number0 = wf.ws->adminList() ? wf.ws->adminList()->number : 0;
-    {
-        // les trois choisies : UNE fenetre
-        table->selectModelRows({0, 1, 2});
-        (void)draw(*page, 1400.f, 900.f);
-        auto* acc = find<ui::Button>(*page, "demandes-admins.accepter");
-        check(acc && acc->text() == "Accepter 3 demandes\xE2\x80\xA6" && acc->enabled(), "<< Accepter 3 demandes... >>");
-        auto* ref = find<ui::Button>(*page, "demandes-admins.refuser");
-        check(ref && ref->text() == "Refuser 3 demandes\xE2\x80\xA6", "<< Refuser 3 demandes... >>");
-        std::vector<std::string> order;   // l'ordre des demandes dans la fenetre : celui des lignes choisies
-        for (const auto r : table->selectedModelRows()) order.push_back(table->model()->cellText(r, 1));
-        const auto at = [&](const std::string& name) {
-            for (std::size_t i = 0; i < order.size(); ++i)
-                if (order[i] == name) return std::to_string(i);
-            return std::string("?");
-        };
-        const std::size_t d0 = prig.dialogs.size();
-        check(click(*page, "demandes-admins.accepter") && prig.dialogs.size() == d0 + 1, "la fenetre << Accepter 3 demandes d'admin >>");
-        if (prig.dialogs.size() == d0 + 1) {
-            auto& dlg = *prig.dialogs.back();
-            ui::Widget& root = *dlg.widgetRoot();
-            std::string d = drawMenu(dlg);
-            check(has(d, "Accepter 3 demandes d'admin") && has(d, "(n\xC2\xB0 " + std::to_string(number0 + 1) + ")"), "le titre ; la liste qui sera signee (n\xC2\xB0 + 1)");
-            check(has(d, adm::fingerprint(leaHex).substr(0, 4)) && has(d, adm::fingerprint(hugoHex).substr(15, 4)) && has(d, adm::fingerprint(ninaHex).substr(25, 4)),
-                  "chaque empreinte en 6 groupes");
-            check(has(d, "Invitation : invit\xC3\xA9 le") && has(d, "Sans invitation : v\xC3\xA9rifie bien qui c'est."), "l'invitation de chacun");
-            check(pickedValue(root, "demandes-admins.lot.profil." + at(kLea)) == "Admin LV2" && pickedValue(root, "demandes-admins.lot.profil." + at(kHugo)) == "Admin LV1" &&
-                      pickedValue(root, "demandes-admins.lot.profil." + at(kNina)) == "Admin LV1",
-                  "le profil propose : celui de l'invitation (Lea : LV2), sinon LV1");
-            auto* ok = find<ui::Button>(root, "demandes-admins.lot.ok");
-            check(ok && !ok->enabled() && ok->text() == "Accepter les 3", "<< Accepter les 3 >> : grise tant qu'aucune case");
-            check(setCheck(root, "demandes-admins.lot.verifie." + at(kLea), true) && setCheck(root, "demandes-admins.lot.verifie." + at(kHugo), true),
-                  "les empreintes de Lea et Hugo verifiees");
-            d = drawMenu(dlg);
-            check(ok && !ok->enabled() && !click(root, "demandes-admins.lot.ok") && has(d, "2 sur 3 v\xC3\xA9rifi\xC3\xA9" "es"),
-                  "celle de Nina pas cochee : rien ne se signe (le bouton reste grise ; << 2 sur 3 verifiees >>)");
-            // la meme regle dans le Workspace : une case vide, rien n'est signe
-            const auto bad = wf.ws->acceptAdmins({{leaHex, "Admin LV2", true}, {hugoHex, "Admin LV1", true}, {ninaHex, "Admin LV1", false}});
-            wf.ws->reload();
-            check(!bad.ok && has(bad.message, "rien n'est sign\xC3\xA9") && (wf.ws->adminList() ? wf.ws->adminList()->number : 0) == number0,
-                  "Workspace::acceptAdmins avec une case vide : refuse, aucune liste signee : " + bad.message);
-            check(click(root, "demandes-admins.lot.retirer." + at(kNina)), "Nina retiree du lot");
-            d = drawMenu(dlg);
-            check(ok && ok->enabled() && ok->text() == "Accepter les 2" && has(d, "Accepter 2 demandes d'admin"), "<< Accepter les 2 >>");
-            check(click(root, "demandes-admins.lot.ok") && lastOk(prig) && closed(dlg), "Lea et Hugo acceptes d'un coup : " + lastText(prig));
-        }
+        check(click(*page, "admins.relever") && lastOk(prig), "Administrateurs, Relever : " + lastText(prig));
         wf.ws->reload();
+        page->refresh();
         const auto* list = wf.ws->adminList() ? &*wf.ws->adminList() : nullptr;
         const adm::Admin* a = list ? list->byKey(leaHex) : nullptr;
         const adm::Admin* b = list ? list->byKey(hugoHex) : nullptr;
-        check(list && list->number == number0 + 1 && a && b && a->active() && b->active() && !list->byKey(ninaHex),
-              "UNE liste signee (n\xC2\xB0 " + std::to_string(number0 + 1) + ") avec Lea et Hugo, sans Nina");
+        const adm::Admin* n = list ? list->byKey(ninaHex) : nullptr;
+        check(list && list->number == number0 + 1 && a && b && n && a->active() && b->active() && n->active(),
+              "UNE liste signee (n\xC2\xB0 " + std::to_string(number0 + 1) + ") avec Lea, Hugo et Nina, sans rien accepter");
         check(a && a->profile == "Admin LV2" && a->rights.size() == 6 && b && b->profile == "Admin LV1" && b->rights.size() == 3, "leur profil (LV2, LV1) et ses droits");
-        check(wf.ws->fetchJournal(nullptr).ok && journalCount(*wf.ws, "admin_ajouter") == 2, "le journal : une ligne << admin_ajouter >> par nouvel admin (2)");
+        check(wf.ws->fetchJournal(nullptr).ok && journalCount(*wf.ws, "admin_ajouter") == 3, "le journal : une ligne << admin_ajouter >> par nouvel admin (3)");
         const std::string t = draw(*page, 1400.f, 900.f);
-        check(rowsOf(*page, "demandes-admins.table") == 1 && has(t, "1 demande en attente"), "la liste relevee : Nina seule en attente");
-        bar->clearAll();
-        check(rowsOf(*page, "demandes-admins.table") == 3 && table->model()->cellText(static_cast<ui::RowIndex>(rowOf(*table, 1, kLea)), 8) == leaHex &&
-                  has(table->model()->cellText(static_cast<ui::RowIndex>(rowOf(*table, 1, kLea)), 7), "Accept\xC3\xA9" "e"),
-              "toutes : Lea et Hugo << Acceptee >>");
-        bar->setValues(8, {"En attente"});
+        check(has(t, kLea) && has(t, kHugo) && has(t, kNina) && !has(t, "en attente") && !has(t, "Demandes d'admin"), "Administrateurs : les trois, actifs ; aucune demande");
     }
     {
-        // Lea et Hugo se voient admins (le regard du poste en attente)
+        // Lea et Hugo se voient admins (le regard du poste en cours d'ajout)
         for (Fixture* f : {&lsf, &hsf}) {
             gui::AdminRefresh x;
             const auto r = f->ws->refreshAdminState(nullptr, &x);
             f->ws->reload();
-            check(r.ok && x.accepted && f->ws->role() == gui::Role::Admin, f->ws->adminKey().name + " se voit admin : " + r.text());
-            check(f->ws->service().syncKey, f->ws->adminKey().name + " : la cle de synchro recue (son trousseau)");
+            check(r.ok && x.admitted && f->ws->role() == gui::Role::Admin, f->ws->adminKey().id + " se voit admin : " + r.text());
+            check(f->ws->service().syncKey, f->ws->adminKey().id + " : la cle de synchro recue (son trousseau)");
         }
         check(lsf.ws->can("codes") && lsf.ws->can("licence_option") && !hsf.ws->can("codes") && hsf.ws->can("demandes"), "chacun ses droits (LV2, LV1)");
         HostRig lrig(lsf);
@@ -602,53 +459,6 @@ int main(int argc, char** argv) {
         const std::string t = draw(*mine);
         check(has(t, "actif") && has(t, "n\xC2\xB0 " + std::to_string(number0 + 1)) && has(t, "lea@exemple.invalid") && has(t, "6 sur 13"),
               "Mon compte de Lea : actif, la liste n\xC2\xB0 " + std::to_string(number0 + 1) + ", son courriel, 6 pouvoirs");
-    }
-    {
-        // Nina refusee, avec une raison
-        const int in = rowOf(*table, 1, kNina);
-        check(in >= 0, "la demande de Nina");
-        table->selectModelRows({static_cast<ui::RowIndex>(in)});
-        auto* ref = find<ui::Button>(*page, "demandes-admins.refuser");
-        check(ref && ref->text() == "Refuser\xE2\x80\xA6" && ref->enabled(), "<< Refuser... >>");
-        const std::size_t d0 = prig.dialogs.size();
-        check(click(*page, "demandes-admins.refuser") && prig.dialogs.size() == d0 + 1, "la fenetre << Refuser >>");
-        if (prig.dialogs.size() == d0 + 1) {
-            auto& dlg = *prig.dialogs.back();
-            const std::string d = drawMenu(dlg);
-            check(has(d, "Refuser la demande de " + kNina) && has(d, "Raison (facultative)"), "le titre ; la raison facultative");
-            check(type(*dlg.widgetRoot(), "demandes-admins.refus.raison", "pas pour l'instant") && click(*dlg.widgetRoot(), "demandes-admins.refus.ok") && lastOk(prig) &&
-                      closed(dlg),
-                  "refusee : " + lastText(prig));
-        }
-        std::string st;
-        check(nsf.ws->adminRequestState(st).ok && st == "refusee", "Nina voit << refusee >> (" + st + ")");
-        check(wf.ws->fetchJournal(nullptr).ok && journalCount(*wf.ws, "demande_refuser") == 1, "le journal : une ligne << demande_refuser >>");
-    }
-    {
-        // Nina demande de nouveau, de deux PC : les deux refusees d'un coup
-        Fixture n2f(source, "compte-svc-nina-portable");
-        check(n2f.ws->serviceConfigure(svc.url()).ok, "le second PC de Nina : l'adresse du service");
-        n2f.ws->reload();
-        check(nsf.ws->requestAdmin(kNina, "nina@exemple.invalid").ok && n2f.ws->requestAdmin(kNina, "nina@exemple.invalid").ok, "Nina demande de nouveau, de deux PC");
-        check(click(*page, "demandes-admins.relever") && lastOk(prig), "Relever : " + lastText(prig));
-        check(rowsOf(*page, "demandes-admins.table") == 2, "2 demandes en attente (Nina, deux PC)");
-        table->selectModelRows({0, 1});
-        auto* ref = find<ui::Button>(*page, "demandes-admins.refuser");
-        check(ref && ref->text() == "Refuser 2 demandes\xE2\x80\xA6" && ref->enabled(), "<< Refuser 2 demandes... >>");
-        const std::size_t d0 = prig.dialogs.size();
-        check(click(*page, "demandes-admins.refuser") && prig.dialogs.size() == d0 + 1, "la fenetre << Refuser 2 demandes d'admin >>");
-        if (prig.dialogs.size() == d0 + 1) {
-            auto& dlg = *prig.dialogs.back();
-            const std::string d = drawMenu(dlg);
-            check(has(d, "Refuser 2 demandes d'admin") && find<ui::Button>(*dlg.widgetRoot(), "demandes-admins.refus.ok")->text() == "Refuser les 2", "le titre ; << Refuser les 2 >>");
-            check(type(*dlg.widgetRoot(), "demandes-admins.refus.raison", "doublon") && click(*dlg.widgetRoot(), "demandes-admins.refus.ok") && lastOk(prig),
-                  "les 2 refusees : " + lastText(prig));
-        }
-        std::string s1, s2;
-        check(nsf.ws->adminRequestState(s1).ok && s1 == "refusee" && n2f.ws->adminRequestState(s2).ok && s2 == "refusee", "les deux PC de Nina voient << refusee >>");
-        check(wf.ws->fetchJournal(nullptr).ok && journalCount(*wf.ws, "demande_refuser") == 3, "le journal : 3 lignes << demande_refuser >> en tout");
-        const std::string t = draw(*page, 1400.f, 900.f);
-        check(rowsOf(*page, "demandes-admins.table") == 0 && has(t, "Aucune demande en attente"), "plus rien en attente");
     }
     return finish();
 }

@@ -80,6 +80,17 @@ namespace app {
         invalidate();
     }
 
+    void GrafcetView::setExternal(External external) {
+        external_ = std::move(external);
+        dirty_ = true;
+        invalidate();
+    }
+
+    int GrafcetView::itemAt(gfx::Point at) const {
+        for (const auto& box : itemBoxes_) if (box.rect.contains(at)) return box.id;
+        return -1;
+    }
+
     void GrafcetView::setChecks(std::vector<grafcet::Check> checks) {
         checks_ = std::move(checks);
         invalidate();
@@ -227,12 +238,14 @@ namespace app {
 
     std::optional<bool> GrafcetView::stepActive(int id) const {
         if (!runtime_) return std::nullopt;
+        if (external_.stepActive) return external_.stepActive(id);   // 1.51.0 (S)
         const auto text = arrayField("Steps", indexOf(chart_.steps, id), "Active");
         if (text.empty()) return std::nullopt;
         return isTrue(text);
     }
 
     std::string GrafcetView::stepActiveTime(int id) const {
+        if (external_.stepTime) return runtime_ ? external_.stepTime(id) : std::string{};   // 1.51.0 (S)
         const auto text = arrayField("Steps", indexOf(chart_.steps, id), "ActiveTime");
         if (text.empty()) return {};
         const auto readable = grafcet::durationText(text);
@@ -241,6 +254,7 @@ namespace app {
 
     std::optional<bool> GrafcetView::transitionTrue(int id) const {
         if (!runtime_) return std::nullopt;
+        if (external_.transitionTrue) return external_.transitionTrue(id);   // 1.51.0 (S)
         const auto text = arrayField("Trans", indexOf(chart_.transitions, id), "Condition");
         if (text.empty()) return std::nullopt;
         return isTrue(text);
@@ -249,6 +263,7 @@ namespace app {
     // Validee : toutes ses etapes d'amont sont actives (IEC 60848, regle 2).
     bool GrafcetView::transitionValidated(int id) const {
         if (!runtime_) return false;
+        if (external_.transitionEnabled) return external_.transitionEnabled(id);   // 1.51.0 (S)
         const auto* t = grafcet::transitionById(chart_, id);
         if (!t || t->sources.empty()) return false;
         for (const int s : t->sources) {
@@ -260,6 +275,7 @@ namespace app {
 
     std::optional<bool> GrafcetView::actionRunning(int id) const {
         if (!runtime_) return std::nullopt;
+        if (external_.actionRunning) return external_.actionRunning(id);   // 1.51.0 (S)
         const auto text = arrayField("Acts", indexOf(chart_.actions, id), "Out");
         if (text.empty()) return std::nullopt;
         return isTrue(text);
@@ -293,6 +309,10 @@ namespace app {
 
     void GrafcetView::askEngine(EngineCommand cmd) {
         if (!runtime_) return;
+        if (cmd == EngineCommand::SfcActivate || cmd == EngineCommand::SfcDeactivate) {
+            if (selectedPart_ != GrafcetPart::Step || selectedId_ < 0) return;
+            forceTarget_ = selectedId_;
+        }
         if (cmd == EngineCommand::ForceSituation) {
             if (selectedPart_ != GrafcetPart::Step || selectedId_ < 0) return;
             forceTarget_ = selectedId_;
@@ -307,6 +327,21 @@ namespace app {
     }
 
     std::string GrafcetView::engineText(EngineCommand cmd) const {
+        if (external()) {   // 1.51.0 (S) : un GRAFCET natif
+            const std::string step = external_.stepName ? external_.stepName(forceTarget_) : std::string("?");
+            switch (cmd) {
+            case EngineCommand::Init:
+                return "Initialiser " + chart_.name + " : toutes les Ã©tapes se dÃ©sactivent, les Ã©tapes "
+                       "initiales s'activent au cycle suivant (situation initiale).";
+            case EngineCommand::SfcActivate:
+                return "Activer l'Ã©tape " + step + " : elle devient active tout de suite, son temps repart de 0 "
+                       "(les autres Ã©tapes ne changent pas).";
+            case EngineCommand::SfcDeactivate:
+                return "DÃ©sactiver l'Ã©tape " + step + " : elle cesse d'Ãªtre active tout de suite "
+                       "(ses actions s'arrÃªtent au cycle suivant).";
+            default: return {};
+            }
+        }
         const std::string ctrl = chart_.scope + "Ctrl_" + chart_.name + ".Cmd.";
         switch (cmd) {
         case EngineCommand::Init:
@@ -336,6 +371,26 @@ namespace app {
         pendingCmd_ = EngineCommand::None;
         invalidate();
         if (!runtime_ || cmd == EngineCommand::None || chart_.name.empty()) return false;
+        if (external()) {   // 1.51.0 (S) : un GRAFCET natif
+            bool done = false;
+            std::string what;
+            if (cmd == EngineCommand::Init && external_.init) { done = external_.init(); what = "situation initiale"; }
+            else if ((cmd == EngineCommand::SfcActivate || cmd == EngineCommand::SfcDeactivate) && external_.forceStep) {
+                done = external_.forceStep(forceTarget_, cmd == EngineCommand::SfcActivate);
+                what = std::string(cmd == EngineCommand::SfcActivate ? "activÃ©" "e : " : "dÃ©sactivÃ©" "e : ")
+                     + (external_.stepName ? external_.stepName(forceTarget_) : std::string("?"));
+            }
+            Firing f;
+            f.time = clockNow();
+            f.from = f.to = "-";
+            f.condition = (done ? "forcÃ© : " : "refusÃ© : ") + what;
+            f.forced = true;
+            history_.push_back(std::move(f));
+            if (history_.size() > 200) history_.erase(history_.begin());
+            historyChanged->emit();
+            invalidate();
+            return done;
+        }
         std::string ctrl = chart_.scope + "Ctrl_" + chart_.name + ".Cmd.";
         if (sim::Value probe; !runtime_->get(ctrl + "InitReq", probe)) ctrl = "Ctrl_" + chart_.name + ".Cmd.";
         bool ok = false;
@@ -473,8 +528,9 @@ namespace app {
         // dans l'infobulle et les Proprietes ; le dessin reste lisible a l'ecran.
         grafcet::DiagramMetrics metrics;
         metrics.maxLabel = 240.f;
-        diagram_ = grafcet::buildDiagram(chart_, &pending_,
-            [r, font](std::string_view text) { return r->measure(text, font).width; }, metrics);
+        const grafcet::MeasureText measure = [r, font](std::string_view text) { return r->measure(text, font).width; };
+        if (external_.build) diagram_ = external_.build(measure, pending_);   // 1.51.0 (S) : la grille de Control Expert
+        else diagram_ = grafcet::buildDiagram(chart_, &pending_, measure, metrics);
         dirty_ = false;
     }
 
@@ -558,6 +614,23 @@ namespace app {
             }
         };
 
+        // ---- 1.51.0 (S) : les textes du graphe (textBox), sous tout le reste ------
+        itemBoxes_.clear();
+        for (const auto& n : diagram_.notes) {
+            const auto box = toScreen(n.box);
+            ctx.r.fillRect(box, c.headerBg.withAlpha(150));
+            ctx.r.strokeRect(box, c.border, 1.f);
+            ctx.r.pushClip(box);
+            ctx.r.drawText({ box.x + 4.f * zoom_, box.y + 3.f * zoom_ }, n.text, fSmall, c.textMuted);
+            ctx.r.popClip();
+        }
+        for (const auto& it : diagram_.items) {
+            const auto box = toScreen(it.box);
+            itemBoxes_.push_back(BarBox{ it.id, box });
+            if (selectedPart_ == GrafcetPart::Item && selectedId_ == it.id)
+                ctx.r.strokeRect(box.inset(-3.f, -3.f), c.accent, 2.f);
+        }
+
         // ---- les liaisons ---------------------------------------------------------
         for (const auto& s : diagram_.segments) {
             const gfx::Color ink = s.transition >= 0 ? inkOfTransition(s.transition) : wire;
@@ -597,7 +670,18 @@ namespace app {
             const auto hit = toScreen(t.hit);
             bars_.push_back(BarBox{ t.id, hit });
 
-            if (t.idBox.w > 0.f) {
+            if (running && external()) {   // 1.51.0 (S) : vraie / fausse, validee ou non
+                const auto truth = transitionTrue(t.id);
+                const std::string badge = truth ? (*truth ? "1" : "0") : "?";
+                const auto idBox = toScreen(t.idBox);
+                const float tw = ctx.r.measure(badge, fSmall).width;
+                const gfx::Rect pill{ idBox.right() - tw - 8.f * zoom_, idBox.y, tw + 8.f * zoom_, idBox.h };
+                ctx.r.fillRect(pill, truth && *truth ? green.withAlpha(170) : c.headerBg);
+                ctx.r.strokeRect(pill, truth && *truth ? green : c.border, 1.f);
+                ctx.r.drawText({ pill.x + 4.f * zoom_, pill.y + (pill.h - lhSmall) / 2.f }, badge, fSmall,
+                               truth && *truth ? c.selectionText : c.textMuted);
+            }
+            else if (t.idBox.w > 0.f) {
                 const auto idBox = toScreen(t.idBox);
                 const float tw = ctx.r.measure(t.idText, fSmall).width;
                 ctx.r.drawText({ idBox.right() - tw, idBox.y + (idBox.h - lhSmall) / 2.f }, t.idText, fSmall, c.textMuted);
@@ -648,7 +732,15 @@ namespace app {
             // l'etape initiale : le double carre de toute la norme
             if (s.initial)
                 ctx.r.strokeRect(box.inset(4.f * zoom_, 4.f * zoom_), frame, std::max(1.f, 1.2f * zoom_));
-            const std::string number = "X" + s.number;
+            // 1.51.0 (S) : un GRAFCET natif ecrit le nom de l'etape ; une macro-etape a ses deux traits
+            const std::string number = s.label.empty() ? "X" + s.number : s.label;
+            if (s.macro) {
+                ctx.r.line({ box.x, box.y + 5.f * zoom_ }, { box.right(), box.y + 5.f * zoom_ }, frame, std::max(1.f, zoom_));
+                ctx.r.line({ box.x, box.bottom() - 5.f * zoom_ }, { box.right(), box.bottom() - 5.f * zoom_ }, frame,
+                           std::max(1.f, zoom_));
+            }
+            if (running && external_.stepFault && external_.stepFault(s.id))
+                dashedRect(ctx.r, box.inset(-6.f * zoom_, -6.f * zoom_), red, 2.f);
             const float nw = ctx.r.measure(number, fNumber).width;
             const float lhNumber = ctx.r.lineHeight(fNumber);
             ctx.r.drawText({ box.x + (box.w - nw) / 2.f, box.y + (box.h - lhNumber) / 2.f }, number, fNumber,
@@ -811,6 +903,15 @@ namespace app {
             };
             if (selectedPart_ == GrafcetPart::Step && selectedId_ >= 0)
                 items.push_back({ EngineCommand::ForceSituation, "Forcer X" + std::to_string(selectedId_) });
+            if (external()) {   // 1.51.0 (S) : un GRAFCET natif - initialiser, forcer l'etape choisie
+                items = { { EngineCommand::Init, "Initialiser" } };
+                if (selectedPart_ == GrafcetPart::Step && selectedId_ >= 0) {
+                    const std::string name = external_.stepName ? external_.stepName(selectedId_) : std::string("?");
+                    const auto on = stepActive(selectedId_);
+                    if (on && *on) items.push_back({ EngineCommand::SfcDeactivate, "D\xC3\xA9sactiver " + name });
+                    else items.push_back({ EngineCommand::SfcActivate, "Activer " + name });
+                }
+            }
             float x = area.right() - 8.f;
             const float y = area.y + 6.f;
             for (auto it = items.rbegin(); it != items.rend(); ++it) {
@@ -866,6 +967,13 @@ namespace app {
     // L'infobulle : ce qu'il y a sous la souris, et en simulation la valeur des
     // variables d'une receptivite.
     std::string GrafcetView::liveTooltip(gfx::Point mouse) const {
+        if (external_.tooltip) {   // 1.51.0 (S)
+            if (const int x = stepAt(mouse); x >= 0) return external_.tooltip(GrafcetPart::Step, x);
+            if (const int t = transitionAt(mouse); t >= 0) return external_.tooltip(GrafcetPart::Transition, t);
+            if (const int a = actionAt(mouse); a >= 0) return external_.tooltip(GrafcetPart::Action, a);
+            if (const int i = itemAt(mouse); i >= 0) return external_.tooltip(GrafcetPart::Item, i);
+            return {};
+        }
         const int t = transitionAt(mouse);
         if (t >= 0) {
             const auto* tr = grafcet::transitionById(chart_, t);
@@ -1096,6 +1204,11 @@ namespace app {
                 select(GrafcetPart::Action, action);
                 actionSelected->emit(action);
                 if (d->clickCount >= 2) editRequested->emit(GrafcetPart::Action, action);
+                return EventResult::Consumed;
+            }
+            if (const int item = itemAt(d->pos); item >= 0) {   // 1.51.0 (S) : saut, divergence, lien, texte
+                select(GrafcetPart::Item, item);
+                itemSelected->emit(item);
                 return EventResult::Consumed;
             }
             select(GrafcetPart::None, -1);

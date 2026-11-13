@@ -1,0 +1,20 @@
+# DFB type interface.
+name = DFB_EQ_PUMP
+version = 1.02
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Count ; INT ;  ; Input ; 16 ; combien d'equipements sont traites ;  ; 
+CycleMs ; DINT ;  ; Input ; 20 ; la periode de la tache en ms. Un DDT ne peut pas contenir de temporisateur ;  ; 
+Eq ; ARRAY[0..15] OF ST_EQ_Pump ;  ; InOut ;  ; les equipements ;  ; 
+FaultCount ; INT ;  ; Output ; 0 ; combien sont en defaut ;  ; 
+ReadyCount ; INT ;  ; Output ; 0 ; combien sont utilisables ;  ; 
+i ; INT ;  ; Local ; 0 ;  ;  ; 
+n ; INT ;  ; Local ; 0 ;  ;  ; 
+LAST ; INT ;  ; Local ; 15 ; dernier indice ;  ; 
+req ; BOOL ;  ; Local ;  ;  ;  ; 
+allowed ; BOOL ;  ; Local ;  ;  ;  ; 
+st ; INT ;  ; Local ; 0 ; l'etat de l'equipement, avant publication ;  ; 
+MAXMS ; DINT ;  ; Local ; 2000000000 ; plafond des compteurs de temps : 23 jours, sous la limite d'un DINT ;  ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; Process ; ST ; 0 ;  ;  ; Process.st

@@ -3,7 +3,7 @@
 //  (maquette 1.43.0, planches 03 et 04 ; docs/ADMINS.md, par. 6) - l'admin+.
 // -----------------------------------------------------------------------------
 //  Chaque action de chaque admin (et de l'admin+, et ce que le service ecrit
-//  lui-meme : une signature refusee, un autre PC, une demande d'admin), signee
+//  lui-meme : une signature refusee, un autre PC ; avant la 1.51, une demande d'admin), signee
 //  par sa cle et chainee a la precedente ; ce poste la releve et la verifie
 //  (Workspace::fetchJournal, journalLines). La page :
 //    - un historique PAR ADMIN (ses pastilles : son nom, son nombre ; un admin

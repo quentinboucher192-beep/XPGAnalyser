@@ -1,0 +1,1 @@
+# zone ; debut ; fin  (les cellules lues, bornes comprises ; absente : toute la zone)

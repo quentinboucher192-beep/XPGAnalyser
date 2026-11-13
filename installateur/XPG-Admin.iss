@@ -20,7 +20,9 @@
 ;  en mode normal (sautee si une cle d'admin est deja la : une mise a jour) ; en silencieux
 ;  /INVITATION=INV-XXXX-XXXX (facultatif ; la mise a jour du Studio n'en passe pas). Ecrit dans
 ;  %LOCALAPPDATA%\XPG\LicenseAdmin\invitation.txt (une ligne, le compte seul y a acces) :
-;  XPG Admin le lit au premier lancement et l'envoie avec la demande d'admin.
+;  XPG Admin le lit au premier lancement et s'inscrit avec lui : le code accepte, ce PC est
+;  admin (1.51.0 : plus de demande d'admin, ni de code a 6 chiffres a dire ; un code inconnu,
+;  expire ou deja servi : XPG Admin dit pourquoi et le fait retaper).
 ;  La cle d'admin, l'archive et les reglages (%LOCALAPPDATA%\XPG\LicenseAdmin) ne sont
 ;  JAMAIS touches : un admin qui avait l'Admin d'avant (1.48) garde sa cle et ses donnees.
 ;  En silencieux : /VERYSILENT /SUPPRESSMSGBOXES [/INVITATION=...] [/TASKS=...].
@@ -97,7 +99,7 @@ Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
 
 [Messages]
 WelcomeLabel1=Bienvenue dans l'installation de XPG Admin
-WelcomeLabel2=L'admin+ t'a invité à devenir admin des licences. Cet assistant installe XPG Admin, ton programme d'admin.%n%nGarde sous la main le code d'invitation qu'il t'a donné avec ce fichier (INV-XXXX-XXXX) : l'étape suivante le demande.%n%nTa clé d'admin naîtra sur ce PC au premier lancement ; elle n'en sort jamais.
+WelcomeLabel2=L'admin+ t'a invité à devenir admin des licences. Cet assistant installe XPG Admin, ton programme d'admin.%n%nGarde sous la main le code d'invitation qu'il t'a donné avec ce fichier (INV-XXXX-XXXX) : l'étape suivante le demande. Ce code suffit : dès qu'il est accepté, tu es admin.%n%nTa clé d'admin naîtra sur ce PC au premier lancement ; elle n'en sort jamais.
 ClickNext=Clique sur Suivant pour continuer, ou sur Annuler pour quitter l'assistant.
 ClickFinish=Clique sur Terminer pour fermer l'assistant.
 ClickInstall=Clique sur Installer pour commencer, ou sur Précédent pour changer un choix.
@@ -115,7 +117,7 @@ InstallingLabel=Copie des fichiers de XPG Admin.
 PreparingDesc=L'assistant prépare l'installation de XPG Admin sur ton PC.
 ExitSetupMessage=L'installation n'est pas terminée : si tu quittes maintenant, XPG Admin ne sera pas installé.%n%nTu pourras relancer l'assistant plus tard.%n%nQuitter l'assistant ?
 FinishedHeadingLabel=C'est installé !
-FinishedLabel=XPG Admin est dans le menu Démarrer. Au premier lancement, ta clé d'admin naît sur ce PC et ta demande part avec ton code d'invitation ; XPG Admin te montre alors un code à 6 chiffres à dire à l'admin+.
+FinishedLabel=XPG Admin est dans le menu Démarrer. Au premier lancement, ta clé d'admin naît sur ce PC et ton code d'invitation fait de toi un admin : rien d'autre à faire, rien à dire à l'admin+. Un code refusé (inconnu, expiré, déjà servi) : XPG Admin te dit pourquoi et te le fait retaper.
 FinishedLabelNoIcons=L'assistant a terminé l'installation de XPG Admin.
 
 [CustomMessages]
@@ -325,8 +327,8 @@ begin
     Result := 'Ta clé d''admin est déjà sur ce PC (' + D + ') : XPG Admin la reprend telle quelle, avec tes réglages et ton archive. ' +
               'Rien à refaire : ni demande, ni code.'
   else
-    Result := 'Au premier lancement, XPG Admin crée ta clé d''admin sur ce PC (dans ' + D + ' ; elle n''en sort jamais) et envoie ta ' +
-              'demande avec ton code d''invitation. Il te montre alors un code à 6 chiffres : dis-le à l''admin+, qui le tape pour t''accepter.';
+    Result := 'Au premier lancement, XPG Admin crée ta clé d''admin sur ce PC (dans ' + D + ' ; elle n''en sort jamais) et ton code ' +
+              'd''invitation fait de toi un admin, avec les droits que l''admin+ a choisis : ni demande, ni code à lui dire.';
   if FileExists(D + '\cle-editeur-licences.cle') then
     Result := Result + #13#10 + #13#10 + 'Ce PC a aussi la clé de l''éditeur : XPG Admin ne s''en sert jamais (elle reste à XPG License Manager Admin).';
   if ConnexionPresente then
@@ -603,9 +605,10 @@ begin
   ChargerPolices;
   // la page << Code d'invitation >> (apres l'accueil) : obligatoire ; prerempli par /INVITATION=
   PageInvitation := CreateInputQueryPage(wpWelcome, 'Code d''invitation',
-                                         'Le code que l''admin+ t''a donné avec cet installateur (valable 48 h, une seule fois).',
+                                         'Le code que l''admin+ t''a donné avec cet installateur (valable 48 h, une seule fois) : il fait de ce PC un admin.',
                                          'Tape ton code d''invitation, tel que l''admin+ te l''a donné ou dicté : INV- puis 8 lettres ou chiffres. ' +
-                                         'Les minuscules et les tirets oubliés sont acceptés.');
+                                         'Les minuscules et les tirets oubliés sont acceptés. XPG Admin le vérifie au premier lancement ; ' +
+                                         'refusé (inconnu, expiré, déjà servi), il te dit pourquoi et te le fait retaper.');
   PageInvitation.Add('Code d''invitation :', False);
   PageInvitation.Values[0] := ExpandConstant('{param:INVITATION|}');
   Ecrire(PageInvitation.SubCaptionLabel.Font, '', 11, CouleurTexte);

@@ -173,15 +173,24 @@ std::string_view typeKindLabel(HmiTypeKind k) noexcept {
 }
 
 // ---------------------------------------------------------------- trouver ---
+// 1.51.0 : un nom complet (S_Pompe.T_Mode, Gaz.T_Mode) designe l'enumeration de cet espace (d'un symbole) ; un nom court,
+// celle de la racine d'abord (avant : la premiere de ce nom, un homonyme d'un espace compris), puis la premiere de ce nom.
 const HmiType* findEnumeration(const Project& p, std::string_view name) {
+    const auto n = trimmed(name);
+    if (n.find('.') != std::string_view::npos) {
+        for (const auto& t : p.programs.types)
+            if (isEnumeration(t) && !t.ns.empty() && sameName(fullName(t), n)) return &t;
+        return nullptr;
+    }
     for (const auto& t : p.programs.types)
-        if (isEnumeration(t) && sameName(t.name, trimmed(name))) return &t;
+        if (isEnumeration(t) && t.ns.empty() && sameName(t.name, n)) return &t;
+    for (const auto& t : p.programs.types)
+        if (isEnumeration(t) && sameName(t.name, n)) return &t;
     return nullptr;
 }
 HmiType* findEnumeration(Project& p, std::string_view name) {
-    for (auto& t : p.programs.types)
-        if (isEnumeration(t) && sameName(t.name, trimmed(name))) return &t;
-    return nullptr;
+    const HmiType* t = findEnumeration(static_cast<const Project&>(p), name);
+    return const_cast<HmiType*>(t);
 }
 std::vector<const HmiType*> enumerations(const Project& p) {
     std::vector<const HmiType*> out;
@@ -204,7 +213,9 @@ int enumValueIndex(const HmiType& t, std::string_view name) {
     return -1;
 }
 std::string enumText(const HmiEnumValue& v) { return v.text.empty() ? v.name : v.text; }
-std::string enumLiteral(const HmiType& t, const HmiEnumValue& v) { return t.name + "#" + v.name; }
+// 1.51.0 : une enumeration d'un symbole s'ecrit par son nom complet (S_Pompe.T_Mode#Marche : un homonyme du projet ne la
+// cache pas).
+std::string enumLiteral(const HmiType& t, const HmiEnumValue& v) { return (t.symbol != kNoId ? fullName(t) : t.name) + "#" + v.name; }
 
 bool parseEnumLiteral(const Project& p, std::string_view text, const HmiType** type, const HmiEnumValue** value) {
     text = trimmed(text);
@@ -228,7 +239,8 @@ bool enumNumberOf(const HmiType& t, std::string_view text, std::int64_t& out) {
     text = trimmed(text);
     if (text.empty()) return false;
     if (const auto hash = text.find('#'); hash != std::string_view::npos) {
-        if (!sameName(trimmed(text.substr(0, hash)), t.name)) return false;
+        // 1.51.0 : T_Mode#Auto ou S_Pompe.T_Mode#Auto (le nom complet d'une enumeration d'un symbole, d'un espace).
+        if (!sameName(trimmed(text.substr(0, hash)), t.name) && !sameName(trimmed(text.substr(0, hash)), fullName(t))) return false;
         text = trimmed(text.substr(hash + 1));
     }
     if (const HmiEnumValue* v = enumValueByName(t, text)) { out = v->value; return true; }

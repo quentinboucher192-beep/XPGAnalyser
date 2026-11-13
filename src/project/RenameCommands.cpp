@@ -4,6 +4,8 @@
 #include "CodeIconKeys.hpp"
 
 #include "ApiCommands.hpp"
+#include "Ladder.hpp"                    // 1.51.0 : renommer dans un ladder
+#include "SfcEdit.hpp"                   // 1.51.0 (S) : renommer dans un GRAFCET
 #include "../import/ProjectParser.hpp"
 
 #include <algorithm>
@@ -112,6 +114,23 @@ bool elementaryName(std::string_view n) {
 } // namespace
 
 std::size_t renameInCode(std::string& code, std::string_view from, std::string_view to, bool member) {
+    // 1.51.0 : UN LADDER (LD). Ses noms sont dans des attributs (contactVariableName,
+    // effectiveParameter...) que la reecriture du texte enjambe (entre guillemets) :
+    // le modele les renomme un par un (la meme regle sur chaque nom), et seuls les
+    // reseaux touches sont reecrits.
+    if (code.compare(0, 9, "<LDSource") == 0) {
+        auto d = ladder::parse(code);
+        if (!d) return 0;
+        const auto n = ladder::rewriteNames(*d, [&](std::string& text) { return renameInCode(text, from, to, member); });
+        if (n > 0) code = ladder::write(*d);
+        return n;
+    }
+    // 1.51.0 (S) : UN GRAFCET (SFC). Ses receptivites et ses actions sont des textes
+    // d'elements, ses sections de transition et d'action du ST (ou un ladder, par le
+    // bloc du dessus) : le modele les renomme un par un ; les etapes, les sauts et le
+    // reste du XML ne sont pas touches.
+    if (code.compare(0, 11, "<SFCProgram") == 0)
+        return sfc::rewriteNames(code, [&](std::string& text) { return renameInCode(text, from, to, member); });
     std::string out;
     out.reserve(code.size());
     std::size_t count = 0, i = 0;

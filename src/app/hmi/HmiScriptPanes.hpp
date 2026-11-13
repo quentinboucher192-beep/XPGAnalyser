@@ -308,6 +308,7 @@ private:
     [[nodiscard]] bool cycleRow(int row) const;   // 1.27.0 : la ligne d'un script de cycle
     [[nodiscard]] bool cycleSelected() const;     // 1.51.0 : un script de cycle (ou l'OnCycle) est choisi
     void updateCycleColumn();                     // 1.51.0 : la section Execution montree ou cachee, selon le choix
+    void setCycleColumn(bool show);               // ... montree (vrai) ou cachee, sa largeur pretee a l'editeur
     [[nodiscard]] std::string cycleHint() const;  // 1.51.0 : la phrase de la barre qui l'explique
 
     hmi::DocumentPtr  doc_;

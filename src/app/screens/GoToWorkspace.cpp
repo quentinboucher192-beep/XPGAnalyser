@@ -31,6 +31,7 @@
 //  est faite.
 // =============================================================================
 #include "Screens.hpp"
+#include "../LadderPane.hpp"   // 1.51.0 (L) : Aller a dans un ladder
 #include "../../core/Edition.hpp"   // 1.12.0 : Aller a, dans chaque application
 
 #include "../../project/CodeIconKeys.hpp"
@@ -626,6 +627,7 @@ void MainAnalysisScreen::goToResult(const GoToPanel::Result& r) {
         if (!editor && centre_)
             if (auto* page = centre_->page(centre_->currentIndex())) editor = dynamic_cast<ui::MultiLineText*>(page->findById(editorId));
         if (editor && line > 0) editor->goToLine(static_cast<std::size_t>(line - 1));
+        revealLadderLine(widgetRoot(), section, line);   // 1.51.0 (L) : un ladder ouvert en schema y va aussi
     };
     const auto p = app_.project();
     if (kind == "hmivar") {

@@ -3,21 +3,27 @@
 //  - la liste des admins (genre << admins >>, signee par la cle de l'editeur),
 //    publique (GET /v1/admins) et lue en tables (admins) pour l'authentification
 //    des routes /admin (licences.js, verifierAppel) ;
-//  - les demandes d'admin (POST /v1/admins/demande, signee par la cle du futur
-//    admin) : une par cle, 20 en attente au plus ;
+//  - 1.51.0 : l'inscription par code d'invitation (POST /v1/admins/inscription,
+//    signee par la cle du futur admin) : le code est servi et la cle inscrite d'un
+//    coup ; l'Admin+ (la cle de l'editeur) la met d'office dans la liste signee a
+//    son prochain regard (plus de demande d'admin a accepter ; 20 inscrits au plus) ;
 //  - le trousseau : la cle de synchro scellee pour chaque admin (le service ne
 //    voit qu'un bloc scelle) ;
 //  - le journal des admins : une chaine (chaque ligne porte l'empreinte de la
 //    precedente) ; chaque entree est signee par la cle qui l'envoie ; le service
 //    ecrit lui-meme (signees par SA cle) les lignes signature_refusee, autre_pc,
-//    demande_admin, sauvegarde, restauration.
+//    sauvegarde, restauration (demande_admin : les lignes d'avant la 1.51 seulement).
 // -----------------------------------------------------------------------------
 //  Les routes sont des methodes du Durable Object (licences.js les ajoute a sa
 //  classe : `this` est l'objet, ses tables et ses aides).
 //  LES TABLES
 //    admins           la liste en place, une ligne par cle (droits, gardes : JSON)
-//    admins_demandes  les demandes d'admin (attente, acceptee, refusee) ; une
-//                     demande close est effacee apres 7 jours
+//    admins_demandes  1.51.0 : les INSCRIPTIONS par code d'invitation (le nom de la
+//                     table ne change pas : une sauvegarde d'avant se restaure) -
+//                     etat << attente >> : inscrite, la cle de l'editeur la signe
+//                     d'office ; << acceptee >> : dans la liste ; << refusee >> :
+//                     close (une demande d'avant la 1.51, sans code). Une close est
+//                     effacee apres 7 jours
 //    trousseau        le scelle de la cle de synchro, par cle d'admin
 //    journal          les lignes du journal, telles qu'ecrites (texte), leur
 //                     empreinte, la cle et le nonce de l'entree (un renvoi de la
@@ -104,6 +110,7 @@ export const ACTIONS_JOURNAL = [
     "stats_reevaluer", // 1.48.1 : les statistiques reevaluees (docs/STATISTIQUES.md, par. 15)
 ];
 // 1.47.0 : derogation_utilisee, derogation_expiree (derogations.js)
+// 1.51.0 : << demande_admin >> n'est plus ecrite (plus de demande d'admin) ; elle reste connue pour les lignes d'avant.
 export const ACTIONS_SERVICE = ["signature_refusee", "autre_pc", "demande_admin", "sauvegarde", "restauration", "derogation_utilisee", "derogation_expiree", "reinitialisation"]; // 1.49.0 : reinitialisation (reinitialiser.js)
 
 // Ce que signe la cle qui ecrit une entree du journal : ce prefixe, puis le texte de l'entree.
@@ -111,8 +118,8 @@ export const PREFIXE_JOURNAL = "XPG-JOURNAL-1\n";
 
 const MAX_ADMINS = 32;
 const MAX_GARDES = 512;
-const MAX_DEMANDES_ADMINS = 20; // en attente, au plus
-export const GARDE_DEMANDES_ADMINS = 7 * JOUR; // une demande d'admin close est effacee apres 7 jours
+const MAX_INSCRITS = 20; // 1.51.0 : les inscriptions qui attendent la signature de l'Admin+, au plus
+export const GARDE_DEMANDES_ADMINS = 7 * JOUR; // une inscription close (admis, ou une demande d'avant close) est effacee apres 7 jours
 const MAX_TROUSSEAU = 4096; // un scelle (base64)
 export const MAX_JOURNAL = 200000; // les lignes du journal, au plus
 const MAX_ENTREE = 16 * 1024; // une entree (octets)
@@ -124,15 +131,18 @@ const PARTIES_REGISTRE = { editions: "offres", options: "options", announcements
 const HORS_PARTIES = new Set(["format", "version", "number", "issued_at"]);
 export const DROITS_REGISTRE = ["offres", "options", "annonces"];
 
-// 1.49.0 : L'INVITATION PAR CODES (docs/ADMINS.md, par. 12). L'admin+ cree un code d'invitation (INV-XXXX-XXXX :
+// 1.49.0 : L'INVITATION PAR CODES (docs/ADMINS.md, par. 4 et 12). L'admin+ cree un code d'invitation (INV-XXXX-XXXX :
 // 8 caracteres de l'alphabet Crockford sans I L O U, 40 bits), valable 48 h, une seule fois ; le service n'en garde que
-// le SHA-256 (hexa), dans la config (une ligne JSON, comme la derogation : elle part avec la sauvegarde). La demande
-// d'admin qui le porte le sert (servie, la cle qui l'a servi) ; GET /admin/admins/demandes rend l'invitation de chaque
-// demande. Le code de confirmation (6 chiffres) ne passe jamais par le service : chaque Admin le calcule de la cle.
+// le SHA-256 (hexa), dans la config (une ligne JSON, comme la derogation : elle part avec la sauvegarde).
+// 1.51.0 : PLUS DE DEMANDE D'ADMIN. Le code tape dans l'installateur XPG Admin (ou a son premier lancement) INSCRIT la
+// cle d'un coup (POST /v1/admins/inscription : le code servi, la cle notee) ; l'Admin+ (GET /admin/admins/inscrits)
+// signe d'office la nouvelle liste, sans empreinte ni code de confirmation, avec le profil et les droits choisis a la
+// creation de l'invitation (gardes sur SON poste : le service ne peut ni les changer, ni lier une cle a une invitation
+// que l'Admin+ n'a pas creee). Les routes des demandes d'avant (GET /admin/admins/demandes, refuser) : 410.
 const CONFIG_INVITATIONS = "admins_invitations";
 const DUREE_INVITATION = 48 * 3600;
 const MAX_INVITATIONS = 100; // gardees, au plus
-const GARDE_INVITATIONS = 30 * JOUR; // une invitation finie est oubliee 30 jours apres son expiration (sauf demande en attente)
+const GARDE_INVITATIONS = 30 * JOUR; // une invitation finie est oubliee 30 jours apres son expiration (sauf inscription en attente)
 const ALPHABET_INVITATION = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 // Un code d'invitation remis en forme (<< INV-XXXX-XXXX >>) : minuscules, espaces, tirets toleres ; O lu 0, I et L lus 1.
@@ -226,13 +236,14 @@ export function droitsDuRegistre(ancien, nouveau) {
     return [...requis];
 }
 
-// La demande d'admin (le corps de POST /v1/admins/demande) : {nom, courriel, pc, poste, logiciel}.
-function lireDemandeAdmin(corps) {
-    const nom = typeof corps.nom === "string" ? corps.nom.trim() : null;
-    if (!texteLigne(nom, 1, 60)) throw mal("nom", "Le champ « nom » doit être ton nom (1 à 60 caractères).");
-    const courriel = typeof corps.courriel === "string" ? corps.courriel.trim() : null;
-    if (!courriel || courriel.length > 120 || !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(courriel))
-        throw mal("courriel", "Le champ « courriel » doit être une adresse de courriel (120 caractères au plus).");
+// 1.51.0 : l'inscription (le corps de POST /v1/admins/inscription) : {invitation, nom?, courriel?, pc, poste, logiciel}.
+// Le nom et le courriel sont facultatifs : ceux de l'invitation (ce que l'admin+ a tape) par defaut.
+function lireInscription(corps) {
+    const nom = corps.nom === undefined ? "" : typeof corps.nom === "string" ? corps.nom.trim() : null;
+    if (!texteLigne(nom, 0, 60)) throw mal("nom", "Le champ « nom » doit être ton nom (60 caractères au plus), ou absent.");
+    const courriel = corps.courriel === undefined ? "" : typeof corps.courriel === "string" ? corps.courriel.trim() : null;
+    if (courriel === null || courriel.length > 120 || (courriel && !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(courriel)))
+        throw mal("courriel", "Le champ « courriel » doit être une adresse de courriel (120 caractères au plus), ou absent.");
     const pc = corps.pc === undefined ? "" : corps.pc;
     if (!texteLigne(pc, 0, 60)) throw mal("pc", "Le champ « pc » doit être le nom de ce PC (60 caractères au plus).");
     if (!estHex(corps.poste, 32)) throw mal("poste", "Le champ « poste » doit être l'identifiant de cette machine (32 hexadécimaux minuscules).");
@@ -243,8 +254,13 @@ function lireDemandeAdmin(corps) {
 
 // Ce que l'admin+ voit d'une invitation (jamais son empreinte).
 function invitationVue(i) {
-    return { id: i.id, nom: i.nom, courriel: i.courriel, profil: i.profil, invitee: i.cree, expire: i.expire, servie: i.servie_le };
+    return { id: i.id, nom: i.nom, courriel: i.courriel, profil: i.profil, invitee: i.cree, expire: i.expire, servie: i.servie_le, par: i.par || "" };
 }
+
+// 1.51.0 : les routes des demandes d'admin d'avant (un Admin+ ou un XPG Admin 1.49, 1.50) : 410, et pourquoi.
+const PLUS_DE_DEMANDES =
+    "Les demandes d'admin n'existent plus (XPG 1.51) : un admin s'ajoute par son code d'invitation, tapé dans l'installateur XPG Admin, et il est admin d'office. Mets à jour ";
+const routeRetiree = (qui) => new Erreur(410, "mise_a_jour", PLUS_DE_DEMANDES + qui + ".");
 
 function depuisDe(ctx) {
     const d = ctx.url.searchParams.get("depuis");
@@ -269,7 +285,7 @@ export const RoutesAdmins = {
 
     // PUT /admin/admins (admin+) {"admins":"<bloc admins>"} : la liste signee par la cle de l'editeur. Le numero
     // monte (le meme numero : le meme texte, rien a faire). Un admin retire, ou absent de la liste, perd son scelle du
-    // trousseau ; la demande d'admin d'une cle de la liste (non retiree) est close (acceptee).
+    // trousseau ; l'inscription d'une cle de la liste (non retiree) est close (acceptee : 1.51.0, << inscrits_admis >>).
     async deposerAdmins(ctx) {
         const corps = this.corpsJson(ctx);
         const bloc = await this.blocEditeur(corps.admins, "admins", "admins");
@@ -314,7 +330,7 @@ export const RoutesAdmins = {
                     ctx.now,
                 );
         });
-        return reponseJson(200, { admins: liste.numero, demandes_acceptees: acceptees });
+        return reponseJson(200, { admins: liste.numero, inscrits_admis: acceptees });
     },
 
     // La derniere ligne du journal ecrite par une cle (son heure, 0 : aucune).
@@ -349,32 +365,35 @@ export const RoutesAdmins = {
         return reponseJson(200, { numero: Number(this.config("admins_numero") || "0"), admins, editeurs });
     },
 
-    // ============================================================ les demandes d'admin ==
-    // POST /v1/admins/demande (signee par la cle du futur admin) {nom, courriel, pc, poste, logiciel} : une demande
-    // par cle (la deposer de nouveau la remplace), 20 en attente au plus ; une ligne au journal (demande_admin).
-    async deposerDemandeAdmin(ctx) {
-        const corps = this.corpsJson(ctx);
-        const d = lireDemandeAdmin(corps);
+    // ============================================================ 1.51.0 : l'inscription par code d'invitation ==
+    // L'invitation servie par une cle (la plus recente), ou null.
+    invitationDe(cle, now) {
+        let inv = null;
+        for (const i of this.invitations(now)) if (i.servie && i.demande === cle && (!inv || i.servie_le >= inv.servie_le)) inv = i;
+        return inv;
+    },
+
+    // Inscrire la cle qui appelle avec son code d'invitation : connu, pas servi par une autre cle (la meme cle peut le
+    // renvoyer : une reponse perdue), pas expire -> servi, la cle inscrite (une par cle ; 20 au plus attendent l'Admin+).
+    // Rend {inv, empreinte, deja} (deja : la cle est deja un admin de la liste, non retire : rien a faire).
+    async inscrire(ctx, corps) {
         const { cle, octets } = ctx.appelant;
         if ((await this.clesEditeur()).some((k) => k.hex === cle)) throw new Erreur(409, "deja", "Cette clé est celle de l'éditeur : elle fait déjà tout.");
+        if (typeof corps.invitation !== "string") throw mal("invitation", "Le champ « invitation » doit être le code d'invitation (INV-XXXX-XXXX).");
+        const d = lireInscription(corps);
+        const empreinte = await empreinteCle(octets);
         const a = this.admin(cle);
-        if (a && !a.retire) throw new Erreur(409, "deja", "Cette clé est déjà celle d'un admin de la liste.");
-        // 1.49.0 : l'invitation (facultative : un Admin d'avant n'en a pas) - connue, pas servie (par une autre cle), pas expiree.
-        let invitations = null;
-        let inv = null;
-        if (corps.invitation !== undefined) {
-            if (typeof corps.invitation !== "string") throw mal("invitation", "Le champ « invitation » doit être le code d'invitation (INV-XXXX-XXXX).");
-            const code = normaliserInvitation(corps.invitation);
-            const hash = code ? await sha256Hex(enc.encode(code)) : "";
-            invitations = this.invitations(ctx.now);
-            inv = code ? invitations.find((i) => i.hash === hash) : null;
-            if (!inv) throw refusInvitation("Ce code d'invitation est inconnu.");
-            if (inv.servie && inv.demande !== cle) throw refusInvitation("Ce code d'invitation a déjà servi.");
-            if (!inv.servie && inv.expire < ctx.now) throw refusInvitation("Ce code d'invitation a expiré (48 h).");
-        }
+        if (a && !a.retire) return { inv: null, empreinte, deja: true };
+        const code = normaliserInvitation(corps.invitation);
+        const hash = code ? await sha256Hex(enc.encode(code)) : "";
+        const invitations = this.invitations(ctx.now);
+        const inv = code ? invitations.find((i) => i.hash === hash) : null;
+        if (!inv) throw refusInvitation("Ce code d'invitation est inconnu.");
+        if (inv.servie && inv.demande !== cle) throw refusInvitation("Ce code d'invitation a déjà servi.");
+        if (!inv.servie && inv.expire < ctx.now) throw refusInvitation("Ce code d'invitation a expiré (48 h).");
         const attente = this.nombre("SELECT COUNT(*) AS n FROM admins_demandes WHERE etat = 'attente' AND cle != ?", cle);
-        if (attente >= MAX_DEMANDES_ADMINS) throw new Erreur(507, "limite", "Trop de demandes d'admin attendent l'admin+ : réessaie plus tard.");
-        if (inv && !inv.servie) {
+        if (attente >= MAX_INSCRITS) throw new Erreur(507, "limite", "Trop d'admins inscrits attendent la signature de l'Admin+ : réessaie plus tard.");
+        if (!inv.servie) {
             inv.servie = 1;
             inv.demande = cle;
             inv.servie_le = ctx.now;
@@ -385,55 +404,88 @@ export const RoutesAdmins = {
              ON CONFLICT (cle) DO UPDATE SET nom = excluded.nom, courriel = excluded.courriel, pc = excluded.pc, poste = excluded.poste,
                  logiciel = excluded.logiciel, etat = 'attente', recue = excluded.recue, maj = excluded.maj`,
             cle,
-            d.nom,
-            d.courriel,
+            (d.nom || inv.nom).slice(0, 60),
+            d.courriel || inv.courriel || "",
             d.pc,
             d.poste,
             d.logiciel,
             ctx.now,
             ctx.now,
         );
-        const empreinte = await empreinteCle(octets);
-        await this.journalService(ctx.now, "demande_admin", await cleIdDe(octets), "demande à devenir admin : " + d.nom + (d.pc ? " (" + d.pc + ")" : ""), {
-            cle,
-            empreinte,
-            nom: d.nom,
-            pc: d.pc,
-            poste: d.poste,
-            logiciel: d.logiciel,
-            ...(inv ? { invitation: inv.id } : {}),
-        });
-        return reponseJson(201, { etat: "attente", empreinte, ...(inv ? { invitation: { id: inv.id, nom: inv.nom, profil: inv.profil } } : {}) });
+        return { inv, empreinte, deja: false };
     },
 
-    // GET /v1/admins/demande?cle=<la cle qui signe> : ou en est la demande de cette cle (attente, acceptee, refusee ;
-    // retire : un admin retire de la liste, sans nouvelle demande). Une cle de la liste (non retiree) : acceptee.
+    // POST /v1/admins/inscription (signee par la cle du futur admin) {invitation, nom?, courriel?, pc, poste, logiciel} :
+    // 201 {etat:"inscrit", empreinte, invitation:{id,nom,courriel,profil}, admins} ; deja admin : 200 {etat:"admis"} ;
+    // un code refuse : 403 << invitation >> et sa phrase (inconnu, expire, deja servi).
+    async deposerInscription(ctx) {
+        const corps = this.corpsJson(ctx);
+        const numero = Number(this.config("admins_numero") || "0");
+        const r = await this.inscrire(ctx, corps);
+        if (r.deja) return reponseJson(200, { etat: "admis", empreinte: r.empreinte, admins: numero });
+        const { id, nom, courriel, profil } = r.inv;
+        return reponseJson(201, { etat: "inscrit", empreinte: r.empreinte, invitation: { id, nom, courriel, profil }, admins: numero });
+    },
+
+    // Ou en est la cle qui appelle : "admis" (dans la liste, non retire), "inscrit" (son code servi, l'Admin+ la signe
+    // d'office), "retire", "refusee" (une demande d'avant la 1.51, close), "sans_invitation" (une demande d'avant la 1.51,
+    // sans code), "aucune".
+    etatCle(cle, now) {
+        const a = this.admin(cle);
+        if (a && !a.retire) return { etat: "admis" };
+        const r = this.ligne("SELECT etat, recue, maj FROM admins_demandes WHERE cle = ?", cle);
+        if (r && r.etat === "attente") {
+            const inv = this.invitationDe(cle, now);
+            return inv ? { etat: "inscrit", recue: r.recue, maj: r.maj, inv } : { etat: "sans_invitation", recue: r.recue, maj: r.maj };
+        }
+        if (a) return { etat: "retire" };
+        if (r && r.etat === "refusee") return { etat: "refusee", recue: r.recue, maj: r.maj };
+        return { etat: "aucune" };
+    },
+
+    // GET /v1/admins/inscription (signee) : {etat:"admis"|"inscrit"|"retire", admins, inscrit?, invitation?} ; rien : 404.
+    async etatInscription(ctx) {
+        const e = this.etatCle(ctx.appelant.cle, ctx.now);
+        const numero = Number(this.config("admins_numero") || "0");
+        if (e.etat === "admis" || e.etat === "retire") return reponseJson(200, { etat: e.etat, admins: numero });
+        if (e.etat === "inscrit")
+            return reponseJson(200, { etat: "inscrit", admins: numero, inscrit: e.recue, invitation: { id: e.inv.id, nom: e.inv.nom, profil: e.inv.profil } });
+        throw new Erreur(404, "inscription", "Cette clé n'est pas inscrite : il faut le code d'invitation que t'envoie l'admin+ (INV-XXXX-XXXX).");
+    },
+
+    // COMPAT (un XPG Admin 1.49, 1.50) : POST /v1/admins/demande - avec un code d'invitation, c'est l'inscription (la
+    // reponse d'avant : 201 {etat:"attente", empreinte, invitation:{id,nom,profil}}) ; l'Admin+ la signe d'office et
+    // l'ancien Admin le voit par GET /v1/admins/demande. Sans code : 410 (il n'y a plus de demande a accepter).
+    async deposerDemandeAdmin(ctx) {
+        const corps = this.corpsJson(ctx);
+        if (corps.invitation === undefined) throw routeRetiree("XPG Admin, et tape le code d'invitation que t'envoie l'admin+");
+        const r = await this.inscrire(ctx, corps);
+        if (r.deja) throw new Erreur(409, "deja", "Cette clé est déjà celle d'un admin de la liste.");
+        return reponseJson(201, { etat: "attente", empreinte: r.empreinte, invitation: { id: r.inv.id, nom: r.inv.nom, profil: r.inv.profil } });
+    },
+
+    // COMPAT : GET /v1/admins/demande?cle=<la cle qui signe> - les etats d'avant (attente : inscrit ; acceptee : admis).
     async etatDemandeAdmin(ctx) {
         const q = ctx.url.searchParams.get("cle");
         if (q !== null && q !== ctx.appelant.cle) throw mal("cle", "« cle » doit être la clé qui signe l'appel.");
-        const a = this.admin(ctx.appelant.cle);
+        const e = this.etatCle(ctx.appelant.cle, ctx.now);
         const numero = Number(this.config("admins_numero") || "0");
-        if (a && !a.retire) return reponseJson(200, { etat: "acceptee", admins: numero });
-        const r = this.ligne("SELECT etat, recue, maj FROM admins_demandes WHERE cle = ?", ctx.appelant.cle);
-        if (a && (!r || r.etat !== "attente")) return reponseJson(200, { etat: "retire", admins: numero });
-        if (!r) throw new Erreur(404, "demande", "Cette clé n'a pas de demande d'admin.");
-        return reponseJson(200, { etat: r.etat, recue: r.recue, maj: r.maj });
+        if (e.etat === "admis") return reponseJson(200, { etat: "acceptee", admins: numero });
+        if (e.etat === "retire") return reponseJson(200, { etat: "retire", admins: numero });
+        if (e.etat === "inscrit") return reponseJson(200, { etat: "attente", recue: e.recue, maj: e.maj });
+        if (e.etat === "refusee") return reponseJson(200, { etat: "refusee", recue: e.recue, maj: e.maj });
+        if (e.etat === "sans_invitation") throw routeRetiree("XPG Admin, et tape le code d'invitation que t'envoie l'admin+");
+        throw new Erreur(404, "demande", "Cette clé n'a pas de demande d'admin.");
     },
 
-    // GET /admin/admins/demandes (admin+) : les demandes en attente (et l'empreinte de chaque cle, a lire au telephone).
-    // 1.47.0 : `?toutes=1` - aussi les demandes closes (acceptees, refusees : gardees 7 jours), avec leur `etat` et `maj`
-    // (la liste << Demandes d'admin >> de l'Admin) ; sans lui, comme avant (les seules en attente).
-    async listerDemandesAdmins(ctx) {
-        const toutes = ctx.url.searchParams.get("toutes") === "1";
-        // 1.49.0 : l'invitation servie par chaque cle (la plus recente)
-        const parCle = new Map();
-        for (const i of this.invitations(ctx.now))
-            if (i.servie && i.demande && (!parCle.has(i.demande) || i.servie_le >= parCle.get(i.demande).servie_le)) parCle.set(i.demande, i);
-        const demandes = [];
-        for (const r of this.lignes(
-            toutes ? "SELECT * FROM admins_demandes ORDER BY recue, cle" : "SELECT * FROM admins_demandes WHERE etat = 'attente' ORDER BY recue, cle",
-        ))
-            demandes.push({
+    // GET /admin/admins/inscrits (admin+) : les cles inscrites par un code d'invitation, que l'Admin+ signe d'office
+    // (et l'empreinte de chaque cle, pour le journal) ; l'invitation de chacune (jamais l'empreinte du code).
+    async listerInscrits(ctx) {
+        const inscrits = [];
+        for (const r of this.lignes("SELECT * FROM admins_demandes WHERE etat = 'attente' ORDER BY recue, cle")) {
+            const inv = this.invitationDe(r.cle, ctx.now);
+            if (!inv) continue; // une demande d'avant la 1.51, sans code : jamais signee d'office
+            inscrits.push({
                 cle: r.cle,
                 id: await cleIdDe(unhex(r.cle)),
                 empreinte: await empreinteCle(unhex(r.cle)),
@@ -442,16 +494,36 @@ export const RoutesAdmins = {
                 pc: r.pc,
                 poste: r.poste,
                 logiciel: r.logiciel,
-                recue: r.recue,
-                etat: r.etat,
-                maj: r.maj,
-                ...(parCle.has(r.cle) ? { invitation: invitationVue(parCle.get(r.cle)) } : {}),
+                inscrit: r.recue,
+                invitation: invitationVue(inv),
             });
-        return reponseJson(200, { demandes });
+        }
+        return reponseJson(200, { inscrits });
+    },
+
+    // Les inscriptions qui attendent la signature de l'Admin+ (GET /admin/etat : << admins_inscrits >>).
+    nombreInscrits(now) {
+        let n = 0;
+        for (const r of this.lignes("SELECT cle FROM admins_demandes WHERE etat = 'attente'")) if (this.invitationDe(r.cle, now)) ++n;
+        return n;
+    },
+
+    // Le grand menage (une fois par jour) : une demande d'avant la 1.51 restee en attente SANS code d'invitation ne peut
+    // plus aboutir (rien ne l'autorise) : elle est close (<< refusee >>), puis effacee 7 jours apres comme toute close.
+    // Son Admin, s'il regarde, lit pourquoi (410 : le code d'invitation).
+    cloreDemandesSansCode(now) {
+        for (const r of this.lignes("SELECT cle FROM admins_demandes WHERE etat = 'attente'"))
+            if (!this.invitationDe(r.cle, now)) this.x("UPDATE admins_demandes SET etat = 'refusee', maj = ? WHERE cle = ? AND etat = 'attente'", now, r.cle);
+    },
+
+    // 1.51.0 : les routes des demandes d'admin d'avant (un Admin+ 1.47 a 1.50) : 410, et pourquoi.
+    async demandesAdminsRetirees() {
+        throw routeRetiree("l'Admin+ (XPG License Manager Admin 1.51) : il signe d'office les admins inscrits");
     },
 
     // ============================================================ 1.49.0 : les invitations ==
-    // Les invitations gardees (la config), sans celles finies depuis plus de 30 jours (sauf si leur demande attend).
+    // Les invitations gardees (la config), sans celles finies depuis plus de 30 jours (sauf si leur inscription attend
+    // encore la signature de l'Admin+).
     invitations(now) {
         let liste = [];
         try {
@@ -474,7 +546,8 @@ export const RoutesAdmins = {
     },
 
     // POST /admin/admins/invitation (admin+) {"nom","courriel","profil"} -> 201 {"id","code","expire"} : un code
-    // d'invitation, 48 h, une seule fois. Le code n'est rendu qu'ici (le service n'en garde que le SHA-256).
+    // d'invitation, 48 h, une seule fois. Le code n'est rendu qu'ici (le service n'en garde que le SHA-256). Les droits
+    // ne passent pas par le service : l'Admin+ les garde avec l'invitation, sur son poste (il signe avec eux).
     async creerInvitationAdmin(ctx) {
         const corps = this.corpsJson(ctx);
         const nom = typeof corps.nom === "string" ? corps.nom.trim() : null;
@@ -492,21 +565,12 @@ export const RoutesAdmins = {
             code = tirerInvitation();
             hash = await sha256Hex(enc.encode(code));
         } while (liste.some((i) => i.hash === hash));
-        const inv = { id: "inv-" + hasardHex(8), hash, nom, courriel, profil, cree: ctx.now, expire: ctx.now + DUREE_INVITATION, servie: 0, demande: "", servie_le: 0 };
+        // 1.51.0 : << par >> - la cle de l'editeur qui l'a creee (l'identifiant : << invite par >> dans la liste des inscrits)
+        const par = await cleIdDe(ctx.appelant.octets);
+        const inv = { id: "inv-" + hasardHex(8), hash, nom, courriel, profil, par, cree: ctx.now, expire: ctx.now + DUREE_INVITATION, servie: 0, demande: "", servie_le: 0 };
         liste.push(inv);
         this.ecrireInvitations(liste);
         return reponseJson(201, { id: inv.id, code, expire: inv.expire });
-    },
-
-    // POST /admin/admins/demande/refuser (admin+) {"cle":"<64 hexa>"}.
-    async refuserDemandeAdmin(ctx) {
-        const corps = this.corpsJson(ctx);
-        if (!estHex(corps.cle, 64)) throw mal("cle", "Le champ « cle » doit être la clé du demandeur (64 hexadécimaux minuscules).");
-        const r = this.ligne("SELECT etat FROM admins_demandes WHERE cle = ?", corps.cle);
-        if (!r) throw new Erreur(404, "demande", "Cette clé n'a pas de demande d'admin.");
-        if (r.etat === "attente") this.x("UPDATE admins_demandes SET etat = 'refusee', maj = ? WHERE cle = ?", ctx.now, corps.cle);
-        else if (r.etat !== "refusee") throw new Erreur(409, "etat", "Cette demande est déjà acceptée.", { etat: r.etat });
-        return reponseJson(200, {});
     },
 
     // ============================================================ le trousseau ==

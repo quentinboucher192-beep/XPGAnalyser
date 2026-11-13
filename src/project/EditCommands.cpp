@@ -3,6 +3,7 @@
 #include "../import/ProjectParser.hpp"
 #include "BlockLibrary.hpp"
 #include "Ladder.hpp"                    // 1.51.0 : une section LD neuve est un ladder vide
+#include "SfcEdit.hpp"                   // 1.51.0 (S) : une section SFC neuve est un GRAFCET a une etape initiale
 #include "../domain/ExecutionOrder.hpp"
 
 #include <algorithm>
@@ -338,6 +339,14 @@ namespace project {
         // Control Expert - l'editeur graphique la dessine, l'export la rend telle quelle.
         if (language_ == PouLanguage::LD) {
             s.body = ladder::emptySourceXml(11, owner_ == kNoIndex ? 2 : 3);
+            s.lineCount = 1;
+        }
+        // 1.51.0 (S) : UNE SECTION SFC NEUVE est un GRAFCET (le <SFCProgram> de Control
+        // Expert) a une etape initiale, d'un nom libre dans tout le projet.
+        if (language_ == PouLanguage::SFC) {
+            const auto taken = sfc::stepNamesInProject(p);
+            s.body = sfc::newProgram(name_, owner_ == kNoIndex ? task_ : std::string{},
+                                     sfc::freeStepName(sfc::Chart{}, taken, "S_"), owner_ == kNoIndex ? 1 : 2);
             s.lineCount = 1;
         }
 

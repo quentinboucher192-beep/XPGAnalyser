@@ -1,0 +1,3 @@
+# API Studio - les projets de la 1.11 recopies ici le 2026-11-13 17:03
+# (les originaux sont restes dans le dossier parent ; ce fichier dit que c'est fait)
+copie : Z:\home\user\XPGAnalyser\projets\project -> Z:\home\user\XPGAnalyser\projets\api\project

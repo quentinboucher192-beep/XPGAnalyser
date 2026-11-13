@@ -1,0 +1,14 @@
+# Derived data type.
+name = ST_GC_STAT
+version = 0.01
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Cycle ; DINT ;  ; Member ;  ;  ;  ; 
+Phase ; INT ;  ; Member ;  ;  ;  ; 
+Mode ; INT ;  ; Member ;  ;  ;  ; 
+ActiveStepCount ; INT ;  ; Member ;  ;  ;  ; 
+LastTransitionFiredId ; INT ;  ; Member ;  ;  ;  ; 
+ConfigFault ; BOOL ;  ; Member ;  ;  ;  ; 
+WatchdogDetected ; BOOL ;  ; Member ;  ;  ;  ; 
+NoActiveStepFault ; BOOL ;  ; Member ;  ;  ;  ; 

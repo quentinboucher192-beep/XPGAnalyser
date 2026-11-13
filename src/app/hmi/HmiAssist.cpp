@@ -3709,6 +3709,27 @@ Description describe(const hmi::Project& hp, const domain::Project* plc, std::st
                     d.line += prop->expr.empty() ? "   valeur " + prop->value : "   = " + prop->expr;
             return d;
         }
+        // 1.51.0 : Vue.Objet seul - l'objet lui-meme (il va dans un Object, un POINTER TO Object) ; Vue.Objet.Get - sa
+        // methode, un pointeur vers lui.
+        if (r.what == W::Incomplete && r.object) {
+            d.found = true;
+            d.type = "Object";
+            d.line = name + " : Object   l'objet " + std::string(hmi::kindLabel(r.object->kind)) + " de " + (pv ? pv->name : std::string{})
+                   + "   // seul, il va dans une variable Object, REF_TO Object ou POINTER TO Object ; " + name
+                   + ".Get() rend un pointeur vers lui ; une valeur : " + name + ".Visible, .X...";
+            return d;
+        }
+        if (const auto last = symbol.rfind('.'); r.what == W::Unknown && last != std::string_view::npos
+                                                  && hmi::pub::same(symbol.substr(last + 1), "Get")) {
+            const auto o = hmi::pub::resolve(hp, symbol.substr(0, last), pv ? &shown : nullptr);
+            if (o.what == W::Incomplete && o.object) {
+                d.found = true;
+                d.type = "POINTER TO Object";
+                d.line = name + "() : POINTER TO Object   m\xC3\xA9thode de l'objet   // un pointeur vers " + o.object->name + " (comme ADR("
+                       + std::string(symbol.substr(0, last)) + "))";
+                return d;
+            }
+        }
         if (r.what == W::Unknown || r.what == W::Incomplete) {
             d.line = r.what == W::Unknown ? r.error : name + " : chemin incomplet (Vue.Objet.Propri\xC3\xA9t\xC3\xA9)";
             return d;

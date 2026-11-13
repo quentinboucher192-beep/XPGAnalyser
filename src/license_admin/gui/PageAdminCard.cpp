@@ -479,7 +479,7 @@ protected:
             rightsCard_.h = secCard_.h = h;
         }
         const float lw = lines_->naturalWidth();
-        put(lines_, {secCard_.right() - 18.f - lw, secCard_.bottom() - 36.f, lw, 22.f}, p && p->kind != Person::Kind::Pending && d_->journal && !own_);
+        put(lines_, {secCard_.right() - 18.f - lw, secCard_.bottom() - 36.f, lw, 22.f}, p && d_->journal && !own_);
         y = std::max(rightsCard_.bottom(), secCard_.bottom()) + 24.f;
         // ======== 2 LICENCES ET CLIENTS ========
         anchorRel_[2] = y - area.y;
@@ -919,7 +919,6 @@ private:
         std::vector<Dot> delays;
         double myDelay = kNaN;
         for (const auto& q : d_->people) {
-            if (q.kind == Person::Kind::Pending) continue;
             const js::AdminStats* s = d_->stats(q.key);
             const AdminFigures* f = d_->fig(q.key);
             const double v[4] = {s ? static_cast<double>(s->actions) : kNaN, s ? s->licences : kNaN, s ? s->requests : kNaN, f ? f->amount : kNaN};

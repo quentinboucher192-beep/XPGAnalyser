@@ -1,0 +1,28 @@
+# Global variables.
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments ; element sources
+Depart ; BOOL ;  ; Global ;  ; départ du cycle ;  ; 
+Arret ; BOOL ;  ; Global ;  ; arrêt demandé ;  ; 
+Plein ; BOOL ;  ; Global ;  ; cuve pleine ;  ; 
+Vidange ; BOOL ;  ; Global ;  ; vidange demandée ;  ; 
+Chaud ; BOOL ;  ; Global ;  ; température atteinte ;  ; 
+Go_Par ; BOOL ;  ; Global ;  ; lancer les moteurs ;  ; 
+Lampe_Init ; BOOL ;  ; Global ;  ; voyant d'attente ;  ; 
+Pompe ; BOOL ;  ; Global ;  ; pompe de remplissage ;  ; 
+Vanne ; BOOL ;  ; Global ;  ; vanne d'entrée ;  ; 
+Alarme ; BOOL ;  ; Global ;  ; remplissage trop long ;  ; 
+Sortie_P0 ; BOOL ;  ; Global ;  ; impulsion fin moteur B ;  ; 
+Voyant_A ; BOOL ;  ; Global ;  ; moteur A en marche ;  ; 
+Niveau ; INT ;  ; Global ;  ; niveau de la cuve (fictif) ;  ; 
+Compteur ; INT ;  ; Global ;  ; cycles de remplissage ;  ; 
+Bp_Marche ; BOOL ;  ; Global ;  ; bouton marche du moteur d'essai ;  ; 
+Bp_Arret ; BOOL ;  ; Global ;  ; bouton arrêt ;  ; 
+Defaut_Therm ; BOOL ;  ; Global ;  ; défaut thermique ;  ; 
+Moteur ; BOOL ;  ; Global ;  ; moteur d'essai en marche ;  ; 
+Moteur_Lance ; BOOL ;  ; Global ;  ; moteur lancé (après la temporisation) ;  ; 
+Tempo_Demarrage ; TON ;  ; Global ;  ; temporisation du démarrage ;  ; 
+Temps_Ecoule ; TIME ;  ; Global ;  ; temps écoulé du démarrage ;  ; 
+Nb_Demarrages ; INT ;  ; Global ;  ; nombre de démarrages ;  ; 
+Vitesse ; INT ;  ; Global ;  ; vitesse (fictive) ;  ; 
+Survitesse ; BOOL ;  ; Global ;  ; vitesse trop haute ;  ; 
+Voyant_Defaut ; BOOL ;  ; Global ;  ; voyant de défaut mémorisé ;  ; 
+Acquit ; BOOL ;  ; Global ;  ; acquittement du défaut ;  ; 

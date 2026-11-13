@@ -8,7 +8,9 @@
 //     << Demander a devenir admin >> ;
 //   - XPG Admin : jamais la cle de l'editeur (meme posee dans son dossier), ni
 //     les entrees, pages et gestes de l'admin+ ; un lien vers l'une d'elles est
-//     refuse et dit ; sans cle : le chemin de l'admin (l'invitation) seulement.
+//     refuse et dit ; sans cle : le chemin de l'admin (l'invitation) seulement -
+//     1.51.0 : son code d'invitation (plus de demande d'admin, plus de page
+//     << Demandes d'admin >>).
 //  argv[1] : la racine du depot (le registre d'exemple).
 // =============================================================================
 #include "admin_gui_harness.hpp"
@@ -68,8 +70,9 @@ struct ShellRig {
     ui::Widget& root() { return *shell->widgetRoot(); }
 };
 
-// Les entrees du menu de l'admin+ seul (le contrat : le journal des admins, les droits, publier une version, les demandes d'admin).
-const char* const kPlusPages[] = {"journal", "droits", "versions", "demandes-admins"};
+// Les entrees du menu de l'admin+ seul (le contrat : le journal des admins, les droits, publier une version). 1.51.0 : plus de
+// << Demandes d'admin >> (une page inconnue, partout).
+const char* const kPlusPages[] = {"journal", "droits", "versions"};
 
 void writeFile(const fs::path& p, const std::string& text) {
     std::error_code ec;
@@ -104,9 +107,12 @@ int main(int argc, char** argv) {
         t = rig.paint();
         check(rig.shell->currentPageId() == "admins" && has(t, sentence) && shown(rig.root(), "admins.creer-cle") && shown(rig.root(), "admins.restaurer"),
               "Administrateurs : la phrase, Creer, Restaurer");
-        check(!shown(rig.root(), "admins.demande.nom") && !shown(rig.root(), "admins.demande.courriel") && !shown(rig.root(), "admins.demande.invitation") &&
-                  !has(t, "Demander \xC3\xA0 devenir admin"),
-              "Administrateurs : pas le formulaire de la demande d'admin");
+        check(!shown(rig.root(), "admins.invitation.code") && !shown(rig.root(), "admins.invitation.valider") && !has(t, "Demander \xC3\xA0 devenir admin") &&
+                  !has(t, "Ton code d'invitation"),
+              "Administrateurs : pas la carte du code d'invitation (XPG Admin seul)");
+        rig.shell->navigate("demandes-admins");
+        check(rig.shell->currentPageId() == "admins" && rig.shell->lastMessage() && has(rig.shell->lastMessage()->result.message, "Page inconnue"),
+              "1.51.0 : << demandes-admins >> n'existe plus (page inconnue)");
         rig.shell->navigate("compte");
         t = rig.paint();
         check(shown(rig.root(), "compte.creer-cle") && !shown(rig.root(), "compte.devenir-admin") && has(t, sentence), "Mon compte : la cle de l'editeur seulement, la phrase");
@@ -157,12 +163,14 @@ int main(int argc, char** argv) {
         rig.shell->navigate("admins");
         t = rig.paint();
         check(!shown(rig.root(), "admins.creer-cle") && !shown(rig.root(), "admins.restaurer") && !shown(rig.root(), "admins.ajouter") &&
-                  shown(rig.root(), "admins.demande.nom"),
-              "Administrateurs : la demande d'admin (l'invitation), ni Creer ni Restaurer ni Ajouter un admin");
+                  shown(rig.root(), "admins.invitation.code") && shown(rig.root(), "admins.invitation.valider") && has(t, "Ton code d'invitation"),
+              "Administrateurs : la carte du code d'invitation, ni Creer ni Restaurer ni Ajouter un admin");
+        check(!has(t, "Demander \xC3\xA0 devenir admin") && !has(t, "Demandes d'admin") && !has(t, "empreinte") && !has(t, "6 chiffres"),
+              "1.51.0 : ni demande d'admin, ni empreinte a lire, ni 6 chiffres");
         check(!has(t, "Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur"), "Administrateurs : pas la carte de la cle de l'editeur");
         rig.shell->navigate("compte");
         (void)rig.paint();
-        check(!shown(rig.root(), "compte.creer-cle") && shown(rig.root(), "compte.devenir-admin"), "Mon compte : Demander a devenir admin, pas la cle de l'editeur");
+        check(!shown(rig.root(), "compte.creer-cle") && shown(rig.root(), "compte.devenir-admin"), "Mon compte : << Mon code d'invitation... >>, pas la cle de l'editeur");
         rig.shell->navigate("securite");
         t = rig.paint();
         check(!shown(rig.root(), "securite.creer") && !shown(rig.root(), "securite.restaurer") && !shown(rig.root(), "securite.restauration") &&

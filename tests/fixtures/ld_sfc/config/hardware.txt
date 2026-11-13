@@ -1,0 +1,15 @@
+# PLC configuration.
+cpu = BME P58 2040
+firmware = 03.20
+family = Modicon M580
+resource = M580
+bus = 
+internalBits = 0
+internalWords = 0
+constantWords = 0
+autoRun = false
+initialiseWords = false
+
+# rack ; number ; reference ; topological address
+# module ; rack ; slot ; reference ; family ; firmware ; kind ; in ; out ; topo ; guid
+# channel ; rack ; slot ; number ; direction ; role ; task ; code ; version ; iob ; KW ; KPW

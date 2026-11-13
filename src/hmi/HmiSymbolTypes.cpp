@@ -123,7 +123,7 @@ std::size_t fixOwned(const Project& p, const View& sym, HmiType& t) {
     n += fixType(p, sym, t.base) ? 1u : 0u;
     for (auto& i : t.interfaces) n += fixType(p, sym, i) ? 1u : 0u;
     n += fixFunctions(p, sym, t.methods);
-    n += fixOperators(p, sym, t.operators);
+    // Ses operateurs le nomment par son nom court (TO_STRING(T_Mode) : la regle des operateurs d'un type) : pas reecrits.
     if (t.kind == HmiTypeKind::Callback) n += fixType(p, sym, t.signature) ? 1u : 0u;
     return n;
 }
@@ -543,7 +543,35 @@ std::string qualify(const Project& p, const View& symbol, std::string_view code,
     if (code.empty()) return std::string(code);
     const std::string scope = scopeOf(p, symbol);
     if (scope.empty()) return std::string(code);
-    return names::qualify(p, code, scope, hidden, function);
+    const std::string named = names::qualify(p, code, scope, hidden, function);
+    // Les litteraux d'enumeration (T_Mode#Marche) : names::qualify laisse un litteral type tel quel ; ceux du symbole
+    // prennent son nom complet (S_Pompe.T_Mode#Marche) - la portee la plus proche, comme les autres noms.
+    if (named.find('#') == std::string::npos) return named;
+    std::string out;
+    out.reserve(named.size() + 16);
+    char quote = 0;
+    bool line = false, block = false;
+    for (std::size_t i = 0; i < named.size();) {
+        const char c = named[i];
+        if (line) { out += c; ++i; if (c == '\n') line = false; continue; }
+        if (block) { out += c; ++i; if (c == ')' && out.size() >= 2 && out[out.size() - 2] == '*') block = false; continue; }
+        if (quote) { out += c; ++i; if (c == quote) quote = 0; continue; }
+        if (c == '\'' || c == '"') { quote = c; out += c; ++i; continue; }
+        if (c == '/' && i + 1 < named.size() && named[i + 1] == '/') { line = true; out += c; ++i; continue; }
+        if (c == '(' && i + 1 < named.size() && named[i + 1] == '*') { block = true; out += "(*"; i += 2; continue; }
+        if (!identStart(c) || (i > 0 && (identPart(named[i - 1]) || named[i - 1] == '.' || named[i - 1] == '#'))) {
+            out += c;
+            ++i;
+            continue;
+        }
+        std::size_t j = i;
+        while (j < named.size() && identPart(named[j])) ++j;
+        const std::string_view word = std::string_view(named).substr(i, j - i);
+        const HmiType* own = j + 1 < named.size() && named[j] == '#' && identStart(named[j + 1]) ? find(p, symbol.id, word) : nullptr;
+        out += own && own->kind == HmiTypeKind::Enumeration ? qualifiedName(scope, own->name) : std::string(word);
+        i = j;
+    }
+    return out;
 }
 
 std::string typeIn(const Project& p, const View& symbol, std::string_view type) {

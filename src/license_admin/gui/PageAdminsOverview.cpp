@@ -38,7 +38,6 @@ const char* const kHeads[8] = {"ADMIN", "ACTIONS", "LICENCES", "DEMANDES", "D\xC
 const float kColShare[8] = {0.20f, 0.15f, 0.095f, 0.095f, 0.09f, 0.11f, 0.16f, 0.10f};   // 1.47.0 : LICENCES entier a 1100 px
 
 std::string stateOf(const Person& p) {
-    if (p.kind == Person::Kind::Pending) return "En attente";
     if (p.retired) return "Retir\xC3\xA9";
     return "Actif";
 }
@@ -101,7 +100,7 @@ public:
         using K = ui::FilterBar::Kind;
         std::vector<ui::FilterBar::Field> fields{
             {.title = "Admin", .kind = K::Text},
-            {.title = "\xC3\x89tat", .kind = K::Values, .chip = true, .noun = "un \xC3\xA9tat", .order = {"Actif", "En attente", "Retir\xC3\xA9"}},
+            {.title = "\xC3\x89tat", .kind = K::Values, .chip = true, .noun = "un \xC3\xA9tat", .order = {"Actif", "Retir\xC3\xA9"}},
             {.title = "Profil", .kind = K::Values, .chip = true, .noun = "un profil"},
             {.title = "Version de l'Admin", .kind = K::Values, .chip = true, .noun = "une version"},
             {.title = "PC", .kind = K::Text},
@@ -128,8 +127,6 @@ public:
         journal_ = &makeButton(*this, "Son journal", "admins.voir-journal", ui::Button::Style::Default, ui::Icon::History);
         rights_ = &makeButton(*this, "Ses droits\xE2\x80\xA6", "admins.droits", ui::Button::Style::Default, ui::Icon::Lock);
         retire_ = &makeButton(*this, "Retirer\xE2\x80\xA6", "admins.retirer", ui::Button::Style::Danger, ui::Icon::User);
-        verify_ = &makeButton(*this, "V\xC3\xA9rifier et accepter\xE2\x80\xA6", "admins.detail.verifier", ui::Button::Style::Primary);
-        refuse_ = &makeButton(*this, "Refuser la demande", "admins.detail.refuser", ui::Button::Style::Danger);
         regler_ = &adoptIn(*this, std::make_unique<LinkButton>("R\xC3\xA9gler les alertes\xE2\x80\xA6", "admins.alertes.regler", false));
         toAlerts_ = &adoptIn(*this, std::make_unique<LinkButton>("Les voir", "admins.vue.alertes"));
         toAlerts_->setVisibility(ui::Visibility::Collapsed);
@@ -148,12 +145,6 @@ public:
         });
         links_ += retire_->clicked->connect([this] {
             if (a_.retire && !selected_.empty()) a_.retire(selected_);
-        });
-        links_ += verify_->clicked->connect([this] {
-            if (a_.verify && !selected_.empty()) a_.verify(selected_);
-        });
-        links_ += refuse_->clicked->connect([this] {
-            if (a_.refuse && !selected_.empty()) a_.refuse(selected_);
         });
         links_ += regler_->clicked->connect([this] {
             if (a_.criticality) a_.criticality();
@@ -188,24 +179,6 @@ public:
     }
     void refreshData() override {
         bar_->refreshCounts();
-        // une ligne par demande : << Verifier et accepter... >>
-        std::size_t pending = 0;
-        for (const auto& p : d_->people) pending += p.kind == Person::Kind::Pending ? 1 : 0;
-        while (verifyRow_.size() < pending) {
-            const std::size_t n = verifyRow_.size() + 1;
-            auto& v = adoptIn(*this, std::make_unique<LinkButton>("V\xC3\xA9rifier et accepter\xE2\x80\xA6", "admins.verifier." + std::to_string(n)));
-            v.setVisibility(ui::Visibility::Collapsed);
-            links_ += v.clicked->connect([this, n] {
-                std::size_t k = 0;
-                for (const auto& p : d_->people)
-                    if (p.kind == Person::Kind::Pending && ++k == n) {
-                        selected_ = p.key;
-                        if (a_.verify) a_.verify(p.key);
-                        return;
-                    }
-            });
-            verifyRow_.push_back(&v);
-        }
         // un geste par alerte
         while (gestures_.size() < d_->ov.alerts.size()) {
             const std::size_t n = gestures_.size();
@@ -258,8 +231,6 @@ protected:
         ry += 30.f;
         rows_.clear();
         const auto shownRows = sortedRows();
-        std::size_t pendingSeen = 0;
-        for (auto* v : verifyRow_) v->setVisibility(ui::Visibility::Collapsed);
         bool unfoldedShown = false;
         for (const int i : shownRows) {
             const Person& p = d_->people[static_cast<std::size_t>(i)];
@@ -267,19 +238,6 @@ protected:
             g.person = i;
             g.row = {x0 + 1.f, ry, rankW - 2.f, 62.f};
             ry += 62.f;
-            if (p.kind == Person::Kind::Pending) {
-                ++pendingSeen;
-                std::size_t n = 0, k = 0;
-                for (const auto& q : d_->people) {
-                    if (q.kind == Person::Kind::Pending) ++k;
-                    if (&q == &p) n = k;
-                }
-                if (n >= 1 && n <= verifyRow_.size()) {
-                    LinkButton* v = verifyRow_[n - 1];
-                    const float vw = v->naturalWidth();
-                    put(v, {colX_[6], g.row.y + 34.f, std::min(vw, colW_[6] + colW_[7]), 20.f});
-                }
-            }
             if (p.key == selected_) {
                 g.unfolded = true;
                 unfoldedShown = true;
@@ -289,7 +247,6 @@ protected:
             }
             rows_.push_back(g);
         }
-        (void)pendingSeen;
         if (!unfoldedShown) hidePanel();
         if (rows_.empty()) ry += 70.f;   // << Aucun admin ne correspond >>
         rank_.h = ry + 10.f - rank_.y;
@@ -344,22 +301,9 @@ protected:
         panelFigs_ = {};
         chartBox_ = recentBox_ = {};
         rightsTop_ = -1.f;
-        const bool pending = p.kind == Person::Kind::Pending;
         for (ui::Widget* b : {static_cast<ui::Widget*>(open_), static_cast<ui::Widget*>(journal_), static_cast<ui::Widget*>(rights_),
-                              static_cast<ui::Widget*>(retire_), static_cast<ui::Widget*>(verify_), static_cast<ui::Widget*>(refuse_),
-                              static_cast<ui::Widget*>(curve_), static_cast<ui::Widget*>(allJournal_)})
+                              static_cast<ui::Widget*>(retire_), static_cast<ui::Widget*>(curve_), static_cast<ui::Widget*>(allJournal_)})
             b->setVisibility(ui::Visibility::Collapsed);
-        if (pending) {
-            noteY_ = y;
-            y += 44.f;
-            const float bw1 = buttonW(*verify_, 120.f), bw2 = buttonW(*refuse_, 120.f);
-            put(verify_, {x, y, bw1, 32.f});
-            put(refuse_, {x + bw1 + 10.f, y, bw2, 32.f});
-            verify_->setEnabled(!(a_.busy && a_.busy()));
-            refuse_->setEnabled(!(a_.busy && a_.busy()));
-            y += 46.f;
-            return y - at.y;
-        }
         // 1. ses chiffres
         panelFigs_ = {x, y, w, 62.f};
         y += 62.f + 12.f;
@@ -420,8 +364,7 @@ protected:
 
     void hidePanel() {
         for (ui::Widget* b : {static_cast<ui::Widget*>(open_), static_cast<ui::Widget*>(journal_), static_cast<ui::Widget*>(rights_),
-                              static_cast<ui::Widget*>(retire_), static_cast<ui::Widget*>(verify_), static_cast<ui::Widget*>(refuse_),
-                              static_cast<ui::Widget*>(curve_), static_cast<ui::Widget*>(allJournal_)})
+                              static_cast<ui::Widget*>(retire_), static_cast<ui::Widget*>(curve_), static_cast<ui::Widget*>(allJournal_)})
             b->setVisibility(ui::Visibility::Collapsed);
     }
 
@@ -572,8 +515,8 @@ protected:
                     avatarOf(r, {ax, y + 30.f, 18.f, 18.f}, *it);
                     ax -= 2.f;
                 }
-                const int pend = d.pendingCount(), ret = d.retiredCount();
-                sub({{std::to_string(pend) + " en attente \xC2\xB7 " + std::to_string(ret) + (ret > 1 ? " retir\xC3\xA9s" : " retir\xC3\xA9"), kF12, kMuted}});
+                const int ret = d.retiredCount();   // 1.51.0 : plus de demandes d'admin en attente
+                sub({{std::to_string(ret) + (ret > 1 ? " retir\xC3\xA9s" : " retir\xC3\xA9"), kF12, kMuted}});
                 break;
             }
             case 1: {   // les actions
@@ -763,9 +706,7 @@ private:
         std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
             const Person& pa = d_->people[static_cast<std::size_t>(a)];
             const Person& pb = d_->people[static_cast<std::size_t>(b)];
-            const bool qa = pa.kind == Person::Kind::Pending, qb = pb.kind == Person::Kind::Pending;
-            if (qa != qb) return qb;
-            if (sortCol_ == 0 || qa) return sortDesc_ ? pa.name > pb.name : pa.name < pb.name;
+            if (sortCol_ == 0) return sortDesc_ ? pa.name > pb.name : pa.name < pb.name;
             const double va = value(a), vb = value(b);
             if (va != vb) return sortDesc_ ? va > vb : va < vb;
             return pa.color < pb.color;
@@ -782,11 +723,6 @@ private:
     }
     void openSelected() {
         if (selected_.empty() || !a_.openCard) return;
-        const Person* p = d_->person(selected_);
-        if (p && p->kind == Person::Kind::Pending) {
-            if (a_.verify) a_.verify(selected_);
-            return;
-        }
         a_.openCard(selected_);
     }
 
@@ -825,24 +761,17 @@ private:
         const Person* p = d_->person(key);
         ui::ListMenu m({1, "admins", false});
         if (!p) return m;
-        const bool pending = p->kind == Person::Kind::Pending;
         const std::string k = key;
         auto* self = const_cast<OverviewView*>(this);
-        if (pending) {
-            m.open("V\xC3\xA9rifier et accepter\xE2\x80\xA6", [self, k] {
-                if (self->a_.verify) self->a_.verify(k);
-            });
-        } else {
-            m.open("Ouvrir sa fiche", [self, k] {
-                if (self->a_.openCard) self->a_.openCard(k);
-            });
-        }
+        m.open("Ouvrir sa fiche", [self, k] {
+            if (self->a_.openCard) self->a_.openCard(k);
+        });
         m.unfold(selected_ == key, [self, k] { self->choose(self->selected_ == k ? std::string() : k); });
         if (p->kind == Person::Kind::Admin && p->active())
             m.action({.label = "Ses droits\xE2\x80\xA6", .icon = ui::Icon::Lock, .run = [self, k] {
                           if (self->a_.rightsOf) self->a_.rightsOf(k);
                       }});
-        if (!pending && p->key.size() == 64)
+        if (p->key.size() == 64)
             m.goTo({.label = "Son journal", .icon = ui::Icon::History, .run = [self, k] {
                         if (self->a_.journalOf) self->a_.journalOf(k);
                     }});
@@ -852,8 +781,8 @@ private:
             m.filterOn({.label = label + " : " + v, .run = [self, field, v] { self->bar_->filterOn(field, v); }});
         };
         filter(1, "Cet \xC3\xA9tat");
-        if (!pending) filter(2, "Ce profil");
-        if (!pending) filter(3, "Cette version");
+        filter(2, "Ce profil");
+        filter(3, "Cette version");
         if (!p->fingerprint.empty()) m.copy("Son empreinte", p->fingerprint, ui::Icon::Copy);
         if (p->key.size() == 64) m.copy("Sa cl\xC3\xA9 (64 caract\xC3\xA8res)", p->key, ui::Icon::Copy);
         if (!p->id.empty()) m.copy("Son identifiant", p->id, ui::Icon::Copy);
@@ -866,10 +795,6 @@ private:
                           if (self->a_.retire) self->a_.retire(k);
                       }});
         }
-        if (pending)
-            m.danger({.label = "Refuser la demande", .run = [self, k] {
-                          if (self->a_.refuse) self->a_.refuse(k);
-                      }});
         return m;
     }
     void openMenu(const std::string& key, gfx::Point at) {
@@ -890,12 +815,6 @@ private:
             if (a_.removeRights) a_.removeRights(d_->keyOf(al.adminId), al.rights);
         } else if (g == "fiche") {
             if (a_.openCard) a_.openCard(d_->keyOf(al.adminId));
-        } else if (g == "accepter") {
-            for (const auto& p : d_->people)
-                if (p.kind == Person::Kind::Pending && p.name == al.adminName) {
-                    if (a_.verify) a_.verify(p.key);
-                    return;
-                }
         }
     }
 
@@ -939,11 +858,8 @@ private:
     ui::Button*               journal_{nullptr};
     ui::Button*               rights_{nullptr};
     ui::Button*               retire_{nullptr};
-    ui::Button*               verify_{nullptr};
-    ui::Button*               refuse_{nullptr};
     ui::PopupMenu*            menu_{nullptr};
     ui::ListMenu              menuList_;
-    std::vector<LinkButton*>  verifyRow_;
     std::vector<LinkButton*>  gestures_;
     std::vector<Rect>         tiles_;
     Rect                      rank_{}, alerts_{};
@@ -952,7 +868,7 @@ private:
     std::vector<RowGeo>       rows_;
     std::vector<AlertGeo>     alertGeo_;
     Rect                      panelFigs_{}, chartBox_{}, recentBox_{};
-    float                     rightsTop_{-1.f}, buttonsY_{0}, hintX_{0}, noteY_{0};
+    float                     rightsTop_{-1.f}, buttonsY_{0}, hintX_{0};
     bool                      showHint_{false};
     mutable std::vector<std::pair<Rect, std::string>> cut_;   // les textes raccourcis du dernier dessin (l'infobulle)
     core::ConnectionScope     links_;
@@ -965,8 +881,7 @@ void OverviewView::paintRow(const ui::PaintContext& ctx, const RowGeo& g) const 
     const js::AdminStats* s = d_->stats(p.key);
     const AdminFigures* f = d_->fig(p.key);
     const Rect b = g.row;
-    const bool pending = p.kind == Person::Kind::Pending;
-    const bool faded = pending || p.retired;
+    const bool faded = p.retired != 0;
     if (g.unfolded) {
         r.fillRect({b.x, b.y, b.w, b.h + g.panel.h}, Color::rgb(0xFAF9FF));
         r.fillRect({b.x, b.y, 3.f, b.h + g.panel.h}, kViolet);
@@ -975,7 +890,7 @@ void OverviewView::paintRow(const ui::PaintContext& ctx, const RowGeo& g) const 
     }
     r.fillRect({b.x, b.bottom() - 1.f + (g.unfolded ? g.panel.h : 0.f), b.w, 1.f}, kLine2);
     // le chevron, l'avatar, le nom
-    if (!pending) {
+    {
         const float cx = colX_[0] - 22.f, cy = b.y + 24.f;
         if (g.unfolded) {
             r.line({cx, cy}, {cx + 5.f, cy + 5.f}, kMuted, 1.5f);
@@ -994,8 +909,6 @@ void OverviewView::paintRow(const ui::PaintContext& ctx, const RowGeo& g) const 
         if (p.kind == Person::Kind::Plus) {
             sx += text(r, sx, sy, "Admin+", kB12, kVioletInk, nw);
             (void)text(r, sx, sy, std::string(" \xC2\xB7 ") + (p.me ? "toi" : p.pc), kF12, kMuted, nx + nw - sx);
-        } else if (pending) {
-            (void)text(r, sx, sy, "demande re\xC3\xA7ue " + ago(d_->now, p.received), kF12, kMuted, nw);
         } else if (p.retired) {
             (void)text(r, sx, sy, "retir\xC3\xA9 le " + dayMonth(p.retired), kF12, kMuted, nw);
         } else {
@@ -1007,10 +920,7 @@ void OverviewView::paintRow(const ui::PaintContext& ctx, const RowGeo& g) const 
                 (void)text(r, sx, sy, " \xC2\xB7 " + ver, kB12, kAmber, nx + nw - sx);
         }
     }
-    if (pending) {
-        (void)text(r, colX_[1], b.y + 13.f, "Pas encore de chiffres : sa demande d'admin attend ton accord (empreinte \xC3\xA0 v\xC3\xA9rifier au t\xC3\xA9l\xC3\xA9phone).", kF13,
-                   kMuted, colX_[7] - colX_[1] - 10.f);
-    } else {
+    {
         // les actions, leur ecart, la courbe
         if (s) {
             const float aw = text(r, colX_[1], b.y + 11.f, num(s->actions), kB14, kInk, colW_[1]);
@@ -1067,9 +977,9 @@ void OverviewView::paintRow(const ui::PaintContext& ctx, const RowGeo& g) const 
     // l'etat
     {
         const std::string st = stateOf(p);
-        const Color fg = pending ? kAmber : p.retired ? kRed : kGreen;
-        const Color bg = pending ? kAmberPale : p.retired ? kRedPale : kGreenPale;
-        const bool dot = !pending && !p.retired;
+        const Color fg = p.retired ? kRed : kGreen;
+        const Color bg = p.retired ? kRedPale : kGreenPale;
+        const bool dot = !p.retired;
         const float natural = kit::pillWidth(r, st, kB12, dot);
         const float pw = std::min(colW_[7], natural);
         const std::string shownSt = natural <= colW_[7] ? st : kit::fit(r, st, kB12, colW_[7] - (dot ? 28.f : 18.f));
@@ -1084,14 +994,6 @@ void OverviewView::paintPanel(const ui::PaintContext& ctx, const Person& p, cons
     const js::AdminStats* s = d_->stats(p.key);
     const AdminFigures* f = d_->fig(p.key);
     const float x = panel.x + 20.f, w = panel.w - 40.f;
-    if (p.kind == Person::Kind::Pending) {
-        std::string t = "Sa demande est arriv\xC3\xA9" "e " + ago(d_->now, p.received) + (p.pc.empty() ? std::string() : " depuis " + p.pc) +
-                        ". Lis-lui son empreinte au t\xC3\xA9l\xC3\xA9phone avant de l'accepter";
-        if (!p.fingerprint.empty()) t += " : " + p.fingerprint;
-        if (p.mismatch) t = "ATTENTION : l'empreinte que le service rend n'est pas celle de sa cl\xC3\xA9. Ne l'accepte pas.";
-        (void)kit::drawWrapped(r, x, noteY_, w, t, kF13, p.mismatch ? kRed : kInk2, 18.f, 2);
-        return;
-    }
     // 1. ses chiffres
     if (!panelFigs_.empty()) {
         const Rect fb = panelFigs_;
@@ -1251,7 +1153,6 @@ void OverviewView::paintAlerts(const ui::PaintContext& ctx) const {
             case js::AlertKind::RecentCritical: icon = ui::Icon::Error; break;
             case js::AlertKind::UnusualHour: icon = ui::Icon::History; break;
             case js::AlertKind::OtherPc: icon = ui::Icon::Screen; break;
-            case js::AlertKind::Pending: icon = ui::Icon::User; break;
         }
         r.fillRoundedRect({x, g.top, 32.f, 32.f}, sb, 8.f);
         ui::drawIcon(r, icon, {x + 8.f, g.top + 8.f, 16.f, 16.f}, sc);

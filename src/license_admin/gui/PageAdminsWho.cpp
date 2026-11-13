@@ -94,7 +94,6 @@ public:
         bool any[4] = {false, false, false, false};
         ch::DumbbellData dd[4];
         for (const auto& p : d_->people) {
-            if (p.kind == Person::Kind::Pending) continue;
             const js::AdminStats* s = d_->stats(p.key);
             const AdminFigures* f = d_->fig(p.key);
             double now[4] = {s ? static_cast<double>(s->actions) : kNaN, s ? s->licences : kNaN, s ? s->requests : kNaN, f ? f->amount / 100.0 : kNaN};
@@ -191,8 +190,7 @@ protected:
         beforeLegendY_ = by;
         by += 24.f;
         const int cols = rightW >= 520.f ? 2 : 1;
-        int people = 0;
-        for (const auto& p : d_->people) people += p.kind == Person::Kind::Pending ? 0 : 1;
+        const int people = static_cast<int>(d_->people.size());
         const float cellH = 58.f + 24.f * static_cast<float>(std::max(1, people));
         const float cellW = (rightW - 28.f - 16.f * static_cast<float>(cols - 1)) / static_cast<float>(cols);
         for (int i = 0; i < 4; ++i) {
@@ -286,8 +284,7 @@ private:
     [[nodiscard]] std::vector<std::pair<std::string, std::string>> legendItems() const {
         std::vector<std::pair<std::string, std::string>> out;
         for (const auto& p : d_->people) {
-            if (p.kind == Person::Kind::Pending) out.push_back({p.name, " : pas encore de lignes"});
-            else if (p.retired) out.push_back({p.name, " (retir\xC3\xA9 le " + dayMonth(p.retired) + ")"});
+            if (p.retired) out.push_back({p.name, " (retir\xC3\xA9 le " + dayMonth(p.retired) + ")"});
             else out.push_back({p.name, p.me ? std::string(" (toi)") : std::string()});
         }
         return out;
@@ -316,9 +313,9 @@ private:
                     lx = x;
                     ly += 24.f;
                 }
-                if (p && p->kind != Person::Kind::Pending) avatarOf(r, {lx, ly, 18.f, 18.f}, *p);
-                const float nx = lx + (p && p->kind != Person::Kind::Pending ? 24.f : 0.f);
-                const float nw = text(r, nx, ly + 1.f, it.first, kF13, p && p->kind == Person::Kind::Pending ? kMuted : kInk, x + w - nx);
+                if (p) avatarOf(r, {lx, ly, 18.f, 18.f}, *p);
+                const float nx = lx + (p ? 24.f : 0.f);
+                const float nw = text(r, nx, ly + 1.f, it.first, kF13, kInk, x + w - nx);
                 (void)text(r, nx + nw, ly + 1.f, it.second, kF13, kMuted, x + w - nx - nw);
                 lx += iw;
             }

@@ -1,0 +1,5 @@
+# Task sections, in execution order.
+# name ; task ; language ; order ; activation ; logic ; file
+Procede ; MAST ; ST ; 1 ;  ;  ; Procede.st
+G7_Cuve ; MAST ; SFC ; 2 ;  ;  ; G7_Cuve.xml
+Ladder_Moteur ; MAST ; LD ; 3 ;  ;  ; Ladder_Moteur.xml

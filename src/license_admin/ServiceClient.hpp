@@ -242,10 +242,11 @@ struct AdminWatch {
     bool          supported{false};
     std::int64_t  activity{-1}, requests{-1}, pending{-1}, changes{-1};
     std::string   version;
-    // 1.44.0 (docs/ADMINS.md, par. 6) : le numero de la liste des admins, le dernier numero du journal des admins, les
-    // demandes d'admin en attente, la derniere version publiee ; qui appelle : son role ("admin+", "admin") et ses droits.
-    // -1 / vide : un service d'avant la 1.44.0.
-    std::int64_t             admins{-1}, journal{-1}, adminRequests{-1};
+    // 1.44.0 (docs/ADMINS.md, par. 6) : le numero de la liste des admins, le dernier numero du journal des admins, la
+    // derniere version publiee ; qui appelle : son role ("admin+", "admin") et ses droits. -1 / vide : un service d'avant
+    // la 1.44.0. 1.51.0 : `invitedWaiting` - les admins inscrits par leur code d'invitation que l'Admin+ signe d'office
+    // (<< admins_inscrits >> ; -1 : un service d'avant la 1.51.0, qui avait des demandes d'admin).
+    std::int64_t             admins{-1}, journal{-1}, invitedWaiting{-1};
     std::string              publishedVersion;
     std::string              role;
     std::vector<std::string> rights;

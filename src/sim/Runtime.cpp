@@ -770,6 +770,8 @@ void Runtime::reset() {
     scans_   = 0;
     halted_  = false;
     resetSfc();   // 1.51.0 (S) : les GRAFCET repartent de leur situation initiale
+    for (auto& r : programs_)   // 1.51.0 (L) : les ladders oublient leurs fronts et leur dernier passage
+        if (r.ladderState) r.ladderState->reset();
 }
 
 namespace {

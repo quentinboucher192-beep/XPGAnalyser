@@ -30,6 +30,8 @@
 
 #include "App.hpp"
 #include "Capture.hpp"
+#include "SfcPane.hpp"                   // 1.51.0 (S) : les commandes sfc-...
+#include "LadderPane.hpp"                // 1.51.0 (L) : les commandes ladder-...
 #include "hmi/HmiCommPanes.hpp"         // lot 15 : les equipements, le reseau du PC
 #include "hmi/HmiEditor.hpp"
 #include "../hmi/HmiEdit.hpp"           // 1.12.30 : vue-survol vide (hitTest)
@@ -1372,6 +1374,77 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         return Step::Next;
     }
     // ---- fin Lot API 8 : themes ----
+    // 1.51.0 (S) : L'EDITEUR DE GRAFCET NATIF (SFC), sur la section ouverte en schema (app/SfcPane) :
+    //  sfc-choisir Etape | sfc-choisir X Y     une etape (son nom), ou l'objet de la case (X, Y)
+    //  sfc-outil sfc.addStep|sfc.alt|...       un bouton de la barre (sfc.cond, sfc.action, sfc.step : leur dialogue)
+    //  sfc-ajouter ["receptivite"]             etape + transition sous la selection
+    //  sfc-receptivite "texte"                 la receptivite de la transition choisie
+    //  sfc-action Q Nom [duree] [section]      une action sur l'etape choisie
+    //  sfc-supprimer | sfc-annuler             supprimer la selection | Ctrl+Z
+    //  sfc-forcer Etape 1|0 | sfc-initialiser  en simulation
+    //  sfc-etat ["attendu"]                    l'etat au journal (attendu : doit y figurer)
+    //  sfc-texte | sfc-schema                  le volet Texte ou Schema de la section
+    if (cmd.rfind("sfc-", 0) == 0) {
+        SfcPane* pane = nullptr;
+        if (auto* root = top())
+            walk(*root, [&](ui::Widget& x) {
+                if (auto* p = dynamic_cast<SfcPane*>(&x); p && !pane && shown(*p)) pane = p;
+            });
+        if (cmd == "sfc-texte" || cmd == "sfc-schema") {
+            ui::ToggleButton* toggle = nullptr;
+            if (auto* root = top())
+                walk(*root, [&](ui::Widget& x) {
+                    auto* t = dynamic_cast<ui::ToggleButton*>(&x);
+                    if (t && !toggle && shown(*t) && x.id().size() > 7 && x.id().compare(x.id().size() - 7, 7, ".schema") == 0)
+                        toggle = t;
+                });
+            if (!toggle) { fail(cmd + " : pas de section en sch\xC3\xA9ma ouverte"); return Step::Next; }
+            if (toggle->checked() != (cmd == "sfc-schema")) click(centreOf(*toggle), MouseButton::Left, 1, {});
+            return Step::Yield;
+        }
+        if (!pane) {
+            if (retries_ < 30) return Step::Retry;
+            fail(cmd + " : pas de GRAFCET (SFC) ouvert en sch\xC3\xA9ma");
+            return Step::Next;
+        }
+        std::string said, error;
+        if (!runSfcScript(app_, *pane, w, said, error)) fail(cmd + " : " + error);
+        if (!said.empty()) std::printf("[script] %s\n", said.c_str());
+        sinceInput_ = 0;
+        return Step::Yield;
+    }
+    // 1.51.0 (L) : LE LADDER (LD), sur la section ouverte en schema (app/LadderPane) : ladder-choisir,
+    //  ladder-outil, ladder-taper, ladder-nommer, ladder-bloc, ladder-broche, ladder-forcer, ladder-annuler,
+    //  ladder-etat (voir LadderPane.hpp) ; ladder-texte | ladder-schema : le volet Texte ou Schema.
+    if (cmd.rfind("ladder-", 0) == 0) {
+        if (cmd == "ladder-texte" || cmd == "ladder-schema") {
+            ui::ToggleButton* toggle = nullptr;
+            if (auto* root = top())
+                walk(*root, [&](ui::Widget& x) {
+                    auto* t = dynamic_cast<ui::ToggleButton*>(&x);
+                    if (t && !toggle && shown(*t) && x.id().size() > 7 && x.id().compare(x.id().size() - 7, 7, ".schema") == 0)
+                        toggle = t;
+                });
+            if (!toggle) { fail(cmd + " : pas de section en sch\xC3\xA9ma ouverte"); return Step::Next; }
+            if (toggle->checked() != (cmd == "ladder-schema")) click(centreOf(*toggle), MouseButton::Left, 1, {});
+            return Step::Yield;
+        }
+        LadderPane* pane = nullptr;
+        if (auto* root = top())
+            walk(*root, [&](ui::Widget& x) {
+                if (auto* p = dynamic_cast<LadderPane*>(&x); p && !pane && shown(*p)) pane = p;
+            });
+        if (!pane) {
+            if (retries_ < 30) return Step::Retry;
+            fail(cmd + " : pas de ladder (LD) ouvert en sch\xC3\xA9ma");
+            return Step::Next;
+        }
+        std::string said, error;
+        if (!runLadderScript(app_, *pane, w, said, error)) fail(cmd + " : " + error);
+        if (!said.empty()) std::printf("[script] %s\n", said.c_str());
+        sinceInput_ = 0;
+        return Step::Yield;
+    }
     if (cmd == "importer") { app_.openPath(arg(1)); return Step::Yield; }
     if (cmd == "ouvrir") { app_.openProjectFolder(arg(1)); return Step::Yield; }
     if (cmd == "action") {
@@ -7317,7 +7390,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         auto* pane = dynamic_cast<HmiScriptsPane*>(currentPage());
         auto* stages = pane ? pane->cycleStages() : nullptr;
         auto* add = pane ? pane->cycleAdd() : nullptr;
-        if (!stages || !add || !shown(*stages)) {
+        // 1.51.0 : la section n'est montree que pour un script de cycle - + Script de cycle (sous la liste) se clique toujours.
+        if (!stages || !add || !shown(cmd == "cycle-ajouter" ? static_cast<ui::Widget&>(*add) : static_cast<ui::Widget&>(*stages))) {
             if (retries_ < 30) return Step::Retry;
             fail(cmd + " : l'onglet courant n'est pas les scripts d'une vue");
             return Step::Next;

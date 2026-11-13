@@ -45,6 +45,8 @@
 #include "../../project/GrafcetLayoutFile.hpp"
 #include "../../project/GrafcetRewrite.hpp"
 #include "../GrafcetView.hpp"
+#include "../SfcPane.hpp"                 // 1.51.0 (S) : le GRAFCET natif (SFC) dessine et modifie
+#include "../LadderPane.hpp"              // 1.51.0 (L) : le ladder (LD) dessine, modifie, simule
 #include "../HistoryPanel.hpp"
 #include "../../project/DeleteCommands.hpp"
 #include "../../project/Grafcet.hpp"
@@ -242,6 +244,35 @@ public:
         if (symbolBar_) symbolBar_->setMessage(text, accent);
     }
 
+    // 1.51.0 (S) : UN SCHEMA DESSINE (SFC ; LD peut s'en servir). Le widget prend la
+    // place du texte tant que "Sch\xC3\xA9ma" est enfonce ; relache, la lecture en
+    // texte revient (references croisees, Aller a). `refresh` : relire la section.
+    void setGraphic(std::unique_ptr<Widget> w, bool showFirst, std::function<void()> refresh = {}) {
+        if (!w || graphic_ || children().size() < 3) return;
+        auto* bar = dynamic_cast<BoxLayout*>(children()[0].get());
+        if (!bar) return;
+        auto toggle = std::make_unique<ToggleButton>("Sch\xC3\xA9ma", this->id() + ".schema");
+        toggle->setTooltip("Enfonc\xC3\xA9 : le sch\xC3\xA9ma dessin\xC3\xA9 (et modifiable) ; rel\xC3\xA2" "ch\xC3\xA9 : "
+                           "la lecture en texte (r\xC3\xA9" "f\xC3\xA9rences crois\xC3\xA9" "es, Aller \xC3\xA0)");
+        graphicToggle_ = &static_cast<ToggleButton&>(bar->addChild(std::move(toggle)));
+        graphic_ = &addChild(std::move(w));
+        graphicRefresh_ = std::move(refresh);
+        links_ += graphicToggle_->toggled->connect([this](bool on) { showGraphic(on); });
+        graphicToggle_->setChecked(showFirst);
+        showGraphic(showFirst);
+    }
+    void showGraphic(bool on) {
+        if (!graphic_) return;
+        graphicShown_ = on;
+        if (graphicToggle_ && graphicToggle_->checked() != on) graphicToggle_->setChecked(on);
+        graphic_->setVisibility(on ? Visibility::Visible : Visibility::Collapsed);
+        view_->setVisibility(on ? Visibility::Collapsed : Visibility::Visible);
+        invalidateLayout();
+    }
+    [[nodiscard]] Widget* graphic() const noexcept { return graphic_; }
+    [[nodiscard]] bool graphicShown() const noexcept { return graphic_ && graphicShown_; }
+    void refreshGraphic() { if (graphicRefresh_) graphicRefresh_(); }
+
 protected:
     void onLayout() override {
         // Fixed strip on top, fixed strip at the bottom, the viewer takes the
@@ -256,6 +287,9 @@ protected:
         children()[1]->setBounds({area.x, area.y + barH + 2.f, area.w,
                                   std::max(0.f, area.h - barH - infoH - 6.f)});
         children()[2]->setBounds({area.x, area.bottom() - infoH, area.w, infoH});
+        // 1.51.0 (S) : le schema dessine, a la place du texte
+        if (graphic_)
+            graphic_->setBounds({area.x, area.y + barH + 2.f, area.w, std::max(0.f, area.h - barH - infoH - 6.f)});
     }
 
 private:
@@ -279,6 +313,10 @@ private:
     ToggleButton*         editToggle_{nullptr};
     MultiLineText*        view_{nullptr};
     StatusBar*            symbolBar_{nullptr};
+    ToggleButton*         graphicToggle_{nullptr};   // 1.51.0 (S) : Schema / Texte
+    Widget*               graphic_{nullptr};
+    bool                  graphicShown_{false};
+    std::function<void()> graphicRefresh_;
     core::ConnectionScope links_;
 };
 
@@ -1330,6 +1368,32 @@ void MainAnalysisScreen::openDocument(domain::Index sectionIndex) {
         pane->editToggle().setEnabled(false);
         pane->editToggle().setTooltip("Un sch\xC3\xA9ma " + std::string(domain::toString(section.language))
             + " se modifie dans Control Expert : API Studio le lit et le r\xC3\xA9" "exporte \xC3\xA0 l'identique.");
+    }
+    // 1.51.0 (S) : UN GRAFCET NATIF (SFC) se dessine et se modifie (app/SfcPane) ; le
+    // bouton Schema rend la lecture en texte. Chaque modification relit le texte.
+    if (graph && section.language == domain::PouLanguage::SFC) {
+        auto sfcPane = std::make_unique<SfcPane>(app_, sectionIndex, pane->id() + ".sfc");
+        auto* sfcRaw = sfcPane.get();
+        auto* docRaw = pane.get();
+        paneLinks_ += sfcRaw->edited->connect([this, docRaw, sectionIndex] {
+            auto p = app_.project();
+            if (p && sectionIndex < p->sections.size()) docRaw->view().setText(project::graphListingText(p->sections[sectionIndex]));
+        });
+        pane->editToggle().setTooltip("Un GRAFCET se modifie dans son sch\xC3\xA9ma (bouton Sch\xC3\xA9ma) ; le texte en est la lecture.");
+        pane->setGraphic(std::move(sfcPane), true, [sfcRaw] { sfcRaw->reload(); });
+    }
+    // 1.51.0 (L) : UN LADDER (LD) se dessine, se modifie et s'anime en simulation
+    // (app/LadderPane) ; le bouton Schema rend la lecture en texte.
+    if (graph && section.language == domain::PouLanguage::LD) {
+        auto ldPane = std::make_unique<LadderPane>(app_, sectionIndex, pane->id() + ".ld");
+        auto* ldRaw = ldPane.get();
+        auto* docRaw = pane.get();
+        paneLinks_ += ldRaw->edited->connect([this, docRaw, sectionIndex] {
+            auto p = app_.project();
+            if (p && sectionIndex < p->sections.size()) docRaw->view().setText(project::graphListingText(p->sections[sectionIndex]));
+        });
+        pane->editToggle().setTooltip("Un ladder se modifie dans son sch\xC3\xA9ma (bouton Sch\xC3\xA9ma) ; le texte en est la lecture.");
+        pane->setGraphic(std::move(ldPane), true, [ldRaw] { ldRaw->reload(); });
     }
 
     // The editor knows nothing about PLCs; it asks, and this is the answer.
@@ -2480,7 +2544,11 @@ void MainAnalysisScreen::refreshOpenDocuments() {
         auto* widget = root().findById("analysis.doc." + std::to_string(open.section));
         auto* pane = dynamic_cast<DocumentPane*>(widget);
         if (!pane) continue;
-        const auto& body = project->sections[open.section].body;
+        // 1.51.0 (S) : un schema (LD, SFC) se lit en texte : sa lecture, pas son XML ; son dessin est relu.
+        const bool graphSection = domain::keepsSourceXml(project->sections[open.section]);
+        const auto body = graphSection ? project::graphListingText(project->sections[open.section])
+                                       : project->sections[open.section].body;
+        if (graphSection) pane->refreshGraphic();
         // Only when it differs: setText moves the caret and drops the selection,
         // and doing that to a tab nobody edited would be a change of its own.
         if (pane->view().text() != body) {

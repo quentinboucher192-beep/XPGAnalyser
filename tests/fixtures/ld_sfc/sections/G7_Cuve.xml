@@ -1,0 +1,197 @@
+<SFCProgram areaNum="0" operatorCtrl="0">
+		<identProgram name="G7_Cuve" type="section" task="MAST" SectionOrder="2"></identProgram>
+		<chartSource name="Chart">
+			<networkSFC>
+				<step stepType="initialStep" stepName="Init">
+					<objPosition posX="0" posY="0"></objPosition>
+					<action qualifier="N">
+						<actionName>
+							<variableName>Lampe_Init</variableName>
+						</actionName>
+						<tValue>
+							<tLiteral></tLiteral>
+						</tValue>
+					</action>
+					<literals max="" min="" delay=""></literals>
+					<comment>attente du départ</comment>
+				</step>
+				<transition>
+					<objPosition posX="0" posY="1"></objPosition>
+					<transitionCondition invertLogic="false">
+						<variableName>Depart</variableName>
+					</transitionCondition>
+				</transition>
+				<step stepType="step" stepName="Remplir">
+					<objPosition posX="0" posY="2"></objPosition>
+					<action qualifier="S">
+						<actionName>
+							<variableName>Pompe</variableName>
+						</actionName>
+						<tValue>
+							<tLiteral></tLiteral>
+						</tValue>
+					</action>
+					<action qualifier="L">
+						<actionName>
+							<variableName>Vanne</variableName>
+						</actionName>
+						<tValue>
+							<tLiteral>t#2s</tLiteral>
+						</tValue>
+					</action>
+					<action qualifier="D">
+						<actionName>
+							<variableName>Alarme</variableName>
+						</actionName>
+						<tValue>
+							<tLiteral>t#5s</tLiteral>
+						</tValue>
+					</action>
+					<action qualifier="P1">
+						<actionName>
+							<sectionName>A_Compte</sectionName>
+						</actionName>
+						<tValue>
+							<tLiteral></tLiteral>
+						</tValue>
+					</action>
+					<literals max="t#10s" min="t#1s" delay=""></literals>
+				</step>
+				<altBranch width="4" relativePos="0">
+					<objPosition posX="0" posY="3"></objPosition>
+				</altBranch>
+				<transition>
+					<objPosition posX="0" posY="3"></objPosition>
+					<transitionCondition invertLogic="false">
+						<variableName>Plein</variableName>
+					</transitionCondition>
+				</transition>
+				<transition>
+					<objPosition posX="3" posY="3"></objPosition>
+					<transitionCondition invertLogic="false">
+						<sectionName>T_Vide</sectionName>
+					</transitionCondition>
+				</transition>
+				<step stepType="step" stepName="Chauffer">
+					<objPosition posX="0" posY="4"></objPosition>
+					<action qualifier="R">
+						<actionName>
+							<variableName>Pompe</variableName>
+						</actionName>
+						<tValue>
+							<tLiteral></tLiteral>
+						</tValue>
+					</action>
+					<literals max="" min="" delay=""></literals>
+				</step>
+				<step stepType="step" stepName="Vider">
+					<objPosition posX="3" posY="4"></objPosition>
+					<action qualifier="R">
+						<actionName>
+							<variableName>Pompe</variableName>
+						</actionName>
+						<tValue>
+							<tLiteral></tLiteral>
+						</tValue>
+					</action>
+					<literals max="" min="" delay=""></literals>
+				</step>
+				<transition>
+					<objPosition posX="0" posY="5"></objPosition>
+					<transitionCondition invertLogic="false">
+						<sectionName>T_Chaud</sectionName>
+					</transitionCondition>
+				</transition>
+				<transition>
+					<objPosition posX="3" posY="5"></objPosition>
+					<transitionCondition invertLogic="true">
+						<variableName>Pompe</variableName>
+					</transitionCondition>
+				</transition>
+				<altJoint width="4" relativePos="0">
+					<objPosition posX="0" posY="5"></objPosition>
+				</altJoint>
+				<step stepType="step" stepName="Attente">
+					<objPosition posX="0" posY="6"></objPosition>
+					<literals max="" min="" delay="t#500ms"></literals>
+				</step>
+				<transition>
+					<objPosition posX="0" posY="7"></objPosition>
+					<transitionCondition invertLogic="false">
+						<variableName>Go_Par</variableName>
+					</transitionCondition>
+				</transition>
+				<parBranch width="4" relativePos="0">
+					<objPosition posX="0" posY="8"></objPosition>
+				</parBranch>
+				<step stepType="step" stepName="Moteur_A">
+					<objPosition posX="0" posY="8"></objPosition>
+					<action qualifier="N">
+						<actionName>
+							<variableName>Voyant_A</variableName>
+						</actionName>
+						<tValue>
+							<tLiteral></tLiteral>
+						</tValue>
+					</action>
+					<literals max="" min="" delay=""></literals>
+				</step>
+				<step stepType="step" stepName="Moteur_B">
+					<objPosition posX="3" posY="8"></objPosition>
+					<action qualifier="P0">
+						<actionName>
+							<variableName>Sortie_P0</variableName>
+						</actionName>
+						<tValue>
+							<tLiteral></tLiteral>
+						</tValue>
+					</action>
+					<literals max="" min="" delay=""></literals>
+				</step>
+				<parJoint width="4" relativePos="0">
+					<objPosition posX="0" posY="8"></objPosition>
+				</parJoint>
+				<transition>
+					<objPosition posX="0" posY="9"></objPosition>
+					<transitionCondition invertLogic="false">
+						<sectionName>T_AB</sectionName>
+					</transitionCondition>
+				</transition>
+				<linkSFC>
+					<directedLinkSource objectType="transition">
+						<objPosition posX="0" posY="9"></objPosition>
+					</directedLinkSource>
+					<directedLinkDestination objectType="step">
+						<objPosition posX="0" posY="0"></objPosition>
+					</directedLinkDestination>
+					<gridObjPosition posX="0.5" posY="10"></gridObjPosition>
+					<gridObjPosition posX="-0.5" posY="10"></gridObjPosition>
+					<gridObjPosition posX="-0.5" posY="0"></gridObjPosition>
+					<gridObjPosition posX="0.5" posY="0"></gridObjPosition>
+				</linkSFC>
+				<textBox width="2" height="1">cuve d'essai (fictive)<objPosition posX="1" posY="0"></objPosition>
+				</textBox>
+			</networkSFC>
+		</chartSource>
+		<transitionSource name="T_Vide">
+			<STSource>Vidange AND Niveau &gt; 10</STSource>
+		</transitionSource>
+		<transitionSource name="T_Chaud">
+			<LDSource nbColumns="11">
+				<networkLD>
+					<typeLine>
+						<contact typeContact="openContact" contactVariableName="Chaud"></contact>
+						<HLink nbCells="9"></HLink>
+						<coil typeCoil="coil" coilVariableName="T_Chaud"></coil>
+					</typeLine>
+				</networkLD>
+			</LDSource>
+		</transitionSource>
+		<transitionSource name="T_AB">
+			<STSource>Moteur_A.t &gt;= t#4s AND Moteur_B.x</STSource>
+		</transitionSource>
+		<actionSource name="A_Compte">
+			<STSource>Compteur := Compteur + 1;
+</STSource>
+		</actionSource>
+	</SFCProgram>

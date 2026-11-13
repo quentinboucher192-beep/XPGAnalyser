@@ -265,12 +265,16 @@ int main(int argc, char** argv) {
         check(!u.ok && has(u.message, "modifi") && !lea.service().configured, "une connexion au port modifie : refusee (" + u.message + ")");
         u = lea.useConnectionFile(U(exported));
         check(u.ok && lea.service().configured && lea.service().config.url == svc.url() && lea.service().hasConnection, "la connexion signee : connecte (" + u.text() + ")");
-        const auto r = lea.requestAdmin("L\xC3\xA9" "a Essai", "lea.essai@exemple.invalid", &fp);
-        check(r.ok && !fp.empty(), "la demande pour devenir admin part tout de suite (" + r.text() + ")");
+        // 1.51.0 : plus de demande d'admin - l'invitation de l'admin+, son code, la signature d'office
+        std::string code;
+        check(plus.inviteAdmin("L\xC3\xA9" "a Essai", "lea.essai@exemple.invalid", licensing::admins::kAllRightsProfile, code).ok, "l'admin+ invite Lea");
+        const auto r = lea.joinWithInvitation(code);
+        check(r.ok, "son code d'invitation part tout de suite (connectee) : inscrite (" + r.text() + ")");
         lea.reload();
-        check(lea.role() == gui::Role::Pending && lea.adminKey().fingerprint == fp, "en attente : sa cle d'admin, son empreinte");
-        const auto acc = plus.acceptAdmin(lea.adminKey().keyHex, licensing::admins::kAllRightsProfile);
-        check(acc.ok, "l'admin+ l'accepte (" + acc.text() + ")");
+        fp = lea.adminKey().fingerprint;
+        check(lea.role() == gui::Role::Pending && !fp.empty(), "ajout en cours : sa cle d'admin");
+        const auto acc = plus.admitInvitedAdmins();
+        check(acc.ok && has(acc.text(), "L\xC3\xA9" "a Essai"), "l'admin+ la signe d'office (" + acc.text() + ")");
         plus.reload();
         gui::AdminRefresh x;
         (void)lea.refreshAdminState(nullptr, &x);

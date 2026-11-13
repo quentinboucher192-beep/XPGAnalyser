@@ -904,6 +904,7 @@ void HmiFunctionsPane::updateDiagnostics() {
     editor_->setMarkedLines(std::move(marks));
     editor_->setSquiggles(squigglesOf(diagnostics_));      // 1.10 : soulignees pendant la frappe
     showStatus();
+    updateSymbolLine();     // 1.51.0 : la barre sous l'editeur suit (une declaration ajoutee dans son onglet : connue)
 }
 
 // 1.11.21 : la barre - le compte du volet, puis les fautes de la fonction montree (le panneau du

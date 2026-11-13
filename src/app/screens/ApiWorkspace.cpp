@@ -13,6 +13,7 @@
 //  blocs, l'ordre, les variables et les tables d'animation suivent (lots 3 a 5).
 // =============================================================================
 #include "Screens.hpp"
+#include "../LadderPane.hpp"   // 1.51.0 (L) : Aller a dans un ladder
 #include "../Licence.hpp"   // 1.30.0
 #include "../../core/Edition.hpp"   // 1.12.14 : IHM Studio ne prepare pas d'automate
 #include "../SectionComparePane.hpp"   // 1.8.0 : le comparateur de sections
@@ -1253,6 +1254,7 @@ void MainAnalysisScreen::goToSectionLine(const std::string& section, std::uint32
     if (!editor)
         if (auto* page = centre_->page(centre_->currentIndex())) editor = dynamic_cast<MultiLineText*>(page->findById(editorId));
     if (editor && line > 0) editor->goToLine(static_cast<std::size_t>(line - 1));
+    revealLadderLine(widgetRoot(), found, line);      // 1.51.0 (L) : un ladder ouvert en schema y va aussi
 }
 
 // La halte vient d'un bloc DFB (ou d'un DDT) : la bibliotheque en a-t-elle une

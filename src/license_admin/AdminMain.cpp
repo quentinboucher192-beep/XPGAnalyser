@@ -60,9 +60,8 @@
 //    XPG-License-Admin --version
 //  1.44.0 : PLUSIEURS ADMINS, LES FICHIERS, LES VERSIONS, LA SAUVEGARDE COMPLETE (docs/ADMINS.md ; par le Workspace de
 //  l'application, gui/Workspace.hpp : les memes fonctions) - chacune ecrit une ligne de resultat :
-//    XPG-License-Admin admin-demander --nom N --courriel C
 //    XPG-License-Admin admin-etat
-//    XPG-License-Admin admin-accepter --cle HEX|--empreinte "B7E2 ..." [--profil P]
+//    XPG-License-Admin admins-inscrits   (1.51.0 : plus de demande d'admin - signe d'office les admins inscrits par leur code)
 //    XPG-License-Admin admin-retirer --cle HEX [--revoquer]
 //    XPG-License-Admin admin-droits --cle HEX --droits a,b,c [--profil P]
 //    XPG-License-Admin profil-enregistrer --nom P --droits a,b,c
@@ -210,11 +209,9 @@ std::string usage() {
            "  kit-studios --sortie DOSSIER                   PublisherKey.hpp, registre.xpgreg, ServiceAddress.hpp, cle-publique.txt\n"
            "                                                 (et LISEZ-MOI.txt) : les fichiers PUBLICS des Studios (cl\xC3\xA9 d'essai refus\xC3\xA9" "e)\n"
            "\n1.44.0 : plusieurs admins, les fichiers, les versions, la sauvegarde compl\xC3\xA8te (une ligne de r\xC3\xA9sultat chacune) :\n"
-           "  admin-demander --nom N --courriel C            demande \xC3\xA0 devenir admin (la cl\xC3\xA9 d'admin na\xC3\xAEt sur ce poste) ; dit l'empreinte\n"
-           "  admin-etat                                     le r\xC3\xB4le de ce poste (rel\xC3\xA8ve la liste des admins, la demande, le journal)\n"
-           "  admin-accepter --cle HEX|--empreinte \"B7E2 ...\" [--profil P]\n"
-           "                                                 l'admin+ : accepte la demande (l'empreinte lue au t\xC3\xA9l\xC3\xA9phone) ;\n"
-           "                                                 le profil \"Tous les droits\" par d\xC3\xA9" "faut\n"
+           "  admin-etat                                     le r\xC3\xB4le de ce poste (rel\xC3\xA8ve la liste des admins, le journal)\n"
+           "  admins-inscrits                                l'admin+ : signe d'office les admins inscrits par leur code d'invitation\n"
+           "                                                 (1.51.0 : plus de demande d'admin ; l'Admin le fait seul toutes les 15 s)\n"
            "  admin-retirer --cle HEX [--revoquer]           l'admin+ : retire un admin (--revoquer : ses licences en vigueur aussi)\n"
            "  admin-droits --cle HEX --droits a,b,c [--profil P]\n"
            "                                                 l'admin+ : les droits d'un admin (vide : aucun)\n"
@@ -367,14 +364,6 @@ bool readPhraseFile(const std::string& path, std::string& phrase, std::string& w
         return false;
     }
     return true;
-}
-
-// Une empreinte lue au telephone : les hexadecimaux seulement, en majuscules.
-std::string fingerprintKey(const std::string& text) {
-    std::string out;
-    for (char c : text)
-        if (std::isxdigit(static_cast<unsigned char>(c))) out += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-    return out;
 }
 
 int oneLine(const license_admin::gui::OpResult& r) {
@@ -591,11 +580,7 @@ int runWorkspaceCommand(const Args& a, const std::string& folder) {
         gui::Derogation d;
         return oneLine(ws.readDerogation(d));
     }
-    if (a.command == "admin-demander") {
-        if (!need("--nom") || !need("--courriel")) return 2;
-        std::string fingerprint;
-        return oneLine(ws.requestAdmin(a.one("--nom"), a.one("--courriel"), &fingerprint));
-    }
+    if (a.command == "admins-inscrits") return oneLine(ws.admitInvitedAdmins());   // 1.51.0
     if (a.command == "admin-etat") {
         std::string state;
         gui::AdminRefresh x;
@@ -604,31 +589,13 @@ int runWorkspaceCommand(const Args& a, const std::string& folder) {
         ws.reload();
         std::string line = "R\xC3\xB4le : " + gui::roleLabel(ws.role());
         if (ws.role() == gui::Role::Plus || ws.role() == gui::Role::Admin) line += " (" + std::to_string(ws.myRights().size()) + " droits sur 13)";
-        if (ws.role() == gui::Role::Pending && !x.requestState.empty()) line += " ; demande : " + x.requestState;
+        if (ws.role() == gui::Role::Pending && !x.joinState.empty()) line += " ; inscription : " + x.joinState;
         if (ws.adminList()) line += " ; liste des admins n\xC2\xB0 " + std::to_string(ws.adminList()->number) + " (" + std::to_string(ws.adminList()->admins.size()) + ")";
         if (ws.adminKey().present) line += " ; empreinte " + ws.adminKey().fingerprint;
         line += " ; journal \xC3\xA0 envoyer : " + std::to_string(ws.journalWaiting());
         if (!r.ok) line += " ; service : " + r.message;
         say(line + "\n");
         return r.ok ? 0 : 1;
-    }
-    if (a.command == "admin-accepter") {
-        std::string key = a.one("--cle");
-        if (key.empty()) {
-            if (!need("--empreinte")) return 2;
-            std::vector<gui::AdminRequest> list;
-            const auto p = ws.pendingAdminRequests(list);
-            if (!p.ok) return oneLine(p);
-            const std::string want = fingerprintKey(a.one("--empreinte"));
-            for (const auto& q : list)
-                if (!q.fingerprintMismatch && fingerprintKey(q.fingerprint) == want) key = q.key;
-            if (key.empty()) {
-                complain("Refus\xC3\xA9 : aucune demande d'admin en attente n'a cette empreinte.");
-                return 1;
-            }
-        }
-        const std::string profile = a.one("--profil").empty() ? std::string(licensing::admins::kAllRightsProfile) : a.one("--profil");
-        return oneLine(ws.acceptAdmin(key, profile, nullptr, true));
     }
     if (a.command == "admin-retirer") {
         if (!need("--cle")) return 2;
@@ -1775,7 +1742,7 @@ int run(const std::vector<std::string>& argv) {
         return showResult(online::studioKit(folder, key.get(), a.one("--sortie"), licensing::systemNow()));
     }
     // ---- 1.44.0 : les admins, les fichiers, les versions, la sauvegarde (le Workspace de l'application) ----
-    static const std::vector<std::string> kWorkspaceCommands = {"admin-demander", "admin-etat",      "admin-accepter",        "admin-retirer",
+    static const std::vector<std::string> kWorkspaceCommands = {"admins-inscrits", "admin-etat",                              "admin-retirer",
                                                                 "admin-droits",   "profil-enregistrer", "journal-relever",     "fichier-envoyer",
                                                                 "version-publier", "sauvegarde-configurer", "sauvegarder", "restaurer",
                                                                 // 1.46.0 : la boutique et les commandes

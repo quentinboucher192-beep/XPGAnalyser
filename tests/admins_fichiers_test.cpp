@@ -598,12 +598,13 @@ int main(int argc, char** argv) {
         r = plus.serviceRunOnline(job, onlineCode);
         check(r.ok, "deposee, son code garde sur ce poste (" + r.text() + ")");
         check(lea.serviceConfigure(svc.url()).ok, "le second poste : l'adresse du service");
-        std::string fp;
-        r = lea.requestAdmin("L\xC3\xA9" "a Essai", "lea@exemple.invalid", &fp);
+        std::string code;   // 1.51.0 : l'invitation, le code, la signature d'office (plus de demande d'admin)
+        check(plus.inviteAdmin("L\xC3\xA9" "a Essai", "lea@exemple.invalid", "Tous les droits", code).ok, "Lea invitee");
+        r = lea.joinWithInvitation(code);
         lea.reload();
-        check(r.ok && !fp.empty(), "une demande d'admin (" + r.text() + ")");
-        r = plus.acceptAdmin(lea.adminKey().keyHex, "Tous les droits");
-        check(r.ok, "acceptee (" + r.text() + ")");
+        check(r.ok && lea.adminKey().present, "son code : inscrite (" + r.text() + ")");
+        r = plus.admitInvitedAdmins();
+        check(r.ok, "signee d'office (" + r.text() + ")");
         plus.reload();
         check(plus.fetchJournal().ok && !plus.journalLines().rows.empty(), "le journal releve");
         const auto sync = plus.archiveSync(false, false);

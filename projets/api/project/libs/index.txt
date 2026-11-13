@@ -1,0 +1,16 @@
+# Shared library. One entry per line:
+#   kind ; category ; name ; version ; author ; comment
+# kind is ddt or dfb. The file itself lives at <category>/<name>.<kind>.
+# Versions here are what the library offers; a project keeps the copy it
+# imported until someone decides to update it.
+mac ; Macros ; AppelerSR ; 1.00 ;  ; Ecrit l'appel d'une sous-routine, avec le remplissage de ses entrees
+mac ; Macros ; CreerInstanceDDT ; 1.00 ;  ; Cree une instance d'un type derive, en l'important au besoin
+mac ; Macros ; CreerInstanceDFB ; 1.00 ;  ; Cree une instance d'un bloc et ecrit son appel
+mac ; Macros ; CreerSR ; 1.00 ;  ; Cree une sous-routine, avec ses variables d'entree et de sortie
+mac ; Macros ; CreerVariable ; 1.00 ;  ; Cree une variable elementaire si elle n'existe pas deja
+mac ; Macros ; EnsureLibraryItem ; 1.10 ;  ; Importe un element de la bibliotheque s'il manque, previent s'il est depasse
+mac ; Macros ; EnsureSection ; 1.10 ;  ; Cree une section si elle n'existe pas deja, globale ou dans une unite
+mac ; Macros ; GenererModes ; 1.00 ;  ; Ecrit la section des modes : un CASE qui appelle les SR de chaque mode
+mac ; Macros ; ImportES ; 3.10 ;  ; Declare les tableaux et les instances, puis cable et configure chaque voie
+mac ; Macros ; LierAlarmes ; 1.10 ;  ; Enregistre et cable toutes les alarmes d'un onglet dans le gestionnaire
+mac ; Macros ; VerifierBibliotheque ; 1.10 ;  ; Liste les elements du projet que la bibliotheque propose en plus recent

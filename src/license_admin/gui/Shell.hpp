@@ -73,8 +73,6 @@ public:
     void openToast();   // << Voir >> : le journal, la ligne depliee
     // Les alertes pas encore vues (le nombre du menu, << Journal des admins >>) ; le journal ouvert les remet a zero.
     [[nodiscard]] int unseenAlerts() const noexcept { return unseenAlerts_; }
-    // Les demandes d'admin en attente (le nombre du menu, << Administrateurs >> ; l'admin+, d'apres le regard).
-    [[nodiscard]] int pendingAdminRequests() const noexcept { return pendingAdmins_; }
     // Les essais : faire comme le regard quand il a releve de nouvelles lignes (les alertes -> les toasts).
     void takeAlerts();
     static constexpr double kToastSeconds = 30.0;
@@ -140,7 +138,7 @@ public:
     // relues toutes les 30 secondes. Sans bruit : la premiere panne est dite une fois. Vrai : un regard est parti.
     // 1.44.0 : pour l'admin+ ET pour un admin (Workspace::signer, plus seulement la cle de l'editeur) ; apres l'etat, la
     // liste des admins et le journal (Workspace::refreshAdminState) : un droit change, une ligne << Me prevenir >> (un
-    // toast) ; EN ATTENTE (pas encore d'acces a /admin/etat) : la demande d'admin, puis, acceptee, l'archive recue.
+    // toast) ; EN COURS D'AJOUT (pas encore d'acces a /admin/etat) : l'inscription par code, puis, signee, l'archive recue.
     bool autoWatch();
     // Relire les licences en ligne sans bruit, et dire ce qui a change depuis le dernier releve (les essais l'appellent).
     bool autoRefreshLicences();
@@ -229,12 +227,14 @@ private:
     double                     lastLive_{-1};            // la derniere fois que le service a repondu au regard
     bool                       autoProblemSaid_{false};  // 1.36.0 : la panne de la releve deja dite
     // 1.44.0 : plusieurs admins
-    bool                       watchPending();           // en attente : la demande d'admin, toutes les 15 s
-    bool                       wantArchive_{false};      // accepte : recevoir l'archive des que possible
-    std::string                pendingState_;            // le dernier etat dit de la demande ("refusee"...)
+    bool                       watchPending();           // en cours d'ajout : l'inscription par code, toutes les 15 s
+    bool                       wantArchive_{false};      // admis : recevoir l'archive des que possible
+    std::string                pendingState_;            // le dernier etat dit de l'inscription ("aucune"...)
+    // 1.51.0 : XPG Admin, premier lancement - le code de l'installateur (invitation.txt) : devenir admin tout seul
+    bool                       autoJoin();
+    bool                       joinTried_{false};
     std::vector<Toast>         toasts_;
     int                        unseenAlerts_{0};
-    int                        pendingAdmins_{0};
     double                     nextBackupCheck_{-1};     // la sauvegarde de secours du jour (l'admin+)
     bool                       versionChecked_{false};   // 1.45.0 : la version du service, lue au lancement
     double                     versionCheckAt_{-1};

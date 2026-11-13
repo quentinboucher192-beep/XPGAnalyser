@@ -1,0 +1,26 @@
+(* CreerVariable
+
+   Creer une variable qui existe deja est refuse, ce qui arrete la macro. Une
+   macro relancee doit pouvoir l'etre. *)
+
+nom   := Ask('nom', 'Nom de la variable', '');
+type  := Ask('type', 'Type', 'BOOL');
+ou    := AskChoice('ou', 'Portee', 'Globale,Dans une unite', 'Globale');
+AskNow();
+
+IF ou = 'Dans une unite' THEN
+    unite := Ask('unite', 'Quelle unite de programme ?', 'Logigrammes_A');
+    portee := 'Private';
+ELSE
+    unite := '';
+    portee := 'Global';
+END_IF;
+
+IF nom = '' THEN
+    Fail('aucun nom donne');
+ELSIF VariableExists(nom) THEN
+    Log(nom + ' existe deja');
+ELSE
+    AddVariable(nom, type, portee, unite);
+    Log(nom + ' : ' + type);
+END_IF;

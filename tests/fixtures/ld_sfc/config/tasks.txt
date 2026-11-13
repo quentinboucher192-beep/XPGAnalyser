@@ -1,0 +1,2 @@
+# name ; type ; watchdog (ms) ; period (ms, periodic only)
+MAST ; periodic ; 0 ; 20

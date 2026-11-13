@@ -321,16 +321,15 @@ protected:
         if (data_.action == "admin") {
             overline(r, x, y + 10.f, "Ce qui va se passer", c.textMuted);
             y += 34.f;
-            const char* steps[4] = {"Tu installes l'Admin (2 min). Tes Studios ne changent pas.", "Il cr\xC3\xA9" "e ta cl\xC3\xA9, sur ce PC. Elle n'en sort jamais.",
-                                    "", "Il accepte : tu es admin, l'Admin te le dit."};
-            const std::string third = (data_.from.empty() ? std::string("L'\xC3\xA9" "diteur") : data_.from) +
-                                      " t'appelle : vous lisez l'empreinte de ta cl\xC3\xA9 ensemble.";
+            // 1.51.0 : plus de demande d'admin, plus d'empreinte lue au telephone - le code d'invitation suffit.
+            const char* steps[4] = {"Tu installes XPG Admin (2 min). Tes Studios ne changent pas.", "Tu tapes ton code d'invitation (dans ce message).",
+                                    "XPG Admin cr\xC3\xA9" "e ta cl\xC3\xA9, sur ce PC. Elle n'en sort jamais.", "Le code accept\xC3\xA9 : tu es admin, XPG Admin te le dit."};
             for (int i = 0; i < 4; ++i) {
                 const float cx = x + static_cast<float>(i % 2) * (w / 2.f + 11.f), cy = y + static_cast<float>(i / 2) * 34.f;
                 r.fillRoundedRect({cx, cy, 22.f, 22.f}, tint(c.accent, dark ? 60 : 30), 7.f);
                 const std::string n = std::to_string(i + 1);
                 r.drawText({cx + (22.f - r.measure(n, kTiny).width) / 2.f, cy + (22.f - r.lineHeight(kTiny)) / 2.f}, n, kTiny, c.accent);
-                r.drawText({cx + 32.f, cy + 2.f}, fit(r, i == 2 ? third : std::string(steps[i]), kCap, w / 2.f - 44.f), kCap, c.text);
+                r.drawText({cx + 32.f, cy + 2.f}, fit(r, std::string(steps[i]), kCap, w / 2.f - 44.f), kCap, c.text);
             }
             y += 76.f;
         }

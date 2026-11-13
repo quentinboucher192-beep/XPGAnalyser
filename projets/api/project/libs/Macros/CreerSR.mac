@@ -1,0 +1,95 @@
+(* CreerSR
+
+   UNE SOUS-ROUTINE N'A PAS DE PARAMETRES. C'est la chose a savoir avant tout
+   le reste : on ne peut pas ecrire MaSR(a := 1, b => r). Les arguments et les
+   retours passent par des VARIABLES CONVENUES, que l'appelant remplit avant
+   l'appel et relit apres.
+
+   Cette macro cree donc trois choses d'un coup : la sous-routine, ses
+   variables d'entree, et ses variables de sortie - nommees de la meme maniere,
+   pour qu'on voie a leur nom a quoi elles servent.
+
+       MaSR_In_<nom>    ce que l'appelant remplit avant
+       MaSR_Out_<nom>   ce qu'il relit apres
+
+   La convention n'est pas jolie, elle est LISIBLE : six mois plus tard, un
+   Ctrl+F sur MaSR_ donne toute l'interface de la sous-routine. *)
+
+nom    := Ask('nom', 'Nom de la sous-routine', '');
+tache  := Ask('tache', 'Tache', 'MAST');
+AskNow();
+
+entrees := Ask('entrees', 'Variables d entree, separees par des virgules (nom:type)', '');
+sorties := Ask('sorties', 'Variables de sortie, meme forme', '');
+AskNow();
+
+IF nom = '' THEN
+    Fail('aucun nom donne');
+END_IF;
+
+IF SectionExists(nom) THEN
+    IF IsSubroutine(nom) THEN
+        Log('la sous-routine ' + nom + ' existe deja');
+    ELSE
+        Fail(nom + ' existe deja, mais c est une SECTION, pas une sous-routine. '
+             + 'Une section tourne a chaque cycle ; les remplacer l une par l autre '
+             + 'changerait le programme.');
+    END_IF;
+ELSE
+    AddSubroutine(nom, tache);
+    Log('sous-routine ' + nom + ' creee');
+END_IF;
+
+(* Les variables. Une liste 'niveau:REAL, marche:BOOL' se decoupe ici : le
+   langage n'a pas de tableau, donc on avance a la virgule. *)
+FOR sens := 0 TO 1 DO
+    IF sens = 0 THEN
+        liste := entrees;
+        prefixe := nom + '_In_';
+    ELSE
+        liste := sorties;
+        prefixe := nom + '_Out_';
+    END_IF;
+
+    depart := 0;
+    WHILE depart < LEN(liste) DO
+        virgule := FIND(liste, ',', depart);
+        IF virgule < 0 THEN
+            morceau := MID(liste, depart);
+            depart := LEN(liste);
+        ELSE
+            morceau := MID(liste, depart, virgule - depart);
+            depart := virgule + 1;
+        END_IF;
+
+        deuxPoints := FIND(morceau, ':', 0);
+        IF deuxPoints < 0 THEN
+            IF LEN(morceau) > 0 THEN
+                Warn('"' + morceau + '" : il manque le type, attendu nom:TYPE');
+            END_IF;
+        ELSE
+            champ := MID(morceau, 0, deuxPoints);
+            typeChamp := MID(morceau, deuxPoints + 1);
+            (* Les espaces autour se retirent a la main : le langage n'a pas de
+               TRIM, et ' niveau' n'est pas un nom de variable valide. *)
+            WHILE LEN(champ) > 0 AND MID(champ, 0, 1) = ' ' DO
+                champ := MID(champ, 1);
+            END_WHILE;
+            WHILE LEN(typeChamp) > 0 AND MID(typeChamp, 0, 1) = ' ' DO
+                typeChamp := MID(typeChamp, 1);
+            END_WHILE;
+
+            IF champ = '' OR typeChamp = '' THEN
+                Warn('"' + morceau + '" : nom ou type vide, ignore');
+            ELSE
+                complet := prefixe + champ;
+                IF VariableExists(complet) THEN
+                    Log(complet + ' existe deja');
+                ELSE
+                    AddVariable(complet, typeChamp, 'Global', '');
+                    Log(complet + ' : ' + typeChamp);
+                END_IF;
+            END_IF;
+        END_IF;
+    END_WHILE;
+END_FOR;

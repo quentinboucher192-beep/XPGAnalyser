@@ -1,0 +1,79 @@
+<LDSource nbColumns="11">
+			<networkLD>
+				<textBox width="11" height="1">Marche / arrêt du moteur d'essai (fictif), sa temporisation et ses défauts<objPosition posX="0" posY="0"></objPosition></textBox>
+				<typeLine>
+					<emptyLine nbRows="1"></emptyLine>
+				</typeLine>
+				<typeLine>
+					<shortCircuit>
+						<VLink></VLink>
+						<contact typeContact="openContact" contactVariableName="Bp_Marche"></contact>
+					</shortCircuit>
+					<contact typeContact="closedContact" contactVariableName="Bp_Arret"></contact>
+					<contact typeContact="closedContact" contactVariableName="Defaut_Therm"></contact>
+					<HLink nbCells="7"></HLink>
+					<coil typeCoil="coil" coilVariableName="Moteur"></coil>
+				</typeLine>
+				<typeLine>
+					<contact typeContact="openContact" contactVariableName="Moteur"></contact>
+					<emptyCell nbCells="10"></emptyCell>
+				</typeLine>
+				<typeLine>
+					<emptyLine nbRows="1"></emptyLine>
+				</typeLine>
+				<typeLine>
+					<emptyCell nbCells="2"></emptyCell>
+					<FFBBlock instanceName="Tempo_Demarrage" typeName="TON" additionnalPinNumber="0" enEnO="false" width="12" height="3">
+						<objPosition posX="2" posY="4"></objPosition>
+						<descriptionFFB execAfter="">
+							<inputVariable invertedPin="false" formalParameter="IN"></inputVariable>
+							<inputVariable invertedPin="false" formalParameter="PT" effectiveParameter="T#2s"></inputVariable>
+							<outputVariable invertedPin="false" formalParameter="Q"></outputVariable>
+							<outputVariable invertedPin="false" formalParameter="ET" effectiveParameter="Temps_Ecoule"></outputVariable>
+						</descriptionFFB>
+					</FFBBlock>
+					<emptyCell nbCells="7"></emptyCell>
+				</typeLine>
+				<typeLine>
+					<contact typeContact="openContact" contactVariableName="Moteur"></contact>
+					<HLink nbCells="1"></HLink>
+					<emptyCell nbCells="2"></emptyCell>
+					<HLink nbCells="6"></HLink>
+					<coil typeCoil="coil" coilVariableName="Moteur_Lance"></coil>
+				</typeLine>
+				<typeLine>
+					<emptyLine nbRows="2"></emptyLine>
+				</typeLine>
+				<typeLine>
+					<contact typeContact="PContact" contactVariableName="Moteur"></contact>
+					<HLink nbCells="7"></HLink>
+					<operateBlock width="3">
+						<statement>Nb_Demarrages := Nb_Demarrages + 1;</statement>
+					</operateBlock>
+				</typeLine>
+				<typeLine>
+					<emptyLine nbRows="1"></emptyLine>
+				</typeLine>
+				<typeLine>
+					<compareBlock width="2">
+						<expression>Vitesse &gt; 1500</expression>
+					</compareBlock>
+					<HLink nbCells="8"></HLink>
+					<coil typeCoil="coil" coilVariableName="Survitesse"></coil>
+				</typeLine>
+				<typeLine>
+					<emptyLine nbRows="1"></emptyLine>
+				</typeLine>
+				<typeLine>
+					<contact typeContact="openContact" contactVariableName="Defaut_Therm"></contact>
+					<HLink nbCells="9"></HLink>
+					<coil typeCoil="setCoil" coilVariableName="Voyant_Defaut"></coil>
+				</typeLine>
+				<typeLine>
+					<contact typeContact="openContact" contactVariableName="Acquit"></contact>
+					<contact typeContact="closedContact" contactVariableName="Defaut_Therm"></contact>
+					<HLink nbCells="8"></HLink>
+					<coil typeCoil="resetCoil" coilVariableName="Voyant_Defaut"></coil>
+				</typeLine>
+			</networkLD>
+		</LDSource>

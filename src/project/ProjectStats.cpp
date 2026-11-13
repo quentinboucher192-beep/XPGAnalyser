@@ -2,6 +2,7 @@
 //  project/ProjectStats.cpp - lot API 7 : les statistiques du projet ouvert
 // =============================================================================
 #include "ProjectStats.hpp"
+#include "Ladder.hpp"          // 1.51.0 : qui lit, qui ecrit dans un ladder
 
 #include "BlockLibrary.hpp"
 #include "MemberTree.hpp"
@@ -256,6 +257,10 @@ public:
     // Une condition d'activation : des lectures.
     void readsOnly(std::string_view s) {
         eachName(s, [](Use& u) { u.read = true; });
+    }
+    // 1.51.0 : la variable d'une bobine de ladder, une sortie de bloc : une ecriture.
+    void writesOnly(std::string_view s) {
+        eachName(s, [](Use& u) { u.written = true; });
     }
 
 private:
@@ -576,6 +581,15 @@ void variableStats(const Project& p, const std::map<std::string, ReadInfo>* hmiR
         const auto names = sec.owner < p.pous.size() ? own.find(sec.owner) : own.end();
         scan.setScope(names == own.end() ? nullptr : &names->second);
         if (sec.language == PouLanguage::ST) scan.statements(sec.body);
+        else if (sec.language == PouLanguage::LD && keepsSourceXml(sec)) {
+            // 1.51.0 : un ladder - les contacts lisent, les bobines ecrivent (project/Ladder)
+            if (auto d = ladder::parse(sec.body))
+                for (const auto& u : ladder::namesUsed(*d)) {
+                    if (u.write) scan.writesOnly(u.name);
+                    else scan.readsOnly(u.name);
+                }
+            else scan.anyDirection(sec.body);
+        }
         else scan.anyDirection(sec.body);
         scan.readsOnly(p.strings.text(sec.activationCondition));
         scan.readsOnly(p.strings.text(sec.logicCondition));

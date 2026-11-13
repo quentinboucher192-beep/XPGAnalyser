@@ -21,6 +21,7 @@
 #include "../src/project/LadderEdit.hpp"
 #include "../src/project/LadderSim.hpp"
 #include "../src/project/ProjectStore.hpp"
+#include "../src/project/RenameCommands.hpp"
 #include "../src/sim/Runtime.hpp"
 
 #include <cstdio>
@@ -74,8 +75,10 @@ const char* kLd =
     "\t\t\t\t</networkLD>\r\n"
     "\t\t\t</LDSource>";
 
-// Plus riche, en LF, VLink seule : comparaison, operation, saut, etiquette, RETURN,
-// commentaire, un element et un enfant inconnus, un commentaire XML, des entites.
+// Plus riche, en LF : auto-maintien par un shortCircuit (sa liaison au bord droit),
+// une sortie vers deux bobines (shortCircuit puis une case <VLink>), comparaison,
+// operation, etiquette seule sur sa rangee, saut, RETURN, commentaire, un element
+// et un enfant inconnus, un commentaire XML, des entites.
 const char* kRich =
     "<LDSource nbColumns=\"6\" extra=\"x&amp;y\">\n"
     "\t<networkLD>\n"
@@ -84,18 +87,29 @@ const char* kRich =
     "\t\t\t<emptyLine nbRows=\"1\"></emptyLine>\n"
     "\t\t</typeLine>\n"
     "\t\t<typeLine>\n"
-    "\t\t\t<contact typeContact=\"openContact\" contactVariableName=\"Marche\" vendor=\"keep\"></contact>\n"
-    "\t\t\t<VLink></VLink>\n"
+    "\t\t\t<shortCircuit>\n"
+    "\t\t\t\t<VLink></VLink>\n"
+    "\t\t\t\t<contact typeContact=\"openContact\" contactVariableName=\"Marche\" vendor=\"keep\"></contact>\n"
+    "\t\t\t</shortCircuit>\n"
     "\t\t\t<contact typeContact=\"closedContact\" contactVariableName=\"Arret\"></contact>\n"
     "\t\t\t<compareBlock width=\"2\">\n"
     "\t\t\t\t<expression>Niveau &lt; 80</expression>\n"
     "\t\t\t</compareBlock>\n"
-    "\t\t\t<HLink nbCells=\"1\"></HLink>\n"
+    "\t\t\t<shortCircuit>\n"
+    "\t\t\t\t<VLink></VLink>\n"
+    "\t\t\t\t<HLink nbCells=\"1\"></HLink>\n"
+    "\t\t\t</shortCircuit>\n"
     "\t\t\t<coil typeCoil=\"coil\" coilVariableName=\"Moteur\"></coil>\n"
     "\t\t</typeLine>\n"
     "\t\t<typeLine>\n"
     "\t\t\t<contact typeContact=\"openContact\" contactVariableName=\"Moteur\"></contact>\n"
+    "\t\t\t<emptyCell nbCells=\"3\"></emptyCell>\n"
+    "\t\t\t<VLink></VLink>\n"
+    "\t\t\t<emptyCell nbCells=\"1\"></emptyCell>\n"
+    "\t\t</typeLine>\n"
+    "\t\t<typeLine>\n"
     "\t\t\t<emptyCell nbCells=\"5\"></emptyCell>\n"
+    "\t\t\t<coil typeCoil=\"coil\" coilVariableName=\"Voyant\"></coil>\n"
     "\t\t</typeLine>\n"
     "\t\t<mysteryElement a=\"1\"></mysteryElement>\n"
     "\t</networkLD>\n"
@@ -103,25 +117,75 @@ const char* kRich =
     "\t<networkLD>\n"
     "\t\t<typeLine>\n"
     "\t\t\t<labelCell label=\"SUITE\"></labelCell>\n"
+    "\t\t\t<emptyCell nbCells=\"5\"></emptyCell>\n"
+    "\t\t</typeLine>\n"
+    "\t\t<typeLine>\n"
     "\t\t\t<contact typeContact=\"NContact\" contactVariableName=\"Capteur\"></contact>\n"
+    "\t\t\t<HLink nbCells=\"2\"></HLink>\n"
     "\t\t\t<operateBlock width=\"3\">\n"
     "\t\t\t\t<statement>Compteur := Compteur + 1;</statement>\n"
     "\t\t\t</operateBlock>\n"
-    "\t\t\t<strangeCell nbCells=\"1\"></strangeCell>\n"
+    "\t\t</typeLine>\n"
+    "\t\t<typeLine>\n"
+    "\t\t\t<emptyLine nbRows=\"1\"></emptyLine>\n"
     "\t\t</typeLine>\n"
     "\t\t<typeLine>\n"
     "\t\t\t<contact typeContact=\"openContact\" contactVariableName=\"Fin\"></contact>\n"
     "\t\t\t<HLink nbCells=\"4\"></HLink>\n"
-    "\t\t\t<control typeControl=\"jump\" label=\"SUITE\"></control>\n"
+    "\t\t\t<control typeControl=\"jumpCoil\" label=\"SUITE\"></control>\n"
     "\t\t</typeLine>\n"
     "\t\t<typeLine>\n"
     "\t\t\t<contact typeContact=\"openContact\" contactVariableName=\"Defaut\"></contact>\n"
     "\t\t\t<HLink nbCells=\"4\"></HLink>\n"
-    "\t\t\t<control typeControl=\"return\"></control>\n"
+    "\t\t\t<control typeControl=\"retCoil\"></control>\n"
+    "\t\t</typeLine>\n"
+    "\t\t<typeLine>\n"
+    "\t\t\t<strangeCell nbCells=\"1\"></strangeCell>\n"
+    "\t\t\t<emptyCell nbCells=\"5\"></emptyCell>\n"
     "\t\t</typeLine>\n"
     "\t</networkLD>\n"
     "\t<unknownChild/>\n"
     "</LDSource>";
+
+// Comme Control Expert l'exporte (noms fictifs) : un TON dans la suite de sa
+// rangee (deux colonnes), EN/ENO ecrits, broches a partir de posY + 1, cases
+// vides sous lui, des rangees vides en bas.
+const char* kReal =
+    "<LDSource nbColumns=\"11\">\r\n"
+    "\t\t\t<networkLD>\r\n"
+    "\t\t\t\t<typeLine>\r\n"
+    "\t\t\t\t\t<emptyLine nbRows=\"1\"></emptyLine>\r\n"
+    "\t\t\t\t</typeLine>\r\n"
+    "\t\t\t\t<typeLine>\r\n"
+    "\t\t\t\t\t<emptyCell nbCells=\"2\"></emptyCell>\r\n"
+    "\t\t\t\t\t<FFBBlock instanceName=\"Tempo_A\" typeName=\"TON\" additionnalPinNumber=\"0\" enEnO=\"true\" width=\"12\" height=\"4\">\r\n"
+    "\t\t\t\t\t\t<objPosition posX=\"2\" posY=\"1\"></objPosition>\r\n"
+    "\t\t\t\t\t\t<descriptionFFB execAfter=\"\">\r\n"
+    "\t\t\t\t\t\t\t<inputVariable invertedPin=\"false\" formalParameter=\"EN\"></inputVariable>\r\n"
+    "\t\t\t\t\t\t\t<inputVariable invertedPin=\"false\" formalParameter=\"IN\"></inputVariable>\r\n"
+    "\t\t\t\t\t\t\t<inputVariable invertedPin=\"false\" formalParameter=\"PT\" effectiveParameter=\"T#1s\"></inputVariable>\r\n"
+    "\t\t\t\t\t\t\t<outputVariable invertedPin=\"false\" formalParameter=\"ENO\"></outputVariable>\r\n"
+    "\t\t\t\t\t\t\t<outputVariable invertedPin=\"false\" formalParameter=\"Q\"></outputVariable>\r\n"
+    "\t\t\t\t\t\t\t<outputVariable invertedPin=\"false\" formalParameter=\"ET\"></outputVariable>\r\n"
+    "\t\t\t\t\t\t</descriptionFFB>\r\n"
+    "\t\t\t\t\t</FFBBlock>\r\n"
+    "\t\t\t\t\t<emptyCell nbCells=\"7\"></emptyCell>\r\n"
+    "\t\t\t\t</typeLine>\r\n"
+    "\t\t\t\t<typeLine>\r\n"
+    "\t\t\t\t\t<emptyLine nbRows=\"1\"></emptyLine>\r\n"
+    "\t\t\t\t</typeLine>\r\n"
+    "\t\t\t\t<typeLine>\r\n"
+    "\t\t\t\t\t<contact typeContact=\"openContact\" contactVariableName=\"Demande\"></contact>\r\n"
+    "\t\t\t\t\t<HLink nbCells=\"1\"></HLink>\r\n"
+    "\t\t\t\t\t<emptyCell nbCells=\"2\"></emptyCell>\r\n"
+    "\t\t\t\t\t<HLink nbCells=\"6\"></HLink>\r\n"
+    "\t\t\t\t\t<coil typeCoil=\"coil\" coilVariableName=\"Fin_tempo\"></coil>\r\n"
+    "\t\t\t\t</typeLine>\r\n"
+    "\t\t\t\t<typeLine>\r\n"
+    "\t\t\t\t\t<emptyLine nbRows=\"3\"></emptyLine>\r\n"
+    "\t\t\t\t</typeLine>\r\n"
+    "\t\t\t</networkLD>\r\n"
+    "\t\t</LDSource>";
 
 const Cell& cell(const Diagram& d, int n, int r, int c) {
     return d.networks[static_cast<std::size_t>(n)].cells[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)];
@@ -229,7 +293,7 @@ void testFormat() {
         check(cell(d, 0, 0, 0).kind == Kind::Contact && cell(d, 0, 0, 0).contact == ContactType::Closed
                   && cell(d, 0, 0, 0).name == "E64A[6]", "kLd : contact ferme E64A[6] en (0,0)");
         check(cell(d, 0, 0, 1).contact == ContactType::Open && cell(d, 0, 0, 1).name == "X1.X", "kLd : contact ouvert X1.X");
-        check(cell(d, 0, 0, 2).kind == Kind::Wire && n.link(0, 2), "kLd : le shortCircuit = un fil, et la liaison a sa gauche");
+        check(cell(d, 0, 0, 2).kind == Kind::Wire && n.link(0, 3) && !n.link(0, 2), "kLd : le shortCircuit = un fil, et la liaison a son bord droit");
         check(cell(d, 0, 0, 9).kind == Kind::Wire && cell(d, 0, 0, 10).kind == Kind::Coil
                   && cell(d, 0, 0, 10).coil == CoilType::Set && cell(d, 0, 0, 10).name == "MT_PROD", "kLd : (S MT_PROD) en colonne 10");
         check(cell(d, 0, 1, 0).contact == ContactType::Rising && cell(d, 0, 1, 1).kind == Kind::Wire
@@ -244,22 +308,41 @@ void testFormat() {
 
     auto r = mustParse(kRich);
     check(write(r) == kRich, "kRich : rendu octet pour octet (LF, commentaire XML, enfant inconnu, entites)");
-    check(r.columns == 6 && r.networks.size() == 2 && r.newline == "\n" && r.bareVLink, "kRich : 6 colonnes, LF, VLink seule");
+    check(r.columns == 6 && r.networks.size() == 2 && r.newline == "\n", "kRich : 6 colonnes, LF");
     if (r.networks.size() == 2) {
         const auto& n0 = r.networks[0];
         check(n0.comments.size() == 1 && n0.comments[0].text == "Marche moteur & voyant", "kRich : le commentaire, decode");
         check(cell(r, 0, 1, 0).name == "Marche" && n0.link(1, 1) && cell(r, 0, 1, 1).contact == ContactType::Closed,
-              "kRich : VLink seule = liaison a la frontiere courante");
+              "kRich : shortCircuit(VLink, contact) : la liaison au bord droit du contact");
         check(cell(r, 0, 1, 2).kind == Kind::Compare && cell(r, 0, 1, 2).text == "Niveau < 80" && cell(r, 0, 1, 2).width == 2
                   && cell(r, 0, 1, 3).kind == Kind::Covered, "kRich : [Niveau < 80] sur deux colonnes");
-        check(cell(r, 0, 1, 5).kind == Kind::Coil && cell(r, 0, 1, 5).name == "Moteur", "kRich : (Moteur)");
+        check(cell(r, 0, 1, 4).kind == Kind::Wire && n0.link(1, 5) && cell(r, 0, 1, 5).name == "Moteur", "kRich : la sortie vers deux bobines");
+        check(cell(r, 0, 2, 4).kind == Kind::Empty && n0.link(2, 5) && cell(r, 0, 3, 5).name == "Voyant",
+              "kRich : une case <VLink> prolonge la liaison d'une rangee");
         check(n0.extras.size() == 1, "kRich : l'element inconnu du reseau est garde");
-        check(cell(r, 1, 0, 0).kind == Kind::Label && cell(r, 1, 0, 0).name == "SUITE", "kRich : l'etiquette SUITE");
-        check(cell(r, 1, 0, 1).contact == ContactType::Falling, "kRich : [N Capteur]");
-        check(cell(r, 1, 0, 2).kind == Kind::Operate && cell(r, 1, 0, 2).text == "Compteur := Compteur + 1;", "kRich : l'operation");
-        check(cell(r, 1, 0, 5).kind == Kind::Raw, "kRich : une case inconnue (Raw)");
-        check(cell(r, 1, 1, 5).kind == Kind::Jump && cell(r, 1, 1, 5).name == "SUITE", "kRich : le saut ->> SUITE");
-        check(cell(r, 1, 2, 5).kind == Kind::Return, "kRich : RETURN");
+        check(cell(r, 1, 0, 0).kind == Kind::Label && cell(r, 1, 0, 0).name == "SUITE", "kRich : l'etiquette SUITE, seule");
+        check(cell(r, 1, 1, 0).contact == ContactType::Falling, "kRich : [N Capteur]");
+        check(cell(r, 1, 1, 3).kind == Kind::Operate && cell(r, 1, 1, 3).text == "Compteur := Compteur + 1;", "kRich : l'operation");
+        check(cell(r, 1, 5, 0).kind == Kind::Raw, "kRich : une case inconnue (Raw)");
+        check(cell(r, 1, 3, 5).kind == Kind::Jump && cell(r, 1, 3, 5).name == "SUITE", "kRich : le saut ->> SUITE (jumpCoil)");
+        check(cell(r, 1, 4, 5).kind == Kind::Return, "kRich : RETURN (retCoil)");
+    }
+
+    auto real = mustParse(kReal);
+    check(write(real) == kReal, "kReal : rendu octet pour octet");
+    if (real.networks.size() == 1 && real.networks[0].blocks.size() == 1) {
+        const auto& b = real.networks[0].blocks[0];
+        check(b.x == 2 && b.y == 1 && b.cols == 2 && b.width == 12 && b.height == 4 && b.pins.size() == 6,
+              "kReal : le TON dans la suite de sa rangee : deux colonnes (11 - 2 - 7)");
+        check(b.pinRow(0) == 2 && b.pinRow(1) == 3 && b.pinRow(2) == 4 && b.pinRow(3) == 2 && b.pinRow(4) == 3,
+              "kReal : EN, IN, PT en rangees 2, 3, 4 ; ENO, Q en 2, 3");
+        check(cell(real, 0, 3, 0).name == "Demande" && cell(real, 0, 3, 1).kind == Kind::Wire
+                  && cell(real, 0, 3, 4).kind == Kind::Wire && cell(real, 0, 3, 10).name == "Fin_tempo",
+              "kReal : Demande -> IN ; Q -> Fin_tempo");
+        check(real.networks[0].rows() == 7 && real.networks[0].fileRows == 7, "kReal : les rangees vides du bas comptent");
+        auto all = real;
+        all.networks[0].modified = true;
+        check(write(all) == kReal, "kReal : reecrit en entier, il redonne le texte de Control Expert");
     }
 
     // ---- modifier un reseau : lui seul est reecrit, aux conventions du fichier
@@ -275,19 +358,20 @@ void testFormat() {
         check(out.find("<strangeCell nbCells=\"1\"></strangeCell>") != std::string::npos, "la case inconnue est reecrite telle quelle");
         auto again = mustParse(out);
         std::string why;
-        check(sameModel(m, again, &why), ("relu : le meme schema " + why).c_str());
+        { const bool same = sameModel(m, again, &why); check(same, ("relu : le meme schema " + why).c_str()); }
         check(write(again) == out, "relu puis rendu : identique");
     }
     // ---- tout reecrire (chaque reseau modifie) : relu, le meme schema
-    for (const char* src : { kLd, kRich }) {
+    for (const char* src : { kLd, kRich, kReal }) {
         auto m = mustParse(src);
         for (auto& n : m.networks) n.modified = true;
         const auto out = write(m);
         auto again = mustParse(out);
         std::string why;
-        check(sameModel(m, again, &why), ("tout reecrit puis relu : le meme schema " + why).c_str());
-        check(out.find("vendor=\"keep\"") != std::string::npos || src == kLd, "un attribut inconnu d'un contact est garde");
-        check(out.find("extra=\"x&amp;y\"") != std::string::npos || src == kLd, "l'en-tete garde ses attributs encodes");
+        { const bool same = sameModel(m, again, &why); check(same, ("tout reecrit puis relu : le meme schema " + why).c_str()); }
+        check(out.find("vendor=\"keep\"") != std::string::npos || src != kRich, "un attribut inconnu d'un contact est garde");
+        check(out.find("extra=\"x&amp;y\"") != std::string::npos || src != kRich, "l'en-tete garde ses attributs encodes");
+        if (src == kRich) check(out == kRich, "kRich reecrit en entier : le meme texte (shortCircuit, VLink, controles)");
         if (src == kLd) {
             check(out.find("<shortCircuit>\r\n\t\t\t\t\t\t\t<VLink></VLink>\r\n\t\t\t\t\t\t\t<HLink nbCells=\"1\"></HLink>\r\n\t\t\t\t\t\t</shortCircuit>")
                       != std::string::npos, "kLd reecrit : le shortCircuit comme Control Expert, en CRLF et tabulations");
@@ -324,8 +408,8 @@ void testEditor() {
     check(placeContact(d, Pos{ 1, 0, 0 }, ContactType::Open, "A"), "placeContact A en (0,0)");
     check(setName(d, Pos{ 1, 0, 10 }, "B"), "setName : la bobine s'appelle B");
     const auto branch = addParallel(d, Pos{ 1, 0, 0 });
-    check(branch.row == 1 && branch.col == 0 && cell(d, 1, 1, 0).kind == Kind::Contact && d.networks[1].link(0, 0)
-              && d.networks[1].link(0, 1), "addParallel : un contact sous A, les deux liaisons");
+    check(branch.row == 1 && branch.col == 0 && cell(d, 1, 1, 0).kind == Kind::Contact && !d.networks[1].link(0, 0)
+              && d.networks[1].link(0, 1), "addParallel : un contact sous A, la liaison a sa droite (a gauche : le rail)");
     check(setName(d, branch, "C"), "la branche s'appelle C");
     check(placeContact(d, Pos{ 1, 0, 1 }, ContactType::Closed, "D"), "placeContact /D en (0,1)");
     check(invert(d, Pos{ 1, 0, 1 }) && cell(d, 1, 0, 1).contact == ContactType::Open, "invert : ferme -> ouvert");
@@ -334,9 +418,9 @@ void testEditor() {
     check(placeCompare(d, Pos{ 1, 0, 2 }, "X > 5") && cell(d, 1, 0, 3).kind == Kind::Covered, "placeCompare sur deux colonnes");
     check(moveElement(d, Pos{ 1, 0, 2 }, Pos{ 1, 0, 5 }) && cell(d, 1, 0, 5).kind == Kind::Compare && cell(d, 1, 0, 2).kind == Kind::Wire,
           "moveElement : la comparaison deplacee, un fil a sa place");
-    check(insertRow(d, 1, 1) && d.networks[1].rows() == 3 && cell(d, 1, 2, 0).name == "C" && d.networks[1].link(1, 0),
+    check(insertRow(d, 1, 1) && d.networks[1].rows() == 3 && cell(d, 1, 2, 0).name == "C" && d.networks[1].link(1, 1),
           "insertRow : la branche descend, la liaison traverse");
-    check(deleteRow(d, 1, 1) && d.networks[1].rows() == 2 && cell(d, 1, 1, 0).name == "C" && d.networks[1].link(0, 0),
+    check(deleteRow(d, 1, 1) && d.networks[1].rows() == 2 && cell(d, 1, 1, 0).name == "C" && d.networks[1].link(0, 1),
           "deleteRow : elle remonte, la liaison reste");
     check(moveNetwork(d, 1, 0) && cell(d, 0, 0, 0).name == "A", "moveNetwork : le reseau monte");
     check(setNetworkComment(d, 0, "Essai") && networkComment(d, 0) == "Essai" && cell(d, 0, 1, 0).name == "A",
@@ -353,9 +437,15 @@ void testEditor() {
     for (int c = 0; c < 11; ++c) erase(d, Pos{ nb, 0, c });
     placeContact(d, Pos{ nb, 0, 0 }, ContactType::Open, "A");
     check(placeBlock(d, Pos{ nb, 0, 3 }, ton) == 0, "placeBlock TON en colonne 3");
-    check(placeCoil(d, Pos{ nb, 0, 10 }, CoilType::Normal, "TQ") && cell(d, nb, 0, 1).kind == Kind::Wire
-              && cell(d, nb, 0, 6).kind == Kind::Wire, "les fils jusqu'au bloc et du bloc a la bobine");
-    check(placeBlock(d, Pos{ nb, 0, 4 }, ton) < 0, "un bloc sur un autre : refuse");
+    {
+        const auto& b = d.networks[static_cast<std::size_t>(nb)].blocks[0];
+        check(b.y == 0 && b.x == 3 && b.cols == 2 && b.height == 3 && b.pinRow(0) == 1 && cell(d, nb, 1, 0).name == "A",
+              "placeBlock : un en-tete au-dessus, IN sur la ligne du contact A (descendue d'une rangee)");
+    }
+    check(placeCoil(d, Pos{ nb, 1, 10 }, CoilType::Normal, "TQ") && cell(d, nb, 1, 1).kind == Kind::Wire
+              && cell(d, nb, 1, 6).kind == Kind::Wire, "les fils jusqu'au bloc et du bloc a la bobine");
+    check(placeBlock(d, Pos{ nb, 1, 4 }, ton) < 0, "un bloc sur un autre : refuse");
+    check(!insertRow(d, nb, 1), "insertRow au milieu d'un bloc : refuse");
     check(setPin(d, nb, 0, 1, "t#200ms") && d.networks[static_cast<std::size_t>(nb)].blocks[0].pins[1].effective == "t#200ms",
           "setPin : PT := t#200ms");
 
@@ -363,8 +453,39 @@ void testEditor() {
     const auto out = write(d);
     auto again = mustParse(out);
     std::string why;
-    check(sameModel(d, again, &why), ("apres les gestes : ecrit puis relu, le meme schema " + why).c_str());
+    { const bool same = sameModel(d, again, &why); check(same, ("apres les gestes : ecrit puis relu, le meme schema " + why).c_str()); }
     check(deleteNetwork(d, 0) && d.networks.size() == 2, "deleteNetwork");
+
+    // ---- les lignes, les blocs d'apres la bibliotheque
+    {
+        auto r = mustParse(emptySourceXml(11, 2));
+        check(insertRung(r, 0, 0) == 0 && cell(r, 0, 0, 0).kind == Kind::Wire && cell(r, 0, 0, 10).kind == Kind::Coil,
+              "insertRung dans un reseau vide : sa premiere rangee");
+        setName(r, Pos{ 0, 0, 10 }, "Q1");
+        check(insertRung(r, 0, 0) == 2 && cell(r, 0, 2, 10).kind == Kind::Coil && cell(r, 0, 1, 0).kind == Kind::Empty,
+              "insertRung : une rangee vide, puis la ligne neuve");
+        { const auto br = addParallel(r, Pos{ 0, 2, 0 }); setName(r, br, "B2"); }
+        int r0 = 0, r1 = 0;
+        rungRows(r, 0, 3, r0, r1);
+        check(r0 == 2 && r1 == 3, "rungRows : la ligne et sa branche");
+        check(deleteRung(r, 0, 3) && r.networks[0].rows() == 1 && cell(r, 0, 0, 10).name == "Q1",
+              "deleteRung : la ligne, sa branche et la rangee vide qui la separait");
+        Block b;
+        check(makeBlock(nullptr, "TON", "T9", false, b) && b.pins.size() == 4 && b.pins[1].formal == "PT" && b.height == 3
+                  && b.cols == 2 && !b.isFunction(), "makeBlock TON : IN, PT, Q, ET");
+        check(makeBlock(nullptr, "ADD_INT", "x", false, b) && b.isFunction() && b.pins.size() == 3 && b.pins[2].formal == "OUT",
+              "makeBlock ADD_INT : une fonction, IN1, IN2, OUT");
+        check(makeBlock(nullptr, "TON", "T9", true, b) && b.pins.front().formal == "EN" && b.height == 4,
+              "makeBlock avec EN/ENO : EN la premiere broche");
+        check(!makeBlock(nullptr, "INCONNU_XYZ", "", false, b), "makeBlock : un type inconnu est refuse");
+        check(freeInstanceName(nullptr, d, "TON") == "TON_1", "freeInstanceName : TON_1");
+        auto f = mustParse(emptySourceXml(11, 2));
+        makeBlock(nullptr, "ADD", "", false, b);
+        const int k = placeBlock(f, Pos{ 0, 0, 2 }, b);
+        check(k == 0 && f.networks[0].blocks[0].instance == ".1", "une fonction posee : son instance .1");
+        makeBlock(nullptr, "GT", "", false, b);
+        check(placeBlock(f, Pos{ 0, 1, 6 }, b) == 1 && f.networks[0].blocks[1].instance == ".2", "la suivante : .2");
+    }
 
     // ---- l'annulation : un geste, un pas
     auto proj = project::ProjectStore::createEmpty("Essai_LD", "BMXP342020");
@@ -440,8 +561,8 @@ std::string ladderBody() {
     ton.pins = { Pin{ "IN", "", false, PinDir::In, {}, {} }, Pin{ "PT", "t#100ms", false, PinDir::In, {}, {} },
                  Pin{ "Q", "", false, PinDir::Out, {}, {} }, Pin{ "ET", "TE", false, PinDir::Out, {}, {} } };
     fitBlock(ton);
-    placeBlock(d, Pos{ n, 0, 2 }, ton);
-    placeCoil(d, Pos{ n, 0, 10 }, CoilType::Normal, "TQ");
+    placeBlock(d, Pos{ n, 0, 2 }, ton);      // une rangee d'en-tete s'insere : la ligne passe en rangee 1
+    placeCoil(d, Pos{ n, 1, 10 }, CoilType::Normal, "TQ");
     // 6 : [X > 5] -> GT5 ; A -> [CNT := CNT + 1]
     n = insertNetwork(d, 7);
     placeCompare(d, Pos{ n, 0, 0 }, "X > 5");
@@ -610,9 +731,27 @@ void testSimulation() {
             auto bad = run(**prog, env, st);
             check(!bad.ok && !env.reports.empty(), "une variable inconnue : une erreur dite");
         }
+        // une bobine a indice calcule : TAB[I] (l'interpreteur ST l'ecrit)
+        {
+            MapEnv e3;
+            e3.vars["A"] = sim::Value::boolean(true);
+            e3.vars["I"] = sim::Value::integer(sim::Type::Int, 1);
+            e3.vars["TAB[0]"] = sim::Value::boolean(false);
+            e3.vars["TAB[1]"] = sim::Value::boolean(false);
+            auto di = mustParse(emptySourceXml(11, 2));
+            deleteNetwork(di, 0);
+            const int k = insertNetwork(di, 0);
+            placeContact(di, Pos{ k, 0, 0 }, ContactType::Open, "A");
+            setName(di, Pos{ k, 0, 10 }, "TAB[I]");
+            auto pi = compile(di, "Indice");
+            State st;
+            const auto r = pi ? run(**pi, e3, st) : RunResult{};
+            for (const auto& dg : e3.reports) std::printf("    (indice) %s\n", dg.message.c_str());
+            check(pi.has_value() && r.ok && e3.b("TAB[1]") && !e3.b("TAB[0]"), "bobine TAB[I] : la case I est ecrite");
+        }
         // le ladder riche : saut et RETURN
         MapEnv e2;
-        for (const char* v : { "Marche", "Arret", "Moteur", "Capteur", "Fin", "Defaut" }) e2.vars[v] = sim::Value::boolean(false);
+        for (const char* v : { "Marche", "Arret", "Moteur", "Voyant", "Capteur", "Fin", "Defaut" }) e2.vars[v] = sim::Value::boolean(false);
         e2.vars["Niveau"] = sim::Value::integer(sim::Type::Int, 50);
         e2.vars["Compteur"] = sim::Value::integer(sim::Type::Int, 0);
         auto rich = compileXml(kRich, "Riche");
@@ -621,7 +760,7 @@ void testSimulation() {
             State st;
             e2.vars["Marche"] = sim::Value::boolean(true);
             auto r = run(**rich, e2, st);
-            check(r.ok && e2.b("Moteur"), "kRich : Marche, /Arret, [Niveau < 80] -> Moteur");
+            check(r.ok && e2.b("Moteur") && e2.b("Voyant"), "kRich : Marche, /Arret, [Niveau < 80] -> Moteur et Voyant");
             e2.vars["Marche"] = sim::Value::boolean(false);
             r = run(**rich, e2, st);
             check(e2.b("Moteur"), "kRich : l'auto-maintien (Moteur en parallele de Marche)");
@@ -639,7 +778,9 @@ void testSimulation() {
             e2.vars["Defaut"] = sim::Value::boolean(false);
             e2.vars["Fin"] = sim::Value::boolean(true);
             r = run(**rich, e2, st, RunOptions{});
-            check(r.ok && r.networksRun > 2, "kRich : ->> SUITE (un saut en arriere, borne)");
+            bool loop = false;
+            for (const auto& dg : r.diagnostics) loop = loop || dg.message.find("too many jumps") != std::string::npos;
+            check(!r.ok && loop && r.networksRun > 2, "kRich : ->> SUITE sur lui-meme : une boucle, bornee et dite");
         }
     }
 }
@@ -662,6 +803,16 @@ void testNames() {
           "renameInText : sans la casse, mots entiers, pas un membre");
     const auto out = write(r);
     check(out.find("ENTREES[6]") != std::string::npos && out.find("E64A") == std::string::npos, "renomme : ecrit");
+    {
+        // le renommage du projet (RenamePlan, RenameCommand) passe par renameInCode
+        std::string body = kLd;
+        const auto n = project::renameInCode(body, "MT_PROD", "MT_PRODUCTION", false);
+        check(n == 1 && body.find("coilVariableName=\"MT_PRODUCTION\"") != std::string::npos,
+              "renameInCode sur un ladder : l'attribut de la bobine est renomme");
+        check(project::renameInCode(body, "MT_PRODUCTION", "MT_PRODUCTION", false) == 1, "renameInCode : le compte (pouCites)");
+        std::string st = "MT_PROD := TRUE;";
+        check(project::renameInCode(st, "MT_PROD", "X", false) == 1 && st == "X := TRUE;", "renameInCode sur du ST : inchange");
+    }
 
     // references croisees et renommage par le projet
     auto proj = project::ProjectStore::createEmpty("Essai_LD_REF", "BMXP342020");
@@ -675,14 +826,84 @@ void testNames() {
     check(e.reads.size() == 2, "references : E64A lu deux fois");
 }
 
+// ------------------------------------------------------------------ 5. le projet fictif
+// tests/fixtures/ld_sfc (Essai_LD_SFC) : son ladder Ladder_Moteur se lit, se rend a
+// l'identique, et tourne avec le reste du programme (ST, GRAFCET).
+void testFixture(const std::string& folder) {
+    std::printf("5. le projet fictif %s\n", folder.c_str());
+    auto opened = project::ProjectStore::open(folder);
+    check(opened && opened->project, "le dossier du projet s'ouvre");
+    if (!opened || !opened->project) return;
+    auto proj = opened->project;
+    domain::Index si = domain::kNoIndex;
+    for (domain::Index i = 0; i < proj->sections.size(); ++i)
+        if (proj->strings.text(proj->sections[i].name) == "Ladder_Moteur") si = i;
+    check(si != domain::kNoIndex && proj->sections[si].language == domain::PouLanguage::LD, "Ladder_Moteur : une section LD");
+    if (si == domain::kNoIndex) return;
+    const auto body = proj->sections[si].body;
+    auto d = mustParse(body);
+    check(write(d) == body, "Ladder_Moteur : rendu octet pour octet");
+    check(d.networks.size() == 1 && d.networks[0].blocks.size() == 1 && d.networks[0].blocks[0].cols == 2
+              && d.networks[0].comments.size() == 1, "Ladder_Moteur : un reseau, un TON (deux colonnes), un commentaire");
+    {
+        auto all = d;
+        all.networks[0].modified = true;
+        check(write(all) == body, "Ladder_Moteur : reecrit en entier, le meme texte (les conventions de Control Expert)");
+    }
+    const auto listing = project::graphListingText(proj->sections[si]);
+    check(listing.find("Bp_Marche") != std::string::npos && listing.find("{Tempo_Demarrage}") != std::string::npos,
+          "la lecture en texte du ladder");
+    const auto x = project::crossReference(*proj, "Moteur");
+    check(x.writes.size() == 1 && x.reads.size() >= 3, "references : Moteur ecrit par sa bobine, lu par ses contacts");
+
+    // l'export XPG et sa relecture
+    exporter::XpgWriteOptions wo;
+    const auto xpg = exporter::writeXpg(*proj, wo);
+    check(xpg && xpg->find(body.substr(0, 200)) != std::string::npos, "l'export XPG garde le ladder");
+
+    sim::Runtime rt(proj);
+    const auto ok = rt.prepare();
+    check(ok.has_value(), "le projet fictif se simule");
+    for (const auto& dgn : rt.preparationDiagnostics())
+        if (dgn.section.find("Ladder") != std::string::npos) std::printf("    (preparation) %s : %s\n", dgn.section.c_str(), dgn.message.c_str());
+    auto get = [&](const char* n) { sim::Value v; (void)rt.get(n, v); return v; };
+    auto set = [&](const char* n, bool b) { (void)rt.set(n, sim::Value::boolean(b)); };
+    (void)rt.step(20);
+    check(!get("Moteur").isTruthy(), "au repos : le moteur est arrete");
+    set("Bp_Marche", true);
+    (void)rt.step(20);
+    set("Bp_Marche", false);
+    (void)rt.step(20);
+    check(get("Moteur").isTruthy(), "Bp_Marche puis relache : le moteur reste en marche (auto-maintien)");
+    check(get("Nb_Demarrages").asInteger() == 1, "front montant de Moteur : Nb_Demarrages = 1");
+    for (int i = 0; i < 110; ++i) (void)rt.step(20);
+    check(get("Moteur_Lance").isTruthy() && get("Temps_Ecoule").asInteger() == 2000, "apres 2 s : Moteur_Lance, Temps_Ecoule = 2 s");
+    check(get("Nb_Demarrages").asInteger() == 1, "un seul front : Nb_Demarrages reste a 1");
+    (void)rt.set("Vitesse", sim::Value::integer(sim::Type::Int, 1600));
+    (void)rt.step(20);
+    check(get("Survitesse").isTruthy(), "[Vitesse > 1500] : Survitesse");
+    set("Defaut_Therm", true);
+    (void)rt.step(20);
+    check(!get("Moteur").isTruthy() && get("Voyant_Defaut").isTruthy(), "defaut thermique : le moteur s'arrete, le voyant (S) s'allume");
+    set("Defaut_Therm", false);
+    (void)rt.step(20);
+    check(get("Voyant_Defaut").isTruthy(), "le defaut parti : le voyant reste (memorise)");
+    set("Acquit", true);
+    (void)rt.step(20);
+    check(!get("Voyant_Defaut").isTruthy(), "acquittement : le voyant (R) s'eteint");
+    const auto* live = rt.ladderLive("Ladder_Moteur");
+    check(live && live->networks.size() == 1 && live->networks[0].ran, "l'etat en direct de Ladder_Moteur");
+}
+
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
     std::printf("1.51.0 : le ladder dans API Studio.\n");
     testFormat();
     testEditor();
     testSimulation();
     testNames();
+    if (argc > 1) testFixture(argv[1]);
     std::printf(failures ? "\n%d echec(s) sur %d\n" : "\ntout est bon (%d verifications)\n", failures ? failures : checks, checks);
     return failures ? 1 : 0;
 }

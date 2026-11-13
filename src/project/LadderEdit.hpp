@@ -70,6 +70,23 @@ namespace project::ladder {
     // deux liaisons verticales. Rend la case du nouveau contact.
     [[nodiscard]] Pos addParallel(Diagram& d, Pos p, int width = 1);
 
+    // ---- les lignes (un « reseau » de Control Expert : des rangees reliees) ----
+    // Les rangees [r0, r1] de la ligne qui contient `row` (reliees par des
+    // liaisons verticales ou un bloc sur plusieurs rangees).
+    void rungRows(const Diagram& d, int network, int row, int& r0, int& r1);
+    // Une ligne neuve apres celle de `row` (une rangee vide pour les separer, puis
+    // un fil du rail a une bobine sans variable) ; dans un reseau vide : sa
+    // premiere rangee. Rend la rangee de la ligne neuve, -1 : impossible.
+    int insertRung(Diagram& d, int network, int row);
+    // Retire la ligne de `row` (ses rangees, ses blocs) et une rangee vide qui la separait.
+    bool deleteRung(Diagram& d, int network, int row);
+
+    // Un bloc d'un type : ses broches d'apres la bibliotheque (TON, ADD...) ou le
+    // DFB du projet ; `instance` vide pour une fonction. Faux : type inconnu.
+    bool makeBlock(const domain::Project* project, std::string_view type, std::string instance, bool enEno, Block& out);
+    // Un nom d'instance libre : TON_1, TON_2... (variables du projet et blocs du schema).
+    [[nodiscard]] std::string freeInstanceName(const domain::Project* project, const Diagram& d, std::string_view type);
+
     // ---- rangees et reseaux ----
     bool insertRow(Diagram& d, int network, int row);
     bool deleteRow(Diagram& d, int network, int row);

@@ -1222,7 +1222,7 @@ OpResult fromResult(const online::Result& x) {
 
 OpResult Workspace::serviceConfigure(const std::string& url) {
     // 1.47.0 : changer l'adresse, c'est gerer le service (l'admin+, ou une derogation) ; un poste sans role ou en attente
-    // la tape encore s'il n'a recu aucune connexion signee (sa demande d'admin en a besoin).
+    // la tape encore s'il n'a recu aucune connexion signee (son code d'invitation en a besoin).
     if ((role_ == Role::Admin || role_ == Role::Retired) && !mayManageService()) return OpResult::fail(whyNotService());
     online::Config c;
     c.url = url;

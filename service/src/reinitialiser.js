@@ -18,7 +18,7 @@
 //  les licences, les activations, les liberations, les jetons flottants, les PC
 //  en Decouverte, les demandes et leurs scelles, les etats de poste, l'archive en
 //  ligne (chiffree : elle repart du poste de l'admin+), les admins, leurs
-//  demandes, le trousseau, le journal (puis UNE ligne << reinitialisation >>,
+//  inscriptions (1.51.0), le trousseau, le journal (puis UNE ligne << reinitialisation >>,
 //  numero 1, precedent "" : la chaine repart proprement), les messages aux PC,
 //  les jetons des fichiers, les fichiers joints (sorte << autre >>, hors versions),
 //  les logiciels vus, les commandes, leurs lignes, leurs scelles, les evenements

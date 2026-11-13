@@ -1031,8 +1031,15 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
         const View* owner = view != kNoId ? p.view(view) : nullptr;
         const std::string code = sc.lang != ScriptLang::ST ? translatedCode : decl::codeOf(sc);   // 1.11.18 (lot 3) : ses declarations du modele
         const auto dialect = scriptcheck::dialectDeclared(code);      // 1.10 : le dialecte IHM (S1) n'est pas inexistant
+        // 1.51.0 : un objet de la vue du script par son nom court (ObjPtr := Carte_1 ; Carte_1.Get() ; Hide(Carte_1)) - le
+        // moteur le cherche dans sa vue (1.27.0) ; un objet de son modele aussi. Le controle des scripts dit s'il est a sa place.
+        std::optional<View> ownerComposed;
+        if (owner && inherits(p, *owner)) ownerComposed = compose(p, *owner);
+        const auto ownObject = [&](const std::string& n) {
+            return owner && (owner->objectByName(n) || (ownerComposed && ownerComposed->objectByName(n)));
+        };
         for (const auto& u : scriptNames(code))
-            if (!known(p, plc, u.name, owner) && !dialect.count(upperText(u.name)))
+            if (!known(p, plc, u.name, owner) && !dialect.count(upperText(u.name)) && !ownObject(u.name))
                 add(out, S::Error, "Script", view, kNoId, sc.name, "variable inexistante : " + u.name, sc.id, u.line);
         // Lot 16 : les structures et tableaux IHM - membres, indices constants, proprietes.
         for (const auto& pp : types::pathProblems(p, code))
@@ -2848,6 +2855,11 @@ void checkPublicVars(const Project& p, std::vector<Issue>& out) {
     const auto check = [&](const std::string& path, bool write, const std::function<void(std::string)>& report, bool script = false) {
         const auto dot = path.find('.');
         if (dot == std::string::npos) return;
+        // 1.51.0 : S_Pompe.T_Mode#Marche, S_Pompe.T_Etat - un type d'un symbole (ou d'un espace) par son nom complet, pas
+        // Vue.Objet.Propriete (le symbole S_Pompe est aussi une vue).
+        if (const std::string head = path.substr(0, path.find_first_of("#[(", dot)); p.isNamespace(path.substr(0, dot))
+            && (path.find('#') != std::string::npos || p.hmiTypeByName(head.substr(0, head.find('.', dot + 1)))))
+            return;
         const View* pv = pub::viewNamed(p, std::string_view(path).substr(0, dot));
         const auto r = pub::resolve(p, path, pv ? borrowed(*pv) : nullptr);
         using W = pub::Resolved::What;

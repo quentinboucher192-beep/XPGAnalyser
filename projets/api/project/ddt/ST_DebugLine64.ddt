@@ -1,0 +1,8 @@
+# Derived data type.
+name = ST_DebugLine64
+version = 0.02
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Line ; string[64] ;  ; Member ;  ;  ;  ; 
+NtpcNow ; Display_NTPC ;  ; Member ;  ;  ;  ; 

@@ -338,10 +338,15 @@ void enumChecks(std::string_view code, Analysis& out, const std::function<std::s
         return values(type).empty() ? std::string{} : type;
     };
     // (1) un litteral inconnu : veux-tu dire ... ?
-    for (const auto& t : toks) {
+    for (std::size_t k = 0; k < toks.size(); ++k) {
+        const auto& t = toks[k];
         if (t.kind != Tok::Kind::Typed) continue;
         const auto hash = t.text.find('#');
-        const std::string type = t.text.substr(0, hash), name = t.text.substr(hash + 1);
+        std::string type = t.text.substr(0, hash);
+        const std::string name = t.text.substr(hash + 1);
+        // 1.51.0 : S_Pompe.T_Mode#Marche (Gaz.T_Mode#Auto) - le litteral d'une enumeration d'un symbole ou d'un espace.
+        for (std::size_t j = k; j >= 2 && toks[j - 1].text == "." && toks[j - 2].kind == Tok::Kind::Ident; j -= 2)
+            type = toks[j - 2].text + "." + type;
         const auto vals = values(type);
         if (vals.empty()) continue;
         bool found = false;
@@ -469,7 +474,17 @@ void enumChecks(std::string_view code, Analysis& out, const std::function<std::s
         if (toks[k].kind != Tok::Kind::Punct || (op != "=" && op != "<>" && op != "<" && op != ">" && op != "<=" && op != ">="))
             continue;
         const std::string a = enumOf(k - 1), b = enumOf(k + 1);
-        if (!a.empty() && !b.empty() && upper(a) != upper(b))
+        // 1.51.0 : S_Pompe.T_Mode et T_Mode ecrit dans le symbole S_Pompe (la portee la plus proche) : la meme enumeration -
+        // le nom court et le nom complet donnent les memes valeurs (enumValues lit d'abord celles du symbole).
+        const auto sameEnum = [&](const std::string& x, const std::string& y) {
+            if (upper(x) == upper(y)) return true;
+            const bool xq = x.find('.') != std::string::npos, yq = y.find('.') != std::string::npos;
+            if (xq == yq) return false;
+            const std::string& q = xq ? x : y;
+            const std::string& sh = xq ? y : x;
+            return upper(q.substr(q.rfind('.') + 1)) == upper(sh) && values(q) == values(sh);
+        };
+        if (!a.empty() && !b.empty() && !sameEnum(a, b))
             out.findings.push_back({toks[k].line, toks[k].column, static_cast<int>(op.size()),
                                     "comparaison de deux \xC3\xA9" "num\xC3\xA9" "rations diff\xC3\xA9rentes : " + a + " et " + b, true});
     }

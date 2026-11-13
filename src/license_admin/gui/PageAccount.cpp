@@ -5,7 +5,7 @@
 //  mene) : pour chaque role - l'admin+, un admin, un admin retire, en attente
 //  d'acceptation, pas encore de cle - ce que ce poste sait de lui, sans reseau
 //  (Workspace::account) :
-//    - QUI : le nom, le courriel (sa demande d'admin), le role, ce PC ;
+//    - QUI : le nom, le courriel (son invitation), le role, ce PC ;
 //    - L'IDENTIFIANT : l'identifiant de la cle (xpg-...), l'empreinte en 6
 //      groupes (celle qui se lit au telephone), << Copier >> l'un et l'autre ;
 //    - L'ETAT DU COMPTE : actif depuis, ajoute par l'admin+ dans la liste
@@ -152,12 +152,12 @@ public:
         copyFp_->setTooltip("Les 6 groupes de ton empreinte au presse-papiers (celle que l'admin+ lit au t\xC3\xA9l\xC3\xA9phone).");
         backup_ = &kit::button(*this, "Sauvegarder ma cl\xC3\xA9\xE2\x80\xA6", "compte.sauvegarder", ui::Button::Style::Default, ui::Icon::Save);
         backup_->setTooltip("Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 : la sauvegarde chiffr\xC3\xA9" "e de la cl\xC3\xA9 de l'\xC3\xA9" "diteur (une phrase).");
-        ask_ = &kit::button(*this, "Demander \xC3\xA0 devenir admin\xE2\x80\xA6", "compte.devenir-admin", ui::Button::Style::Primary, ui::Icon::User);
-        ask_->setTooltip("Administrateurs : ton nom, ton courriel ; ta cl\xC3\xA9 est cr\xC3\xA9" "\xC3\xA9" "e sur ce PC et l'admin+ re\xC3\xA7oit ta demande.");
+        ask_ = &kit::button(*this, "Mon code d'invitation\xE2\x80\xA6", "compte.devenir-admin", ui::Button::Style::Primary, ui::Icon::User);
+        ask_->setTooltip("Administrateurs : ton code d'invitation (celui du message de l'admin+) ; ta cl\xC3\xA9 na\xC3\xAEt sur ce PC et tu es admin.");
         createKey_ = &kit::button(*this, "Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur\xE2\x80\xA6", "compte.creer-cle", ui::Button::Style::Default, ui::Icon::Lock);
         createKey_->setTooltip("Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 : la cl\xC3\xA9 qui signe les licences (l'admin+, une seule fois).");
-        waiting_ = &kit::button(*this, "Voir ma demande", "compte.attente", ui::Button::Style::Default, ui::Icon::History);
-        waiting_->setTooltip("L'\xC3\xA9" "cran d'attente : ton empreinte en grand, \xC3\xA0 lire \xC3\xA0 l'admin+ au t\xC3\xA9l\xC3\xA9phone.");
+        waiting_ = &kit::button(*this, "O\xC3\xB9 en est mon ajout", "compte.attente", ui::Button::Style::Default, ui::Icon::History);
+        waiting_->setTooltip("Administrateurs : ton code est accept\xC3\xA9, l'Admin+ signe ta cl\xC3\xA9 d'office (rien \xC3\xA0 faire).");
         links_ += copyId_->clicked->connect([this] { copy("Identifiant copi\xC3\xA9 : ", info_.keyId); });
         links_ += copyFp_->clicked->connect([this] { copy("Empreinte copi\xC3\xA9" "e : ", info_.fingerprint); });
         links_ += backup_->clicked->connect([this] { go("securite"); });
@@ -287,10 +287,10 @@ private:
             case Role::Plus: return "Toi, l'admin+ : la cl\xC3\xA9 de l'\xC3\xA9" "diteur, qui signe tout - les licences, la liste des admins. Tout se lit ici, sans r\xC3\xA9seau.";
             case Role::Admin: return "Ce que ce poste sait de toi : ta cl\xC3\xA9 d'admin, ton compte dans la liste sign\xC3\xA9" "e par l'admin+, tes pouvoirs.";
             case Role::Retired: return "Ta cl\xC3\xA9 a \xC3\xA9t\xC3\xA9 retir\xC3\xA9" "e de la liste des admins : elle ne signe plus rien. Ce qu'elle a sign\xC3\xA9 avant reste valable.";
-            case Role::Pending: return "Ta demande pour devenir admin attend l'admin+ : il lit ton empreinte au t\xC3\xA9l\xC3\xA9phone, puis l'accepte.";
+            case Role::Pending: return "Ton code d'invitation est accept\xC3\xA9 : l'Admin+ ajoute ta cl\xC3\xA9 \xC3\xA0 la liste sign\xC3\xA9" "e des admins d'office, d\xC3\xA8s qu'il est en ligne.";
             case Role::None: break;
         }
-        if (license_admin::classique()) return "Pas encore de cl\xC3\xA9 d'admin sur ce poste : ta demande part avec ton code d'invitation, l'admin+ l'accepte.";
+        if (license_admin::classique()) return "Pas encore de cl\xC3\xA9 d'admin sur ce poste : ton code d'invitation fait de toi un admin (Administrateurs).";
         return "Ce programme est celui de l'admin+. Un admin installe XPG Admin, re\xC3\xA7u avec son invitation. Pas encore de cl\xC3\xA9 de l'\xC3\xA9" "diteur sur ce poste.";
     }
 
@@ -374,10 +374,12 @@ private:
                 state_.push_back({"Retir\xC3\xA9 le", (a.retired ? dateTimeFr(a.retired) : std::string("\xE2\x80\x94")) + ", par l'admin+" +
                                                           (listN.empty() ? std::string() : " (liste " + listN + ")"), ui::Tone::Error});
                 break;
-            case Role::Pending:
-                state_.push_back({"\xC3\x89tat", "en attente d'acceptation par l'admin+", ui::Tone::Warning});
-                if (a.requestSent) state_.push_back({"Demande envoy\xC3\xA9" "e le", dateTimeFr(a.requestSent) + " (" + kit::agoFr(now, a.requestSent) + ")"});
-                state_.push_back({"Ce qu'il reste \xC3\xA0 faire", "lis ton empreinte \xC3\xA0 l'admin+ au t\xC3\xA9l\xC3\xA9phone : il l'accepte, ce poste le voit tout seul"});
+            case Role::Pending:   // 1.51.0 : inscrit par son code d'invitation, l'Admin+ le signe d'office
+                state_.push_back({"\xC3\x89tat", "admin, ajout en cours : l'Admin+ signe ta cl\xC3\xA9 d'office", ui::Tone::Warning});
+                if (a.joinedAt)
+                    state_.push_back({"Code d'invitation accept\xC3\xA9 le", dateTimeFr(a.joinedAt) + " (" + kit::agoFr(now, a.joinedAt) + ")" +
+                                                                         (a.invitationId.empty() ? std::string() : ", invitation " + a.invitationId)});
+                state_.push_back({"Ce qu'il reste \xC3\xA0 faire", "rien : d\xC3\xA8s que l'Admin+ est en ligne, ce poste le voit tout seul"});
                 break;
             case Role::None:
                 state_.push_back({"\xC3\x89tat", a.keyHex.empty() ? std::string("pas de cl\xC3\xA9 sur ce poste") : std::string("une cl\xC3\xA9 d'admin, pas dans la liste ni en attente"),
@@ -442,7 +444,7 @@ private:
                 else inProfile = std::set<std::string>(it->rights.begin(), it->rights.end());
             }
         } else {
-            profileLine_ = a.role == Role::Pending ? "Aucun pouvoir tant que l'admin+ n'a pas accept\xC3\xA9 ta demande (il choisit ton profil)."
+            profileLine_ = a.role == Role::Pending ? "Tes pouvoirs s'ouvrent d\xC3\xA8s que l'Admin+ a sign\xC3\xA9 ta cl\xC3\xA9" + (a.profile.empty() ? std::string(".") : " (profil \xC2\xAB " + a.profile + " \xC2\xBB, choisi \xC3\xA0 l'invitation).")
                                                    : "Aucun pouvoir : pas de cl\xC3\xA9 sur ce poste.";
         }
         // la derniere fois (le journal des admins de ce poste)
@@ -622,7 +624,7 @@ private:
         if (info_.keyHex.empty()) {
             kit::drawWrapped(r, id_.x + 20.f, id_.y + 48.f, id_.w - 40.f,
                              license_admin::classique()   // 1.49.0
-                                 ? "Pas encore de cl\xC3\xA9 sur ce poste. Demander \xC3\xA0 devenir admin la cr\xC3\xA9" "e (elle ne quitte jamais ce PC)."
+                                 ? "Pas encore de cl\xC3\xA9 sur ce poste. Ton code d'invitation la cr\xC3\xA9" "e (elle ne quitte jamais ce PC)."
                                  : "Pas encore de cl\xC3\xA9 sur ce poste. L'admin+ cr\xC3\xA9" "e la cl\xC3\xA9 de l'\xC3\xA9" "diteur dans Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 "
                                    "(ou la restaure).",
                              FontId{14}, c.textMuted, 20.f, 4);

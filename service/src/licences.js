@@ -15,7 +15,7 @@
 //  cle de l'editeur (<< admin+ >>) ou la cle d'un admin de la liste signee par
 //  l'editeur, non retire (<< admin >>, avec ses droits) ; un document depose par
 //  un admin est signe par SA cle, et il faut le droit de ce qu'il change. La
-//  liste, les demandes d'admin, le trousseau, le journal : admins.js ; les
+//  liste, l'inscription par code d'invitation (1.51.0), le trousseau, le journal : admins.js ; les
 //  fichiers, les messages a un PC, les versions : fichiers.js ; la sauvegarde
 //  et la restauration du service entier : sauvegarde.js. Le logiciel de chaque
 //  cle (X-XPG-Logiciel de ses appels signes) est garde (logiciels).
@@ -213,6 +213,10 @@ const ROUTES = {
     "POST /v1/demandes/annuler": { f: "annulerDemande", signe: "pc" },
     "GET /v1/poste": { f: "lirePoste", signe: "pc" },
     "GET /v1/messages": { f: "lireMessages", signe: "pc" },
+    // 1.51.0 : l'inscription par code d'invitation (admins.js) - plus de demande d'admin ; /v1/admins/demande reste pour
+    // un XPG Admin 1.49 ou 1.50 (avec un code : la meme inscription ; sans : 410). Les memes limites (les memes compteurs).
+    "POST /v1/admins/inscription": { f: "deposerInscription", signe: "pc", ip: PAR_IP.admins, pc: PAR_PC.admins },
+    "GET /v1/admins/inscription": { f: "etatInscription", signe: "pc" },
     "POST /v1/admins/demande": { f: "deposerDemandeAdmin", signe: "pc", ip: PAR_IP.admins, pc: PAR_PC.admins },
     "GET /v1/admins/demande": { f: "etatDemandeAdmin", signe: "pc" },
     "GET /admin/cle-service": { f: "cleService", signe: "admin" },
@@ -235,8 +239,9 @@ const ROUTES = {
     // 1.44.0 (docs/ADMINS.md, § 6)
     "PUT /admin/admins": { f: "deposerAdmins", signe: "plus" },
     "GET /admin/admins": { f: "listerAdmins", signe: "admin" },
-    "GET /admin/admins/demandes": { f: "listerDemandesAdmins", signe: "plus" },
-    "POST /admin/admins/demande/refuser": { f: "refuserDemandeAdmin", signe: "plus" },
+    "GET /admin/admins/inscrits": { f: "listerInscrits", signe: "plus" }, // 1.51.0 : signes d'office par l'Admin+
+    "GET /admin/admins/demandes": { f: "demandesAdminsRetirees", signe: "plus" }, // 1.51.0 : 410 (plus de demande d'admin)
+    "POST /admin/admins/demande/refuser": { f: "demandesAdminsRetirees", signe: "plus" }, // 1.51.0 : 410
     "POST /admin/admins/invitation": { f: "creerInvitationAdmin", signe: "plus" }, // 1.49.0 : l'invitation par codes (admins.js)
     "PUT /admin/trousseau": { f: "deposerTrousseau", signe: "plus" },
     "GET /admin/trousseau": { f: "lireTrousseau", signe: "admin" },
@@ -782,8 +787,10 @@ export class Licences extends DurableObject {
             this.x("DELETE FROM demandes WHERE etat != 'attente' AND maj < ?", now - GARDE_DEMANDES);
             this.ajouter("octets_demandes", -Number(d.o));
         }
-        // 1.44.0 : les demandes d'admin closes (7 jours), les messages (30 jours), les fichiers qu'aucune des 3
+        // 1.44.0 : les inscriptions closes (7 jours), les messages (30 jours), les fichiers qu'aucune des 3
         // dernieres versions ne porte (30 jours), les liens finis, les logiciels des cles qui n'appellent plus (un an).
+        // 1.51.0 : une demande d'admin d'avant, sans code d'invitation, est d'abord close (admins.js).
+        this.cloreDemandesSansCode(now);
         this.x("DELETE FROM admins_demandes WHERE etat != 'attente' AND maj < ?", now - GARDE_DEMANDES_ADMINS);
         this.x("DELETE FROM messages WHERE recu < ?", now - GARDE_MESSAGE);
         this.purgerFichiers(now);
@@ -1878,11 +1885,12 @@ export class Licences extends DurableObject {
             attente: this.compte("n_attente"),
             changements: this.compte("changements"),
             registre: Number(this.config("registre_numero") || "0"),
-            // 1.44.0 : la liste des admins (son numero), le journal (son dernier numero), les demandes d'admin en
-            // attente, et qui appelle : son role (<< admin+ >>, << admin >>) et ses droits.
+            // 1.44.0 : la liste des admins (son numero), le journal (son dernier numero), et qui appelle : son role
+            // (<< admin+ >>, << admin >>) et ses droits. 1.51.0 : les admins inscrits par un code d'invitation, que
+            // l'Admin+ signe d'office (<< admins_demandes >> n'est plus rendu : plus de demande d'admin).
             admins: Number(this.config("admins_numero") || "0"),
             journal: this.dernierNumeroJournal(),
-            admins_demandes: this.nombre("SELECT COUNT(*) AS n FROM admins_demandes WHERE etat = 'attente'"),
+            admins_inscrits: ctx.appelant.role === "admin+" ? this.nombreInscrits(ctx.now) : 0,
             version_publiee: this.config("version_derniere") || "",
             role: ctx.appelant.role,
             droits: ctx.appelant.droits,

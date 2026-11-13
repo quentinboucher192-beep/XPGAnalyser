@@ -7,27 +7,29 @@
 //  son clic droit et sa ligne depliee, les alertes et leur geste : PageAdminsOverview.cpp) et QUI FAIT QUOI
 //  (PageAdminsWho.cpp) ; Droits et Journal des admins y menent. Une ligne : << Ouvrir sa fiche >> (double-clic,
 //  Entree) - LA FICHE D'UN ADMIN (PageAdminCard.cpp) sous son en-tete (ses ancres, la periode). Un admin : la liste en
-//  lecture seule et << Ma fiche >> (la sienne seulement). Ce qui suit (1.44.0) reste : ajouter, retirer, les
-//  demandes recues, les droits.
+//  lecture seule et << Ma fiche >> (la sienne seulement). Ce qui suit (1.44.0) reste : ajouter, retirer, les droits.
+//  1.51.0 : PLUS DE DEMANDE D'ADMIN - << Ajouter un admin... >> est une seule etape (son nom, son profil, le PC de son
+//  Studio trouve par une recherche, ou un lien) : son code d'invitation fait de lui un admin des l'installation de XPG
+//  Admin (l'Admin+ signe sa cle d'office, Workspace::admitInvitedAdmins).
 //  Une page, quatre visages selon le role du poste (Workspace::role) :
 //    - l'ADMIN+ (la cle de l'editeur) : le tableau des admins (lui d'abord, puis
-//      chaque admin de la liste signee, puis les demandes recues << En attente
-//      d'acceptation >>), la fiche de celui choisi (ses chiffres au journal, sa
-//      cle en 6 groupes, son certificat, ses droits, << Voir son journal >>,
-//      << Ses droits... >>, << Retirer cet admin... >> et sa confirmation qui
-//      propose << Revoquer aussi ses licences >>), et << Ajouter un admin... >> :
-//      le dialogue en 3 etapes (son nom ; il installe l'Admin, sa demande arrive ;
-//      l'empreinte lue au telephone, cochee, puis accepter avec un profil) ;
+//      chaque admin de la liste signee), la fiche de celui choisi (ses chiffres
+//      au journal, sa cle en 6 groupes, son certificat, ses droits, << Voir son
+//      journal >>, << Ses droits... >>, << Retirer cet admin... >> et sa
+//      confirmation qui propose << Revoquer aussi ses licences >>), et << Ajouter
+//      un admin... >> : une etape (1.51.0) - l'invitation part, son code fait de
+//      lui un admin des l'installation ;
 //    - un ADMIN (ou un admin retire) : la meme liste en LECTURE SEULE (qui est
 //      admin, sur quel PC, son etat), et ses droits a lui ;
-//    - PAS ENCORE ADMIN (aucune cle) : les deux chemins - << Creer la cle de
-//      l'editeur >> (le premier PC, Parametres de securite) ou << Demander a
-//      devenir admin >> (son nom, son courriel : Workspace::requestAdmin) ;
-//    - EN ATTENTE : << L'admin+ doit accepter ta cle >>, l'empreinte en 6 grands
-//      groupes a lui lire au telephone ; la coquille regarde la demande toutes
-//      les 15 s et passe le poste admin des qu'elle est acceptee.
-//  Ce qui parle au service (la liste et ce qu'il en sait, les demandes d'admin,
-//  accepter, refuser, retirer) passe par runSlow (ou runQuiet : le releve
+//    - PAS ENCORE ADMIN (aucune cle) : l'Admin+, << Creer la cle de l'editeur >>
+//      (le premier PC, Parametres de securite) ; XPG Admin (1.51.0), << Ton code
+//      d'invitation >> (celui de l'installateur, sinon a taper :
+//      Workspace::joinWithInvitation) - accepte, il est admin ;
+//    - AJOUT EN COURS (1.51.0) : son code est accepte, l'Admin+ signe sa cle
+//      d'office des qu'il est en ligne ; la coquille regarde toutes les 15 s et
+//      passe le poste admin des que c'est fait. Rien a lire, rien a dire.
+//  Ce qui parle au service (la liste et ce qu'il en sait, inviter, retirer, les
+//  inscrits signes d'office) passe par runSlow (ou runQuiet : le releve
 //  automatique), jamais sur le fil de l'interface. Les tableaux sont dessines ;
 //  un tableau cache (<< admins.table >>) porte la meme liste pour les scripts
 //  (--choisir admins.table=N) et les essais.
@@ -36,6 +38,7 @@
 #include "AdminsKit.hpp"
 #include "ListKit.hpp"
 #include "Page.hpp"
+#include "PcPicker.hpp"   // 1.51.0 : chercher le PC d'un futur admin
 
 #include "../../deploy/DevKey.hpp"
 #include "../../ui/widgets/DataViews.hpp"
@@ -85,10 +88,6 @@ std::string trimmed(std::string s) {
     while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) ++i;
     return s.substr(i);
 }
-std::string lower(std::string s) {
-    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return s;
-}
 std::string count(std::size_t n, const char* one, const char* many) { return std::to_string(n) + " " + (n > 1 ? many : one); }
 
 // Un tableau de textes (le tableau cache des scripts).
@@ -126,26 +125,25 @@ std::string shortRight(const std::string& id) {
     return adm::rightLabel(id);
 }
 
-// Une ligne du tableau : l'admin+, un admin de la liste (actif ou retire), une demande recue.
+// Une ligne du tableau : l'admin+, un admin de la liste (actif ou retire). 1.51.0 : plus de demande recue.
 struct AdminRow {
-    enum class Kind { Plus, Admin, Pending } kind{Kind::Admin};
+    enum class Kind { Plus, Admin } kind{Kind::Admin};
     std::string              key, id, name, pc, machine, fingerprint, profile, email, software, version;
-    Seconds                  since{0}, retired{0}, lastAction{0}, seen{0}, received{0};
+    Seconds                  since{0}, retired{0}, lastAction{0}, seen{0};
     std::vector<std::string> rights;
     std::string              lastSummary;
     int                      actions30{0}, licences{0};
     bool                     me{false}, mismatch{false};
     int                      color{0};
     int                      order{0};   // 1.47.0 : son rang dans la liste (retires compris) : sa couleur dans les pages des admins
-    [[nodiscard]] bool active() const { return kind != Kind::Pending && retired == 0; }
+    [[nodiscard]] bool active() const { return retired == 0; }
 };
 
-// Ce que le service a dit (GET /admin/admins, et les demandes d'admin pour l'admin+).
+// Ce que le service a dit (GET /admin/admins ; 1.51.0, l'admin+ : les inscrits signes d'office juste avant).
 struct Fetched {
-    bool                      haveView{false}, haveRequests{false};
-    AdminsView                view;
-    std::vector<AdminRequest> requests;
-    std::string               problem;
+    bool        haveView{false};
+    AdminsView  view;
+    std::string problem;
 };
 
 // 1.47.0 : le nom de l'admin+ sans la marque d'une cle d'essai (<< CLE D'ESSAI ... (Camille Essai) >> -> << Camille Essai >>).
@@ -213,23 +211,6 @@ float paintRights(gfx::IRenderer& r, const ui::Theme& th, float x, float y, floa
         h += lh;
     }
     return h;
-}
-
-// Les 6 groupes de l'empreinte, en cases (la grande : 2 x 3 ; la petite : une ligne).
-void paintFingerprint(gfx::IRenderer& r, const ui::Theme& th, const Rect& box, const std::string& fingerprint, int perRow, float cellH, FontId f, bool dim = false) {
-    const auto& c = th.color;
-    const auto g = groups(fingerprint);
-    if (g.empty()) return;
-    const float gap = 8.f;
-    const int rows = (static_cast<int>(g.size()) + perRow - 1) / perRow;
-    const float cw = (box.w - gap * static_cast<float>(perRow - 1)) / static_cast<float>(perRow);
-    for (std::size_t i = 0; i < g.size(); ++i) {
-        const int row = static_cast<int>(i) / perRow, col = static_cast<int>(i) % perRow;
-        const Rect cell{box.x + static_cast<float>(col) * (cw + gap), box.y + static_cast<float>(row) * (cellH + gap), cw, cellH};
-        ui::shapes::fillFramedRect(r, cell, c.panelBg, c.borderStrong, 8.f);
-        r.drawText({cell.x + (cell.w - r.measure(g[i], f).width) * 0.5f, cell.y + (cell.h - r.lineHeight(f)) * 0.5f}, g[i], f, dim ? c.textMuted : c.text);
-    }
-    (void)rows;
 }
 
 // =================================================================== retirer ====
@@ -334,21 +315,21 @@ private:
 };
 
 // =========================================================== ajouter un admin ====
-// Le dialogue de la planche 02 : trois colonnes, toujours visibles (on voit ou l'on en est). Les demandes d'admin sont
-// relevees toutes les 10 s tant qu'il est ouvert et qu'aucune ne correspond (runQuiet : sans bruit), ou sur
-// << Relever maintenant >>.
+// 1.51.0 : UNE SEULE ETAPE (la demande : << supprimer les parties 2 et 3 >>). Plus de demande d'admin a attendre, ni
+// d'empreinte a lire, ni de 6 chiffres : l'admin+ dit qui (son nom, son courriel), avec quels droits (son profil) et ou
+// envoyer XPG Admin (le PC de son Studio, trouve par une recherche - PcPicker ; ou un lien de 48 h). L'envoi cree le code
+// d'invitation (48 h, une seule fois) et le met dans le message ; le futur admin le tape dans l'installateur : il est
+// admin des que son code est accepte (l'Admin+ signe sa cle d'office). Le dialogue dit alors << Invitation envoyee >>,
+// montre le code une fois (Copier) et se ferme sur << Fermer >>.
 class AddAdminBody final : public ui::Widget {
 public:
-    static constexpr double kPollEvery = 10.0;
-
-    AddAdminBody(Dialog& owner, ShellHost host, std::string requestKey, std::function<void()> done)
-        : ui::Widget("dialog.ajouter-admin.corps"), owner_(owner), host_(std::move(host)), wanted_(std::move(requestKey)), done_(std::move(done)) {
-        opened_ = host_.workspace().now();
+    AddAdminBody(Dialog& owner, ShellHost host, std::function<void()> done)
+        : ui::Widget("dialog.ajouter-admin.corps"), owner_(owner), host_(std::move(host)), done_(std::move(done)) {
         name_ = &adopt(*this, std::make_unique<ui::InputText>("admins.ajouter.nom"));
         name_->setPlaceholder("Nina Perret");
         name_->setMaxLength(60);
         email_ = &adopt(*this, std::make_unique<ui::InputText>("admins.ajouter.courriel"));
-        email_->setPlaceholder("nina@exemple.fr");
+        email_->setPlaceholder("nina@exemple.fr (facultatif)");
         email_->setMaxLength(120);
         group_ = std::make_shared<ui::RadioGroup>();
         studio_ = &adopt(*this, std::make_unique<ui::RadioButton>("Dans les notifications de son Studio", group_, 0, "admins.ajouter.envoi.studio"));
@@ -368,133 +349,88 @@ public:
         }
         profile_->setItems(std::move(items));
         profile_->setSelectedIndex(pick);
-        // L'envoi de l'Admin (planche 02) : un PC parmi ceux que connait ce poste, ou un lien (48 h, une seule fois).
-        pc_ = &adopt(*this, std::make_unique<ui::DropDown>("admins.ajouter.pc"));
-        pcs_ = host_.workspace().pcsForMessages();
-        {
-            std::vector<ui::DropDown::Item> pcItems;
-            for (const auto& m : pcs_) {
-                ui::DropDown::Item it;
-                it.label = m.name.empty() ? m.deviceId.substr(0, 12) : m.name;
-                it.value = m.deviceId.empty() ? m.deviceKey : m.deviceId;
-                it.note = m.customer + (m.studio.empty() ? std::string() : " \xC2\xB7 " + m.studio);
-                it.keywords = m.customer + " " + m.licenseId;
-                pcItems.push_back(std::move(it));
-            }
-            pc_->setItems(std::move(pcItems));
-            if (!pcs_.empty()) pc_->setSelectedIndex(0);
-        }
-        send_ = &button(*this, "Envoyer l'Admin", "admins.ajouter.envoyer", ui::Button::Style::Default, ui::Icon::Mail);
-        makeLink_ = &button(*this, "Cr\xC3\xA9" "er le lien", "admins.ajouter.lien.creer", ui::Button::Style::Default, ui::Icon::Link);
-        copyLink_ = &button(*this, "Copier le lien", "admins.ajouter.lien.copier", ui::Button::Style::Default, ui::Icon::Copy);
+        // Le PC de son Studio : une recherche (les PC que connait ce poste, les plus recemment actifs d'abord).
+        pc_ = &adopt(*this, std::make_unique<PcPicker>("admins.ajouter.pc"));
+        pc_->setPcs(host_.workspace().pcsForMessages(), host_.workspace().now());
+        links_ += pc_->selectionChanged->connect([this] { update(); });
+        links_ += pc_->picked->connect([this] {
+            if (const MessagePc* p = pc_->selected())
+                host_.flash("PC choisi : " + PcPicker::labelOf(*p) + (p->customer.empty() ? std::string() : " (" + p->customer + ")") +
+                                " \xE2\x80\x94 Envoyer l'invitation.",
+                            Tone::Info);
+        });
+        send_ = &button(*this, "Envoyer l'invitation", "admins.ajouter.envoyer", ui::Button::Style::Primary, ui::Icon::Mail);
+        makeLink_ = &button(*this, "Cr\xC3\xA9" "er le lien", "admins.ajouter.lien.creer", ui::Button::Style::Primary, ui::Icon::Link);
+        copyLink_ = &button(*this, "Copier le lien et le code", "admins.ajouter.lien.copier", ui::Button::Style::Default, ui::Icon::Copy);
         chooseFile_ = &button(*this, "Choisir l'installateur\xE2\x80\xA6", "admins.ajouter.fichier", ui::Button::Style::Default, ui::Icon::Open);
-        chooseFile_->setTooltip("Aucune version publi\xC3\xA9" "e n'a l'installateur de l'Admin : choisis le fichier (XPG-Admin-Setup-....exe), il est d\xC3\xA9pos\xC3\xA9 pour l'occasion.");
+        chooseFile_->setTooltip("Aucune version publi\xC3\xA9" "e n'a l'installateur de XPG Admin : choisis le fichier (XPG-Admin-Setup-....exe), il est d\xC3\xA9pos\xC3\xA9 pour l'occasion.");
+        copyCode_ = &button(*this, "Copier", "admins.ajouter.code.copier", ui::Button::Style::Default, ui::Icon::Copy);
+        cancel_ = &button(*this, "Annuler", "admins.ajouter.annuler");
+        close_ = &button(*this, "Fermer", "admins.ajouter.fermer", ui::Button::Style::Primary);
         links_ += send_->clicked->connect([this] { sendInstaller(false); });
         links_ += makeLink_->clicked->connect([this] { sendInstaller(true); });
         links_ += copyLink_->clicked->connect([this] {
             if (url_.empty()) return;
-            // 1.49.0 : le lien et le code d'invitation, a coller ensemble dans le courriel
             ui::setClipboardText(code_.empty() ? url_ : url_ + "\n" + codeSentence());
-            host_.flash(code_.empty() ? std::string("Lien copi\xC3\xA9 : colle-le dans ton courriel au futur admin (valable 48 h, une seule fois).")
-                                      : std::string("Lien et code d'invitation copi\xC3\xA9s : colle-les dans ton courriel au futur admin (48 h, une seule fois)."),
-                        Tone::Info);
+            host_.flash("Lien et code d'invitation copi\xC3\xA9s : colle-les dans ton courriel au futur admin (48 h, une seule fois).", Tone::Info);
         });
-        links_ += chooseFile_->clicked->connect([this] { chooseInstaller(lastWasLink_); });
-        links_ += group_->valueChanged->connect([this](int) { update(); });
-        refreshNow_ = &button(*this, "Relever maintenant", "admins.ajouter.relever", ui::Button::Style::Default, ui::Icon::Refresh);
-        checked_ = &adopt(*this, std::make_unique<ui::Checkbox>("J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte", "admins.empreinte.verifiee"));
-        // 1.49.0 (docs/ADMINS.md, par. 12) : le code d'invitation (montre une fois, Copier) ; les 6 chiffres a taper
-        copyCode_ = &button(*this, "Copier", "admins.ajouter.code.copier", ui::Button::Style::Default, ui::Icon::Copy);
-        confirm_ = &adopt(*this, std::make_unique<ui::InputText>("admins.confirmation"));
-        confirm_->setPlaceholder("123 456");
-        confirm_->setMaxLength(9);
         links_ += copyCode_->clicked->connect([this] {
             if (code_.empty()) return;
             ui::setClipboardText(code_);
             host_.flash("Code d'invitation copi\xC3\xA9 : valable 48 h, une seule fois.", Tone::Info);
         });
-        links_ += confirm_->textChanged->connect([this](const std::string&) {
-            confirmProblem_.clear();
-            update();
-        });
-        refuse_ = &button(*this, "Refuser la demande", "admins.refuser", ui::Button::Style::Danger);
-        later_ = &button(*this, "Plus tard", "admins.plus-tard");
-        accept_ = &button(*this, "Accepter comme admin", "admins.accepter", ui::Button::Style::Primary, ui::Icon::User);
+        links_ += chooseFile_->clicked->connect([this] { chooseInstaller(lastWasLink_); });
+        links_ += group_->valueChanged->connect([this](int) { update(); });
         links_ += name_->textChanged->connect([this](const std::string&) { update(); });
-        links_ += checked_->stateChanged->connect([this](ui::Checkbox::State) { update(); });
-        links_ += refreshNow_->clicked->connect([this] { poll(true); });
-        links_ += later_->clicked->connect([this] { owner_.close(); });
-        links_ += refuse_->clicked->connect([this] { refuse(); });
-        links_ += accept_->clicked->connect([this] { accept(); });
+        links_ += cancel_->clicked->connect([this] { owner_.close(); });
+        links_ += close_->clicked->connect([this] { owner_.close(); });
         update();
     }
     ~AddAdminBody() override { *alive_ = false; }
 
-    // A chaque image : le releve des demandes, toutes les 10 s tant qu'aucune ne correspond.
-    void step() {
-        if (matched() || polling_ || sent_) return;
-        const double now = steadySeconds();
-        if (lastPoll_ >= 0 && now - lastPoll_ < kPollEvery) return;
-        poll(false);
-    }
+    // Les essais.
+    [[nodiscard]] PcPicker& picker() noexcept { return *pc_; }
+    [[nodiscard]] bool sent() const noexcept { return sentAt_ != 0; }
+    [[nodiscard]] const std::string& code() const noexcept { return code_; }
 
 protected:
     void onLayout() override {
-        frame_.place(*this, 1300.f, 790.f);
+        frame_.place(*this, 1040.f, 660.f);
         const auto& p = frame_.panel;
-        top_ = p.y + 77.f;
-        const float gap = 16.f, x0 = p.x + 22.f, colW = (p.w - 44.f - 2.f * gap) / 3.f;
-        for (int i = 0; i < 3; ++i) cols_[i] = {x0 + static_cast<float>(i) * (colW + gap), top_ + 18.f, colW, p.bottom() - 86.f - (top_ + 18.f)};
-        // Colonne 1
-        const Rect& a = cols_[0];
-        const float y0 = a.y + 80.f;
-        name_->setBounds({a.x + 16.f, y0 + 20.f, a.w - 32.f, 34.f});
-        email_->setBounds({a.x + 16.f, y0 + 88.f, a.w - 32.f, 34.f});
-        studio_->setBounds({a.x + 30.f, y0 + 160.f, a.w - 60.f, 26.f});
-        link_->setBounds({a.x + 30.f, y0 + 212.f, a.w - 60.f, 26.f});
-        const float sy = y0 + 264.f;
-        const bool byLink = group_->value() == 1;
-        show(pc_, !byLink);
-        show(send_, !byLink);
-        show(makeLink_, byLink && url_.empty());
-        show(copyLink_, byLink && !url_.empty());
-        if (!byLink) {
-            const float bw = buttonWidth(*send_, 130.f);
-            send_->setBounds({a.right() - 16.f - bw, sy, bw, 32.f});
-            pc_->setBounds({a.x + 16.f, sy, std::max(80.f, send_->bounds().x - 8.f - (a.x + 16.f)), 32.f});
-        } else {
-            makeLink_->setBounds({a.x + 16.f, sy, buttonWidth(*makeLink_, 130.f), 32.f});
-            copyLink_->setBounds({a.x + 16.f, sy, buttonWidth(*copyLink_, 130.f), 32.f});
-        }
-        show(chooseFile_, needFile_);
-        chooseFile_->setBounds({a.x + 16.f, sy + 40.f, buttonWidth(*chooseFile_, 160.f), 30.f});
-        profileY_ = sy + (needFile_ ? 120.f : 92.f);
-        profile_->setBounds({a.x + 16.f, profileY_ + 22.f, a.w - 32.f, 32.f});
-        // Colonne 2
-        const Rect& b = cols_[1];
-        refreshNow_->setBounds({b.x + 16.f, b.y + 334.f, buttonWidth(*refreshNow_, 160.f), 32.f});
-        // 1.49.0 : le code d'invitation, une fois cree (le bas de la colonne 1)
-        show(copyCode_, !code_.empty());
-        if (!code_.empty()) {
-            const float cw = buttonWidth(*copyCode_, 90.f);
-            copyCode_->setBounds({a.right() - 28.f - cw, a.bottom() - 86.f + 20.f, cw, 32.f});
-        }
-        // Colonne 3
-        const Rect& c3 = cols_[2];
-        checked_->setBounds({c3.x + 30.f, c3.y + 352.f, c3.w - 60.f, 30.f});
-        // 1.49.0 : une demande avec invitation - les 6 chiffres a taper a la place de la case
-        const AdminRequest* mq = matched();
-        const bool byCode = mq && mq->byCode();
-        show(checked_, !byCode);
-        show(confirm_, byCode);
-        confirm_->setBounds({c3.x + 16.f, c3.y + 250.f, std::min(c3.w - 32.f, 220.f), 44.f});
-        // Le pied
+        const float top = p.y + 77.f + 18.f, bottom = p.bottom() - 76.f;
+        const float gap = 20.f, x0 = p.x + 24.f;
+        const float leftW = std::clamp((p.w - 48.f - gap) * 0.42f, 300.f, 400.f);
+        left_ = {x0, top, leftW, bottom - top - 14.f};
+        right_ = {x0 + leftW + gap, top, p.right() - 24.f - (x0 + leftW + gap), bottom - top - 14.f};
+        // A gauche : qui, ses droits, comment lui envoyer.
+        name_->setBounds({left_.x, left_.y + 22.f, left_.w, 34.f});
+        email_->setBounds({left_.x, left_.y + 90.f, left_.w, 34.f});
+        profile_->setBounds({left_.x, left_.y + 158.f, left_.w, 32.f});
+        studio_->setBounds({left_.x + 14.f, left_.y + 260.f, left_.w - 28.f, 26.f});
+        link_->setBounds({left_.x + 14.f, left_.y + 316.f, left_.w - 28.f, 26.f});
+        // A droite : le PC (une recherche), ou le lien ; envoye : l'invitation et son code.
+        const bool byLink = group_->value() == 1, done = sentAt_ != 0;
+        show(pc_, !byLink && !done);
+        pc_->setBounds({right_.x, right_.y + 26.f, right_.w, std::max(120.f, right_.h - 26.f - (needFile_ ? 46.f : 0.f))});
+        show(chooseFile_, needFile_ && !done);
+        chooseFile_->setBounds({right_.x, right_.bottom() - 34.f, buttonWidth(*chooseFile_, 160.f), 32.f});
+        show(copyCode_, done && !code_.empty());
+        codeBox_ = {right_.x, right_.y + 64.f, right_.w, 76.f};
+        const float cw = buttonWidth(*copyCode_, 90.f);
+        copyCode_->setBounds({codeBox_.right() - 14.f - cw, codeBox_.y + 22.f, cw, 32.f});
+        show(copyLink_, done && !url_.empty());
+        copyLink_->setBounds({right_.x, codeBox_.bottom() + 70.f, buttonWidth(*copyLink_, 170.f), 32.f});
+        // Le pied : Annuler + Envoyer l'invitation (ou Creer le lien) ; envoye : Fermer.
         const float by = p.bottom() - 58.f;
-        const float rw = buttonWidth(*refuse_, 160.f);
-        refuse_->setBounds({p.x + 22.f, by, rw, 38.f});
-        const float aw = buttonWidth(*accept_, 220.f), lw = buttonWidth(*later_, 100.f);
-        accept_->setBounds({p.right() - 22.f - aw, by, aw, 38.f});
-        later_->setBounds({accept_->bounds().x - 10.f - lw, by, lw, 38.f});
+        show(send_, !byLink && !done);
+        show(makeLink_, byLink && !done);
+        show(cancel_, !done);
+        show(close_, done);
+        ui::Button* primary = done ? close_ : byLink ? makeLink_ : send_;
+        const float pw = buttonWidth(*primary, 170.f);
+        primary->setBounds({p.right() - 24.f - pw, by, pw, 38.f});
+        const float aw = buttonWidth(*cancel_, 100.f);
+        cancel_->setBounds({primary->bounds().x - 10.f - aw, by, aw, 38.f});
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
@@ -503,188 +439,72 @@ protected:
         const auto& c = th.color;
         const auto& p = frame_.panel;
         (void)frame_.paint(r, th, "Ajouter un admin",
-                           "Trois \xC3\xA9tapes. Sa cl\xC3\xA9 na\xC3\xAEt sur son PC ; toi, tu la certifies avec la cl\xC3\xA9 de l'\xC3\xA9" "diteur.", ui::Icon::User);
-        // L'etat, en haut a droite.
-        const AdminRequest* q = matched();
-        {
-            std::string s = q ? (q->fingerprintMismatch ? "Empreinte diff\xC3\xA9rente : refuse" : "Demande re\xC3\xA7ue \xC2\xB7 \xC3\xA0 v\xC3\xA9rifier")
-                              : "En attente de sa demande";
-            const Tint t = q ? (q->fingerprintMismatch ? Tint{c.error, c.error.withAlpha(24)} : Tint{rgb(0xC2410C), rgb(0xFFF4E5)}) : Tint{c.textMuted, c.rowAltBg};
-            const FontId f = gfx::semibold(kF13);
-            const float w = pillWidth(r, s, f, true);
-            (void)pill(r, frame_.closeBox.x - 14.f - w, p.y + 28.f, s, f, t.fg, t.bg, 24.f, true);
+                           "Son code d'invitation fait de lui un admin d\xC3\xA8s l'installation de XPG Admin : rien d'autre \xC3\xA0 faire.", ui::Icon::User);
+        const bool byLink = group_->value() == 1, done = sentAt_ != 0;
+        // ---- a gauche ----
+        r.drawText({left_.x, name_->bounds().y - 20.f}, "Pr\xC3\xA9nom et nom", gfx::semibold(kF13), c.text);
+        r.drawText({left_.x, email_->bounds().y - 20.f}, "Courriel", gfx::semibold(kF13), c.text);
+        r.drawText({left_.x, profile_->bounds().y - 20.f}, "Son profil (ses droits)", gfx::semibold(kF13), c.text);
+        r.drawText({left_.x, profile_->bounds().bottom() + 6.f},
+                   fit(r, "Une copie du profil : tu l'ajustes ensuite pour lui seul (Droits).", kF12, left_.w), kF12, c.textMuted);
+        r.drawText({left_.x, studio_->bounds().y - 30.f}, "Comment lui envoyer XPG Admin", gfx::semibold(kF13), c.text);
+        for (ui::RadioButton* rb : {studio_, link_}) {
+            const Rect box{left_.x, rb->bounds().y - 6.f, left_.w, 48.f};
+            ui::shapes::strokeRoundedRect(r, box, rb->selected() ? c.accent : c.border, 10.f, rb->selected() ? 1.5f : 1.f);
+            const std::string sub = rb == studio_ ? std::string("le PC de son Studio, choisi \xC3\xA0 droite") : std::string("valable 48 h, une seule fois");
+            r.drawText({rb->bounds().x + 24.f, rb->bounds().bottom() - 2.f}, fit(r, sub, kF12, box.w - 60.f), kF12, c.textMuted);
         }
-        const std::string who = displayName();
-        // ---- 1 : son nom et son courriel ----
-        stepHead(r, th, cols_[0], 1, "Son nom et son courriel", name_->text().empty() ? std::string("\xC3\xA0 remplir") : "pr\xC3\xA9par\xC3\xA9 \xC3\xA0 " + clockFr(opened_),
-                 !trimmed(name_->text()).empty());
         {
-            const Rect& a = cols_[0];
-            r.drawText({a.x + 16.f, name_->bounds().y - 20.f}, "Pr\xC3\xA9nom et nom", gfx::semibold(kF13), c.text);
-            r.drawText({a.x + 16.f, email_->bounds().y - 20.f}, "Courriel", gfx::semibold(kF13), c.text);
-            r.drawText({a.x + 16.f, studio_->bounds().y - 24.f}, "Comment lui envoyer l'Admin", gfx::semibold(kF13), c.text);
-            for (ui::RadioButton* rb : {studio_, link_}) {
-                const Rect box{a.x + 16.f, rb->bounds().y - 6.f, a.w - 32.f, 46.f};
-                ui::shapes::strokeRoundedRect(r, box, rb->selected() ? c.accent : c.border, 10.f, rb->selected() ? 1.5f : 1.f);
-                const std::string sub = rb == studio_ ? std::string("un PC choisi parmi ses activations") : std::string("valable 48 h, une seule fois");
-                r.drawText({rb->bounds().x + 24.f, rb->bounds().bottom() - 2.f}, fit(r, sub, kF12, box.w - 60.f), kF12, c.textMuted);
-            }
-            // Ce qu'a donne l'envoi (ou ce qu'il faut).
-            const float ny = (pc_->visible() ? pc_->bounds().bottom() : std::max(makeLink_->bounds().bottom(), copyLink_->bounds().bottom())) + (needFile_ ? 44.f : 8.f);
-            std::string status;
-            Color ink = c.textMuted;
-            if (sending_) status = "Envoi en cours\xE2\x80\xA6";
-            else if (!sendProblem_.empty()) {
-                status = sendProblem_;
-                ink = c.error;
-            } else if (!url_.empty()) {
-                status = "Lien (48 h, une seule fois) : " + url_;
-                ink = c.text;
-            } else if (sentAt_) {
-                status = "\xE2\x9C\x93 Envoy\xC3\xA9 \xC3\xA0 " + clockFr(sentAt_) + " : " + sentWhat_;
-                ink = c.ok;
-            } else if (group_->value() == 0 && pcs_.empty())
-                status = "Aucun PC connu sur ce poste : choisis \xC2\xAB Par un lien \xC2\xBB, ou fais-lui installer l'Admin comme tu veux.";
-            else
-                status = group_->value() == 0 ? std::string("L'installateur arrive dans les notifications de son Studio, sign\xC3\xA9 par l'\xC3\xA9" "diteur.")
-                                              : std::string("Un lien \xC3\xA0 coller dans ton courriel : il l'ouvre dans son navigateur.");
-            (void)drawWrapped(r, a.x + 16.f, ny, a.w - 32.f, status, kF12, ink, 16.f, 2);
-            r.drawText({a.x + 16.f, profile_->bounds().y - 22.f}, "Son profil", gfx::semibold(kF13), c.text);
-            const Rect note{a.x + 16.f, a.bottom() - 70.f, a.w - 32.f, 56.f};
-            if (!code_.empty()) {
-                // 1.49.0 : le code d'invitation, montre ici une seule fois (le service n'en garde que l'empreinte)
-                const Rect box{a.x + 16.f, a.bottom() - 86.f, a.w - 32.f, 72.f};
+            const Rect note{left_.x, link_->bounds().bottom() + 34.f, left_.w, 0.f};
+            const float h = std::max(0.f, left_.bottom() - note.y);
+            if (h >= 56.f) {
+                const Rect box{note.x, note.y, note.w, std::min(h, 76.f)};
                 r.fillRoundedRect(box, c.accent.withAlpha(16), 10.f);
-                ui::shapes::strokeRoundedRect(r, box, c.accent, 10.f, 1.5f);
-                r.drawText({box.x + 12.f, box.y + 10.f}, code_, gfx::semibold(FontId{24}), c.text);
-                r.drawText({box.x + 12.f, box.y + 46.f}, fit(r, "valable 48 h, une seule fois \xC2\xB7 dans le message", kF12, copyCode_->bounds().x - box.x - 20.f), kF12,
-                           c.textMuted);
-            } else if (note.y > profile_->bounds().bottom() + 8.f) {
-                r.fillRoundedRect(note, c.accent.withAlpha(16), 10.f);
-                (void)drawWrapped(r, note.x + 12.f, note.y + 10.f, note.w - 24.f,
-                                  "Il aura les droits du profil choisi (une copie : tu les ajustes ensuite pour lui seul). Ceux de l'admin+ restent \xC3\xA0 toi.", kF12,
-                                  c.accent, 17.f, 2);
-            }
-        }
-        // ---- 2 : il installe l'Admin ----
-        stepHead(r, th, cols_[1], 2, (who.empty() ? std::string("Il") : who) + " installe l'Admin",
-                 q ? "demande re\xC3\xA7ue \xC3\xA0 " + clockFr(q->received) : std::string("en attente"), q != nullptr);
-        {
-            const Rect& b = cols_[1];
-            float y = b.y + 80.f;
-            const auto item = [&](bool done, const std::string& title, const std::string& sub, const std::string& when) {
-                if (done) drawTick(r, b.x + 18.f, y + 3.f, c.ok);
-                else r.fillRoundedRect({b.x + 20.f, y + 5.f, 7.f, 7.f}, c.textDisabled, 3.5f);
-                r.drawText({b.x + 40.f, y}, fit(r, title, gfx::semibold(kF13), b.w - 100.f), gfx::semibold(kF13), done ? c.text : c.textMuted);
-                if (!when.empty()) r.drawText({b.right() - 16.f - r.measure(when, kF12).width, y + 1.f}, when, kF12, c.textMuted);
-                if (!sub.empty()) r.drawText({b.x + 40.f, y + 19.f}, fit(r, sub, kF12, b.w - 60.f), kF12, c.textMuted);
-                y += 54.f;
-            };
-            if (sentAt_ && url_.empty())
-                item(true, "L'installateur est dans ses notifications", sentWhat_, clockFr(sentAt_));
-            else if (!url_.empty())
-                item(true, "Le lien est pr\xC3\xAAt (48 h, une seule fois)", "\xC3\xA0 coller dans ton courriel", clockFr(sentAt_));
-            else
-                item(!trimmed(name_->text()).empty(), "Invitation pr\xC3\xA9par\xC3\xA9" "e", "son nom, son profil : " + selectedProfile(), clockFr(opened_));
-            item(q != nullptr, (who.empty() ? std::string("Il") : who) + " installe l'Admin sur son PC", q ? q->pc + " \xC2\xB7 " + q->software : std::string("le Studio, un lien ou une cl\xC3\xA9 USB"), {});
-            item(q != nullptr, "Son Admin a cr\xC3\xA9\xC3\xA9 sa cl\xC3\xA9", "sur son PC ; elle n'en sortira jamais", {});
-            item(q != nullptr, "Sa demande d'admin est arriv\xC3\xA9" "e", "avec l'empreinte de sa cl\xC3\xA9", q ? clockFr(q->received) : std::string());
-            if (!q) {
-                std::string wait = polling_ ? std::string("Relev\xC3\xA9 en cours\xE2\x80\xA6")
-                                            : lastProblem_.empty() ? "Relev\xC3\xA9 toutes les 10 s tant que ce dialogue est ouvert."
-                                                                   : "Relev\xC3\xA9 : " + lastProblem_;
-                if (!requests_.empty() && !polling_)
-                    wait = count(requests_.size(), "demande attend", "demandes attendent") + " : tape son nom tel qu'il l'a donn\xC3\xA9, ou choisis-la dans Administrateurs.";
-                (void)drawWrapped(r, b.x + 16.f, refreshNow_->bounds().y - 46.f, b.w - 32.f, wait, kF12, lastProblem_.empty() ? c.textMuted : c.warning, 17.f, 2);
-            }
-            // Ce que voit le futur admin en ce moment
-            const Rect mini{b.x + 16.f, b.bottom() - 206.f, b.w - 32.f, 190.f};
-            r.drawText({mini.x, mini.y - 22.f}, "CE QUE VOIT " + (who.empty() ? std::string("LE FUTUR ADMIN") : upper(who)) + " EN CE MOMENT", gfx::semibold(kF11), c.textMuted);
-            ui::shapes::fillFramedRect(r, mini, c.panelBg, c.border, 12.f);
-            r.fillRoundedRect({mini.x, mini.y, mini.w, 36.f}, rgb(0x111A2E), 12.f);
-            r.fillRect({mini.x, mini.y + 24.f, mini.w, 12.f}, rgb(0x111A2E));
-            r.drawText({mini.x + 14.f, mini.y + 10.f}, "License Manager", gfx::semibold(kF13), rgb(0xFFFFFF));
-            const std::string tag = (who.empty() ? std::string("toi") : who) + " \xC2\xB7 admin en attente";
-            r.drawText({mini.right() - 14.f - r.measure(tag, kF12).width, mini.y + 11.f}, tag, kF12, rgb(0xC7D0E0));
-            const std::string boss = plusName();
-            r.drawText({mini.x + 14.f, mini.y + 48.f}, fit(r, boss + " doit accepter ta cl\xC3\xA9", gfx::semibold(kF14), mini.w - 28.f), gfx::semibold(kF14), c.text);
-            const bool viaCode = (q && q->byCode()) || (!q && !code_.empty());   // 1.49.0 : 6 chiffres, jamais montres ici
-            r.drawText({mini.x + 14.f, mini.y + 68.f},
-                       fit(r, viaCode ? std::string("Dis ce code \xC3\xA0 ton admin+ :") : boss + " va t'appeler. Lis-lui ton empreinte :", kF12, mini.w - 28.f), kF12,
-                       c.textMuted);
-            if (viaCode) r.drawText({mini.x + 14.f, mini.y + 100.f}, "(6 chiffres, sur son \xC3\xA9" "cran : il te les dit)", kF13, c.textDisabled);
-            else if (q) paintFingerprint(r, th, {mini.x + 14.f, mini.y + 92.f, mini.w - 28.f, 64.f}, q->fingerprint, 3, 28.f, gfx::semibold(kF13));
-            else r.drawText({mini.x + 14.f, mini.y + 100.f}, "(son empreinte, d\xC3\xA8s qu'il l'a envoy\xC3\xA9" "e)", kF13, c.textDisabled);
-            r.drawText({mini.x + 14.f, mini.bottom() - 24.f}, "En attendant, l'Admin ne peut rien signer.", kF12, c.textMuted);
-        }
-        // ---- 3 (1.49.0) : une demande avec invitation - les 6 chiffres que dit le futur admin ----
-        const bool byCode = q && q->byCode();
-        if (byCode) {
-            stepHead(r, th, cols_[2], 3, "Tu tapes le code que te dit " + (who.empty() ? std::string("le futur admin") : who) + ", et tu acceptes",
-                     "6 chiffres, sur l'\xC3\xA9" "cran de son Admin", false, true);
-            const Rect& d = cols_[2];
-            float y = d.y + 78.f;
-            y += drawWrapped(r, d.x + 16.f, y, d.w - 32.f,
-                             "Appelle " + (who.empty() ? std::string("le futur admin") : who) +
-                                 " : son Admin lui montre 6 chiffres. Tape-les ici ; justes, la cl\xC3\xA9 de l'\xC3\xA9" "diteur signe. Faux : rien n'est sign\xC3\xA9.",
-                             kF13, c.text, 19.f, 4) +
-                 10.f;
-            r.drawText({d.x + 16.f, y}, "SON INVITATION", gfx::semibold(kF11), c.textMuted);
-            r.drawText({d.x + 16.f, y + 20.f},
-                       fit(r, q->invitationId + (q->invitationProfile.empty() ? std::string() : " \xC2\xB7 " + q->invitationProfile) +
-                                  (q->invited ? " \xC2\xB7 invit\xC3\xA9 \xC3\xA0 " + clockFr(q->invited) : std::string()),
-                           kF12, d.w - 32.f),
-                       kF12, c.text);
-            r.drawText({d.x + 16.f, confirm_->bounds().y - 20.f}, "Les 6 chiffres", gfx::semibold(kF13), c.text);
-            if (!confirmProblem_.empty())
-                (void)drawWrapped(r, d.x + 16.f, confirm_->bounds().bottom() + 12.f, d.w - 32.f, confirmProblem_, kF12, c.error, 17.f, 4);
-        }
-        // ---- 3 : l'empreinte au telephone ----
-        if (!byCode) stepHead(r, th, cols_[2], 3, "Tu v\xC3\xA9rifies l'empreinte avec " + (who.empty() ? std::string("lui") : who) + ", et tu acceptes",
-                 "au t\xC3\xA9l\xC3\xA9phone, pas par courriel", false, true);
-        if (!byCode) {
-            const Rect& d = cols_[2];
-            float y = d.y + 78.f;
-            y += drawWrapped(r, d.x + 16.f, y, d.w - 32.f,
-                             "Appelle " + (who.empty() ? std::string("le futur admin") : who) +
-                                 " et lisez l'empreinte ensemble, groupe par groupe. Il la voit sur son \xC3\xA9" "cran.",
-                             kF13, c.text, 19.f, 3) +
-                 10.f;
-            r.drawText({d.x + 16.f, y}, "L'EMPREINTE DE SA CL\xC3\x89, RE\xC3\x87UE ICI", gfx::semibold(kF11), c.textMuted);
-            y += 20.f;
-            if (q) {
-                paintFingerprint(r, th, {d.x + 16.f, y, d.w - 32.f, 128.f}, q->fingerprint, 3, 58.f, gfx::semibold(FontId{24}));
-                r.drawText({d.x + 16.f, y + 134.f},
-                           fit(r, "cl\xC3\xA9 cr\xC3\xA9\xC3\xA9" "e sur " + q->pc + " \xC2\xB7 re\xC3\xA7ue \xC3\xA0 " + clockFr(q->received) + " \xC2\xB7 " + q->id, kF12, d.w - 32.f),
-                           kF12, c.textMuted);
-            } else {
-                paintFingerprint(r, th, {d.x + 16.f, y, d.w - 32.f, 128.f}, "\xE2\x80\x94 \xE2\x80\x94 \xE2\x80\x94 \xE2\x80\x94 \xE2\x80\x94 \xE2\x80\x94", 3, 58.f,
-                                 gfx::semibold(FontId{24}), true);
-                r.drawText({d.x + 16.f, y + 134.f}, "Elle arrive avec sa demande.", kF12, c.textMuted);
-            }
-            const Rect cb = checked_->bounds();
-            ui::shapes::strokeRoundedRect(r, {d.x + 16.f, cb.y - 8.f, d.w - 32.f, cb.h + 16.f}, checked_->isChecked() ? c.accent : c.border, 10.f);
-            float wy = cb.bottom() + 20.f;
-            const Rect warn{d.x + 16.f, wy, d.w - 32.f, 56.f};
-            const bool bad = q && q->fingerprintMismatch;
-            r.fillRoundedRect(warn, bad ? c.error.withAlpha(22) : rgb(0xFFF7E6), 10.f);
-            ui::drawIcon(r, ui::Icon::Warning, {warn.x + 12.f, warn.y + 12.f, 16.f, 16.f}, bad ? c.error : rgb(0xC2410C));
-            (void)drawWrapped(r, warn.x + 38.f, warn.y + 10.f, warn.w - 50.f,
-                              bad ? std::string("L'empreinte rendue par le service n'est pas celle calcul\xC3\xA9" "e ici : refuse la demande.")
-                                  : std::string("Un seul caract\xC3\xA8re diff\xC3\xA8re ? Refuse la demande : quelqu'un s'est gliss\xC3\xA9 entre vous."),
-                              kF12, bad ? c.error : rgb(0xB45309), 17.f, 2);
-            wy += 68.f;
-            const Rect info{d.x + 16.f, d.bottom() - 82.f, d.w - 32.f, 68.f};
-            if (info.y > wy) {
-                r.fillRoundedRect(info, c.accent.withAlpha(16), 10.f);
-                (void)drawWrapped(r, info.x + 12.f, info.y + 10.f, info.w - 24.f,
-                                  "En acceptant, la cl\xC3\xA9 de l'\xC3\xA9" "diteur signe son certificat d'admin, ici, sur ton PC, puis le publie sur le service. " +
-                                      (who.empty() ? std::string("Il") : who) + " devient admin dans la minute.",
+                (void)drawWrapped(r, box.x + 12.f, box.y + 10.f, box.w - 24.f,
+                                  "Le message porte son code d'invitation (48 h, une seule fois). Il le tape dans l'installateur : il est admin d\xC3\xA8s qu'il est "
+                                  "accept\xC3\xA9, avec ce profil.",
                                   kF12, c.accent, 17.f, 3);
             }
         }
+        // ---- a droite ----
+        if (done) {
+            paintSent(ctx);
+        } else if (!byLink) {
+            r.drawText({right_.x, right_.y}, "Le PC de son Studio", gfx::semibold(kF13), c.text);
+            const std::string hint = "Haut / Bas pour choisir, Echap efface la recherche";
+            const float hw = r.measure(hint, kF12).width;
+            if (hw < right_.w - 160.f) r.drawText({right_.right() - hw, right_.y + 1.f}, hint, kF12, c.textMuted);
+        } else {
+            r.drawText({right_.x, right_.y}, "Par un lien", gfx::semibold(kF13), c.text);
+            (void)drawWrapped(r, right_.x, right_.y + 30.f, right_.w,
+                              "\xC2\xAB Cr\xC3\xA9" "er le lien \xC2\xBB pr\xC3\xA9pare un lien vers l'installateur de XPG Admin (valable 48 h, une seule fois) et son "
+                              "code d'invitation. Tu colles les deux dans ton courriel : il ouvre le lien, installe XPG Admin et y tape le code.",
+                              kF14, c.text, 21.f, 6);
+        }
+        if (needFile_ && !done)
+            r.drawText({chooseFile_->bounds().right() + 12.f, chooseFile_->bounds().y + 8.f},
+                       fit(r, "aucune version publi\xC3\xA9" "e n'a l'installateur de XPG Admin", kF12, std::max(10.f, right_.right() - chooseFile_->bounds().right() - 12.f)),
+                       kF12, c.warning);
+        // ---- le pied ----
         r.fillRect({p.x + 1.f, p.bottom() - 76.f, p.w - 2.f, 1.f}, c.border);
-        r.drawText({refuse_->bounds().right() + 16.f, refuse_->bounds().y + 11.f}, "Tout est \xC3\xA9" "crit dans le journal des admins.", kF13, c.textMuted);
+        std::string status;
+        Color ink = c.textMuted;
+        if (sending_) status = "Envoi en cours\xE2\x80\xA6";
+        else if (!sendProblem_.empty()) {
+            status = sendProblem_;
+            ink = c.error;
+        } else if (done) {
+            status = "\xC3\x89" "crit dans le journal des admins (invitation, puis admin ajout\xC3\xA9 par son code).";
+        } else if (!byLink) {
+            if (const MessagePc* s = pc_->selected())
+                status = "Pour " + PcPicker::labelOf(*s) + (s->customer.empty() ? std::string() : " (" + s->customer + ")") + " \xC2\xB7 l'installateur arrive sign\xC3\xA9 par l'\xC3\xA9" "diteur.";
+            else status = pc_->pcs().empty() ? std::string("Aucun PC connu sur ce poste : choisis \xC2\xAB Par un lien \xC2\xBB.") : std::string("Choisis le PC dans la liste.");
+        } else {
+            status = "Un lien \xC3\xA0 coller dans ton courriel, avec son code d'invitation.";
+        }
+        const float sx = p.x + 24.f;
+        const float room = (cancel_->visible() ? cancel_->bounds().x : close_->bounds().x) - 16.f - sx;
+        (void)drawWrapped(r, sx, p.bottom() - 52.f, std::max(80.f, room), status, kF13, ink, 18.f, 2);
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
@@ -696,117 +516,80 @@ protected:
     }
 
 private:
-    static std::string upper(std::string s) {
-        for (auto& ch : s)
-            if (ch >= 'a' && ch <= 'z') ch = static_cast<char>(ch - 'a' + 'A');
-        return s;
+    // L'invitation partie : le code (montre ici une seule fois), ou va le message (ou le lien), ce qui se passe ensuite.
+    void paintSent(const ui::PaintContext& ctx) {
+        auto& r = ctx.r;
+        const auto& c = ctx.theme.color;
+        drawTick(r, right_.x, right_.y + 4.f, c.ok);
+        r.drawText({right_.x + 24.f, right_.y}, url_.empty() ? std::string("Invitation envoy\xC3\xA9" "e") : std::string("Invitation pr\xC3\xAAte"),
+                   gfx::semibold(FontId{18}), c.ok);
+        r.drawText({right_.x, right_.y + 30.f}, fit(r, sentWhat_, kF13, right_.w), kF13, c.text);
+        if (!code_.empty()) {
+            r.fillRoundedRect(codeBox_, c.accent.withAlpha(16), 10.f);
+            ui::shapes::strokeRoundedRect(r, codeBox_, c.accent, 10.f, 1.5f);
+            r.drawText({codeBox_.x + 14.f, codeBox_.y + 10.f}, code_, gfx::semibold(FontId{26}), c.text);
+            r.drawText({codeBox_.x + 14.f, codeBox_.y + 50.f}, fit(r, "son code d'invitation \xC2\xB7 48 h, une seule fois \xC2\xB7 montr\xC3\xA9 ici une seule fois", kF12,
+                                                                  copyCode_->bounds().x - codeBox_.x - 24.f),
+                       kF12, c.textMuted);
+        }
+        float y = codeBox_.bottom() + 16.f;
+        if (!url_.empty()) {
+            r.drawText({right_.x, y}, fit(r, "Lien (48 h, une seule fois) : " + url_, kF12, right_.w), kF12, c.text);
+            y = copyLink_->bounds().bottom() + 16.f;
+        } else {
+            y += 8.f;
+        }
+        (void)drawWrapped(r, right_.x, y, right_.w,
+                          "Il installe XPG Admin et tape ce code dans l'installateur (la page \xC2\xAB Code d'invitation \xC2\xBB). D\xC3\xA8s que le service l'accepte, "
+                          "ta cl\xC3\xA9 de l'\xC3\xA9" "diteur signe la sienne d'office, sans rien te demander : il appara\xC3\xAEt dans Administrateurs, avec le profil " +
+                              cite(sentProfile_) + ".",
+                          kF13, c.textMuted, 19.f, 5);
     }
-    // 1.49.0 : la phrase du code, a coller avec le lien (la meme que dans le message du Studio)
-    [[nodiscard]] std::string codeSentence() const {
-        return "Ton code d'invitation : " + code_ + " (\xC3\xA0 saisir dans l'installateur, valable 48 h)";
-    }
-    [[nodiscard]] std::string plusName() const {
-        const auto& k = host_.workspace().key();
-        return k.name.empty() ? std::string("L'admin+") : k.name;
-    }
+    static std::string cite(const std::string& s) { return "\xC2\xAB " + s + " \xC2\xBB"; }
+    // la phrase du code, a coller avec le lien (la meme que dans le message du Studio)
+    [[nodiscard]] std::string codeSentence() const { return "Ton code d'invitation : " + code_ + " (\xC3\xA0 saisir dans l'installateur, valable 48 h)"; }
     [[nodiscard]] std::string selectedProfile() const {
         const auto* it = profile_->selectedItem();
         return it ? it->value : std::string(adm::kAllRightsProfile);
     }
-    // Le nom a montrer : celui tape, sinon celui de la demande.
-    [[nodiscard]] std::string displayName() const {
-        std::string n = trimmed(name_->text());
-        if (n.empty())
-            if (const AdminRequest* q = matched()) n = q->name;
-        const auto sp = n.find(' ');
-        return sp == std::string::npos ? n : n.substr(0, sp);   // le prenom (<< Accepter Nina comme admin >>)
-    }
-    // La demande qui correspond : celle demandee, sinon par le nom tape, sinon la seule en attente.
-    [[nodiscard]] const AdminRequest* matched() const {
-        if (!wanted_.empty()) {
-            for (const auto& q : requests_)
-                if (q.key == wanted_) return &q;
-            return nullptr;
-        }
-        const std::string typed = lower(trimmed(name_->text()));
-        if (!typed.empty()) {
-            for (const auto& q : requests_)
-                if (lower(trimmed(q.name)) == typed) return &q;
-            for (const auto& q : requests_) {
-                const std::string n = lower(trimmed(q.name));
-                if (n.rfind(typed, 0) == 0 || typed.rfind(n, 0) == 0) return &q;
-            }
-            return nullptr;
-        }
-        return requests_.size() == 1 ? &requests_.front() : nullptr;
-    }
-    void stepHead(gfx::IRenderer& r, const ui::Theme& th, const Rect& col, int n, const std::string& title, const std::string& sub, bool done,
-                  bool current = false) const {
-        const auto& c = th.color;
-        ui::shapes::fillFramedRect(r, col, c.panelBg, current ? c.accent : c.border, 12.f);
-        if (current) ui::shapes::strokeRoundedRect(r, col.inset(-2.f, -2.f), c.accent.withAlpha(60), 14.f, 2.f);
-        const Rect badge{col.x + 16.f, col.y + 18.f, 28.f, 28.f};
-        if (done) {
-            r.fillRoundedRect(badge, c.ok.withAlpha(30), 8.f);
-            drawTick(r, badge.x + 8.f, badge.y + 8.f, c.ok);
-        } else {
-            r.fillRoundedRect(badge, current ? c.accent : c.rowAltBg, 8.f);
-            const std::string s = std::to_string(n);
-            r.drawText({badge.x + (28.f - r.measure(s, gfx::semibold(kF13)).width) * 0.5f, badge.y + 6.f}, s, gfx::semibold(kF13), current ? rgb(0xFFFFFF) : c.textMuted);
-        }
-        r.drawText({badge.right() + 12.f, col.y + 16.f}, fit(r, std::to_string(n) + " \xC2\xB7 " + title, gfx::semibold(kF14), col.w - 70.f), gfx::semibold(kF14), c.text);
-        r.drawText({badge.right() + 12.f, col.y + 36.f}, fit(r, sub, kF12, col.w - 70.f), kF12, c.textMuted);
-        r.fillRect({col.x + 1.f, col.y + 64.f, col.w - 2.f, 1.f}, c.border);
-    }
 
     void update() {
-        const AdminRequest* q = matched();
-        const std::string who = displayName();
-        checked_->setLabel("J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte avec " + (who.empty() ? std::string("lui") : who));
-        accept_->setText("Accepter " + (who.empty() ? std::string("ce futur admin") : who) + " comme admin");
         const bool busy = host_.busy && host_.busy();
-        refuse_->setEnabled(q != nullptr && !sent_);
-        checked_->setEnabled(q != nullptr && !q->fingerprintMismatch);
-        // 1.49.0 : avec invitation, les 6 chiffres tapes (verifies a l'acceptation) a la place de la case
-        const bool byCode = q && q->byCode();
-        std::size_t digits = 0;
-        for (const char ch : confirm_->text()) digits += (ch >= '0' && ch <= '9') ? 1 : 0;
-        const bool ok = q && !q->fingerprintMismatch && (byCode ? digits == 6 : checked_->isChecked()) && !sent_ && !busy;
-        accept_->setEnabled(ok);
-        accept_->setTooltip(!q ? std::string("Sa demande n'est pas encore arriv\xC3\xA9" "e.")
-                            : q->fingerprintMismatch ? std::string("L'empreinte ne correspond pas : refuse la demande.")
-                            : byCode ? (digits == 6 ? std::string("Les 6 chiffres sont v\xC3\xA9rifi\xC3\xA9s, puis la cl\xC3\xA9 de l'\xC3\xA9" "diteur signe la nouvelle liste.")
-                                                    : std::string("Tape les 6 chiffres que te dit le futur admin (son Admin les montre)."))
-                            : !checked_->isChecked() ? std::string("Coche d'abord \xC2\xAB J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte \xC2\xBB, apr\xC3\xA8s l'avoir lue au t\xC3\xA9l\xC3\xA9phone.")
-                                                     : std::string("La cl\xC3\xA9 de l'\xC3\xA9" "diteur signe la nouvelle liste des admins, puis la publie."));
-        refreshNow_->setEnabled(!polling_);
-        send_->setEnabled(!sending_ && !busy && pc_->selectedItem() != nullptr);
-        makeLink_->setEnabled(!sending_ && !busy);
+        const bool named = !trimmed(name_->text()).empty();
+        send_->setEnabled(!sending_ && !busy && named && pc_->selected() != nullptr);
+        send_->setTooltip(!named ? std::string("Son nom d'abord : c'est son nom dans la liste des admins.")
+                          : !pc_->selected() ? std::string("Choisis le PC de son Studio (la recherche), ou \xC2\xAB Par un lien \xC2\xBB.")
+                                             : std::string("Cr\xC3\xA9" "e son code d'invitation et envoie XPG Admin dans les notifications de ce Studio."));
+        makeLink_->setEnabled(!sending_ && !busy && named);
+        makeLink_->setTooltip(named ? std::string("Cr\xC3\xA9" "e son code d'invitation et un lien de 48 h vers l'installateur de XPG Admin.")
+                                    : std::string("Son nom d'abord : c'est son nom dans la liste des admins."));
         chooseFile_->setEnabled(!sending_ && !busy);
-        show(refreshNow_, q == nullptr);
+        name_->setReadOnly(sentAt_ != 0);
+        email_->setReadOnly(sentAt_ != 0);
         invalidateLayout();
         invalidate();
     }
 
-    // Envoyer l'installateur de l'Admin : dans les notifications du Studio du PC choisi, ou un lien (48 h, une fois). Aucune
-    // version publiee n'a l'installateur : le fichier est demande, puis l'envoi repart.
+    // Envoyer XPG Admin : dans les notifications du Studio du PC choisi, ou un lien (48 h, une fois). Le code d'invitation
+    // est cree d'abord (une fois par dialogue) et part dans le message. Aucune version publiee n'a l'installateur : le
+    // fichier est demande, puis l'envoi repart.
     void sendInstaller(bool byLink) {
-        if (sending_) return;
+        if (sending_ || sentAt_) return;
         lastWasLink_ = byLink;
-        const auto* it = pc_->selectedItem();
-        if (!byLink && !it) {
-            sendProblem_ = "choisis le PC (ses activations, ses demandes)";
+        const MessagePc* chosen = pc_->selected();
+        if (!byLink && !chosen) {
+            sendProblem_ = "Choisis le PC de son Studio (la recherche), ou \xC2\xAB Par un lien \xC2\xBB.";
+            update();
+            return;
+        }
+        const std::string name = trimmed(name_->text());
+        if (name.empty()) {
+            sendProblem_ = "Son nom d'abord : c'est son nom dans la liste des admins.";
             update();
             return;
         }
         const Workspace* w = &host_.workspace();
-        const std::string device = it ? it->value : std::string(), name = trimmed(name_->text()), file = fallback_;
-        // 1.49.0 (docs/ADMINS.md, par. 12) : le code d'invitation est cree d'abord (une fois par dialogue) et part dans le message
-        if (code_.empty() && name.empty()) {
-            sendProblem_ = "son nom d'abord : il va avec le code d'invitation";
-            update();
-            return;
-        }
+        const std::string device = byLink ? std::string() : pc_->selectedValue(), file = fallback_;
         const std::string email = trimmed(email_->text()), profile = selectedProfile();
         auto url = std::make_shared<std::string>();
         auto code = std::make_shared<std::string>(code_);
@@ -821,20 +604,18 @@ private:
             }
             return byLink ? w->adminInstallerLink(file, *url, {}, *code) : w->sendAdminInstaller(device, name, file, {}, *code);
         };
-        const auto done = [this, alive, url, byLink, code, inv](const OpResult& r) {
+        const auto done = [this, alive, url, byLink, code, profile](const OpResult& r) {
             if (!*alive) return;
             sending_ = false;
             if (code_.empty() && !code->empty()) code_ = *code;   // montre une fois, dans ce dialogue seulement
             if (r.ok) {
-                // 1.47.0 (agent A) : l'invitation notee (invitations-admins.json) - la liste << Demandes d'admin >> la rapproche
-                // (1.49.0 : celle du code est deja notee par inviteAdmin)
-                if (code_.empty())
-                    (void)host_.workspace().noteAdminInvitation({trimmed(name_->text()), trimmed(email_->text()), selectedProfile(), byLink ? "lien" : "studio", 0, {}, 0});
                 sentAt_ = host_.workspace().now();
                 sentWhat_ = r.details.empty() ? r.message : r.details.front();
                 if (sentWhat_.rfind("Fichier : ", 0) == 0) sentWhat_ = sentWhat_.substr(10);
+                sentProfile_ = profile;
                 if (byLink) url_ = *url;
                 needFile_ = false;
+                if (done_) done_();
             } else {
                 sendProblem_ = r.message;
                 if (r.message.find("choisis le fichier") != std::string::npos) {
@@ -846,7 +627,7 @@ private:
             }
             update();
         };
-        if (!host_.runSlow(byLink ? "Lien vers l'installateur de l'Admin" : "Envoyer l'Admin \xC3\xA0 un PC", work, done)) {
+        if (!host_.runSlow(byLink ? "Lien vers XPG Admin et son code d'invitation" : "Envoyer XPG Admin et son code d'invitation", work, done)) {
             sending_ = false;
             host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
         }
@@ -854,7 +635,7 @@ private:
     }
     void chooseInstaller(bool byLink) {
         ui::FilePick p;
-        p.title = "L'installateur de l'Admin (XPG-Admin-Setup-....exe)";
+        p.title = "L'installateur de XPG Admin (XPG-Admin-Setup-....exe)";
         p.filters = {{"Installateur Windows (.exe)", "exe"}};
         auto alive = alive_;
         host_.pickFile(p, [this, alive, byLink](std::string path) {
@@ -864,166 +645,46 @@ private:
         });
     }
 
-    void poll(bool loud) {
-        if (polling_) return;
-        polling_ = true;
-        lastPoll_ = steadySeconds();
-        const Workspace* w = &host_.workspace();
-        auto out = std::make_shared<std::vector<AdminRequest>>();
-        auto alive = alive_;
-        const auto work = [w, out] { return w->pendingAdminRequests(*out); };
-        const auto done = [this, alive, out](const OpResult& r) {
-            if (!*alive) return;
-            polling_ = false;
-            lastPoll_ = steadySeconds();
-            if (r.ok) {
-                requests_ = *out;
-                lastProblem_.clear();
-            } else {
-                lastProblem_ = r.message;
-            }
-            // Ouvert sur une demande qui n'est plus la : elle a ete traitee ailleurs.
-            if (!wanted_.empty() && r.ok && !matched()) lastProblem_ = "cette demande n'est plus en attente (accept\xC3\xA9" "e ou refus\xC3\xA9" "e ailleurs)";
-            if (const AdminRequest* q = matched()) {
-                if (trimmed(name_->text()).empty()) name_->setText(q->name);
-                if (trimmed(email_->text()).empty()) email_->setText(q->email);
-            }
-            update();
-        };
-        const bool started = loud ? host_.runSlow && host_.runSlow("Admins : demandes d'admin", work, done)
-                                  : runQuietly(host_, "Admins : demandes d'admin", work, done);
-        if (!started) polling_ = false;
-        update();
-    }
-
-    void accept() {
-        const AdminRequest* q = matched();
-        if (!q || q->fingerprintMismatch || sent_) return;
-        // 1.49.0 : une demande avec invitation - les 6 chiffres verifies ici (de sa cle) ; faux : rien n'est signe
-        const bool byCode = q->byCode();
-        const std::string typed = byCode ? confirm_->text() : std::string();
-        if (byCode && !adm::confirmationMatches(q->key, typed)) {
-            confirmProblem_ = "Ce code ne correspond pas \xC3\xA0 sa cl\xC3\xA9 : rien n'est sign\xC3\xA9. Fais-lui relire les 6 chiffres que montre son Admin ; "
-                              "s'ils diff\xC3\xA8rent encore, refuse la demande.";
-            update();
-            return;
-        }
-        if (!byCode && !checked_->isChecked()) return;
-        if (host_.busy && host_.busy()) {
-            host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
-            return;
-        }
-        const Workspace* w = &host_.workspace();
-        const std::string key = q->key, profile = selectedProfile(), name = q->name;
-        sent_ = true;
-        auto alive = alive_;
-        auto done = done_;
-        Dialog* owner = &owner_;
-        if (!host_.runSlow("Accepter " + name + " comme admin", [w, key, profile, byCode, typed] { return w->acceptAdmin(key, profile, nullptr, !byCode, typed); },
-                           [this, alive, done, owner](const OpResult& r) {
-                               if (*alive) {
-                                   sent_ = false;
-                                   if (r.ok) owner->close();
-                                   else update();
-                               }
-                               if (r.ok && done) done();
-                           })) {
-            sent_ = false;
-            host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
-        }
-        if (*alive) update();
-    }
-
-    void refuse() {
-        const AdminRequest* q = matched();
-        if (!q || sent_) return;
-        if (host_.busy && host_.busy()) {
-            host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
-            return;
-        }
-        const Workspace* w = &host_.workspace();
-        const std::string key = q->key, name = q->name;
-        sent_ = true;
-        auto alive = alive_;
-        auto done = done_;
-        Dialog* owner = &owner_;
-        if (!host_.runSlow("Refuser la demande de " + name, [w, key] { return w->refuseAdmin(key); },
-                           [this, alive, done, owner](const OpResult& r) {
-                               if (*alive) {
-                                   sent_ = false;
-                                   if (r.ok) owner->close();
-                                   else update();
-                               }
-                               if (r.ok && done) done();
-                           })) {
-            sent_ = false;
-            host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
-        }
-        if (*alive) update();
-    }
-
-    Dialog&                          owner_;
-    ShellHost                        host_;
-    std::string                      wanted_;
-    std::function<void()>            done_;
-    Seconds                          opened_{0};
-    std::vector<AdminRequest>        requests_;
-    std::string                      lastProblem_;
-    bool                             polling_{false}, sent_{false};
-    double                           lastPoll_{-1};
-    ui::InputText*                   name_{nullptr};
-    ui::InputText*                   email_{nullptr};
-    std::shared_ptr<ui::RadioGroup>  group_;
-    ui::RadioButton*                 studio_{nullptr};
-    ui::RadioButton*                 link_{nullptr};
-    ui::DropDown*                    profile_{nullptr};
-    ui::Button*                      refreshNow_{nullptr};
-    ui::DropDown*                    pc_{nullptr};
-    ui::Button*                      send_{nullptr};
-    ui::Button*                      makeLink_{nullptr};
-    ui::Button*                      copyLink_{nullptr};
-    ui::Button*                      chooseFile_{nullptr};
-    std::vector<MessagePc>           pcs_;
-    std::string                      fallback_, url_, sentWhat_, sendProblem_;
-    Seconds                          sentAt_{0};
-    bool                             sending_{false}, needFile_{false}, lastWasLink_{false};
-    float                            profileY_{0.f};
-    ui::Checkbox*                    checked_{nullptr};
-    ui::Button*                      copyCode_{nullptr};    // 1.49.0 : le code d'invitation (Copier)
-    ui::InputText*                   confirm_{nullptr};     // 1.49.0 : les 6 chiffres
-    std::string                      code_, confirmProblem_;
-    ui::Button*                      refuse_{nullptr};
-    ui::Button*                      later_{nullptr};
-    ui::Button*                      accept_{nullptr};
-    Frame                            frame_;
-    float                            top_{0.f};
-    Rect                             cols_[3]{};
-    std::shared_ptr<bool>            alive_ = std::make_shared<bool>(true);
-    core::ConnectionScope            links_;
+    Dialog&                         owner_;
+    ShellHost                       host_;
+    std::function<void()>           done_;
+    ui::InputText*                  name_{nullptr};
+    ui::InputText*                  email_{nullptr};
+    std::shared_ptr<ui::RadioGroup> group_;
+    ui::RadioButton*                studio_{nullptr};
+    ui::RadioButton*                link_{nullptr};
+    ui::DropDown*                   profile_{nullptr};
+    PcPicker*                       pc_{nullptr};
+    ui::Button*                     send_{nullptr};
+    ui::Button*                     makeLink_{nullptr};
+    ui::Button*                     copyLink_{nullptr};
+    ui::Button*                     chooseFile_{nullptr};
+    ui::Button*                     copyCode_{nullptr};
+    ui::Button*                     cancel_{nullptr};
+    ui::Button*                     close_{nullptr};
+    std::string                     fallback_, url_, sentWhat_, sendProblem_, code_, sentProfile_;
+    Seconds                         sentAt_{0};
+    bool                            sending_{false}, needFile_{false}, lastWasLink_{false};
+    Frame                           frame_;
+    Rect                            left_{}, right_{}, codeBox_{};
+    std::shared_ptr<bool>           alive_ = std::make_shared<bool>(true);
+    core::ConnectionScope           links_;
 };
 
 class AddAdminDialog final : public Dialog {
 public:
-    AddAdminDialog(ShellHost host, std::string requestKey, std::function<void()> done)
-        : Dialog("dialog.ajouter-admin"), host_(std::move(host)), key_(std::move(requestKey)), done_(std::move(done)) {}
+    AddAdminDialog(ShellHost host, std::function<void()> done) : Dialog("dialog.ajouter-admin"), host_(std::move(host)), done_(std::move(done)) {}
     [[nodiscard]] std::string title() const override { return "Ajouter un admin"; }
 
 protected:
     core::Status buildUi() override {
-        auto body = std::make_unique<AddAdminBody>(*this, host_, key_, done_);
-        body_ = body.get();
-        setRoot(std::move(body));
+        setRoot(std::make_unique<AddAdminBody>(*this, host_, done_));
         return core::ok();
-    }
-    void onTick() override {
-        if (body_ && !closed()) body_->step();
     }
 
 private:
     ShellHost             host_;
-    std::string           key_;
     std::function<void()> done_;
-    AddAdminBody*         body_{nullptr};
 };
 
 // ===================================================================== la page ====
@@ -1053,11 +714,8 @@ public:
         rightsPage_ = &adopt(*this, std::make_unique<statskit::TabButton>("Droits", "admins.droits-page", ui::Icon::Lock));
         rightsPage_->setTooltip("Les profils de droits (Admin LV1, LV2\xE2\x80\xA6), copi\xC3\xA9s vers un admin puis ajust\xC3\xA9s pour lui seul.");
         tabJournal_ = &adopt(*this, std::make_unique<statskit::TabButton>("Journal des admins", "admins.onglet.journal", ui::Icon::History));
-        // 1.47.0 (agent A) : << N demandes d'admin en attente : Voir la liste >> -> Demandes d'admin (PageAdminRequests.cpp)
-        requestsLink_ = &adopt(*this, std::make_unique<ab::LinkButton>("Voir la liste", "admins.demandes-liste"));
-        links_ += requestsLink_->clicked->connect([this] { host_.navigate("demandes-admins"); });
         reload_ = &button(*this, "Relever", "admins.relever", ui::Button::Style::Default, ui::Icon::Refresh);
-        reload_->setTooltip("Relire tout de suite la liste des admins, les demandes et les chiffres du service (l'Admin le fait seul en arrivant sur la page).");
+        reload_->setTooltip("Relire tout de suite la liste des admins et les chiffres du service (l'Admin le fait seul en arrivant sur la page).");
         range_ = &adopt(*this, std::make_unique<statskit::SegGroup>(
                                    "admins.periode", std::vector<statskit::SegGroup::Item>{{statskit::rangeKey(statskit::Range::Days7), statskit::rangeLabel(statskit::Range::Days7)},
                                                                                           {statskit::rangeKey(statskit::Range::Days30), statskit::rangeLabel(statskit::Range::Days30)},
@@ -1092,19 +750,14 @@ public:
         // Pas encore admin : les deux chemins.
         createKey_ = &button(*this, "Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur\xE2\x80\xA6", "admins.creer-cle", ui::Button::Style::Primary, ui::Icon::Lock);
         restore_ = &button(*this, "Restaurer la cl\xC3\xA9 de l'\xC3\xA9" "diteur\xE2\x80\xA6", "admins.restaurer", ui::Button::Style::Default, ui::Icon::Open);   // 1.49.0
-        reqName_ = &adopt(*this, std::make_unique<ui::InputText>("admins.demande.nom"));
-        reqName_->setPlaceholder("Pr\xC3\xA9nom et nom");
-        reqName_->setMaxLength(60);
-        reqEmail_ = &adopt(*this, std::make_unique<ui::InputText>("admins.demande.courriel"));
-        reqEmail_->setPlaceholder("ton@courriel");
-        reqEmail_->setMaxLength(120);
-        // 1.49.0 (docs/ADMINS.md, par. 12) : XPG Admin - le code d'invitation (pose par l'installateur ; sinon tape ici)
-        reqCode_ = &adopt(*this, std::make_unique<ui::InputText>("admins.demande.invitation"));
+        // 1.51.0 (docs/ADMINS.md, par. 4) : XPG Admin - le code d'invitation (pose par l'installateur ; sinon tape ici) : il
+        // fait de ce PC un admin, sans demande.
+        reqCode_ = &adopt(*this, std::make_unique<ui::InputText>("admins.invitation.code"));
         reqCode_->setPlaceholder("INV-XXXX-XXXX");
         reqCode_->setMaxLength(20);
-        send_ = &button(*this, "Envoyer ma demande", "admins.demande.envoyer", ui::Button::Style::Primary, ui::Icon::Mail);
+        send_ = &button(*this, "Devenir admin", "admins.invitation.valider", ui::Button::Style::Primary, ui::Icon::User);
         service_ = &button(*this, "R\xC3\xA9gler le service\xE2\x80\xA6", "admins.regler-service", ui::Button::Style::Default, ui::Icon::Globe);
-        // En attente.
+        // Ajout en cours.
         check_ = &button(*this, "V\xC3\xA9rifier maintenant", "admins.attente.verifier", ui::Button::Style::Default, ui::Icon::Refresh);
 
         table_ = &adopt(*this, std::make_unique<ui::TableView>("admins.table"));
@@ -1116,7 +769,7 @@ public:
         overview_ = &adopt(*this, ab::makeOverview(data_, actions_, host_));
         who_ = &adopt(*this, ab::makeWho(data_, actions_, host_));
 
-        links_ += add_->clicked->connect([this] { openAdd({}); });
+        links_ += add_->clicked->connect([this] { openAdd(); });
         links_ += tabVue_->clicked->connect([this] { showTab(0); });
         links_ += tabQui_->clicked->connect([this] { showTab(1); });
         links_ += rightsPage_->clicked->connect([this] { host_.navigate("droits"); });
@@ -1151,8 +804,9 @@ public:
         links_ += createKey_->clicked->connect([this] { host_.navigate("securite"); });
         links_ += restore_->clicked->connect([this] { host_.navigate("securite"); });
         links_ += service_->clicked->connect([this] { host_.navigate("service"); });
-        links_ += send_->clicked->connect([this] { sendRequest(); });
-        links_ += check_->clicked->connect([this] { checkRequest(); });
+        links_ += send_->clicked->connect([this] { join(); });
+        links_ += reqCode_->editingDone->connect([this](const std::string&) { join(); });
+        links_ += check_->clicked->connect([this] { checkJoin(); });
         links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& sel) {
             if (syncing_) return;
             if (!sel.empty() && sel.front() < rows_.size()) selectedKey_ = rows_[sel.front()].key;
@@ -1172,6 +826,10 @@ public:
     void refresh() override {
         const std::string f = takePageFocus("admins");
         if (f.rfind("admin:", 0) == 0) selectedKey_ = f.substr(6);
+        if (f.rfind("code-refuse:", 0) == 0) {   // 1.51.0 : le code de l'installateur refuse au premier lancement (Shell::autoJoin)
+            invitationProblem_ = sentence(f.substr(12));
+            lastState_ = "invitation";
+        }
         const Role role = ws().role();
         if (role != shownRole_) {
             shownRole_ = role;
@@ -1179,7 +837,6 @@ public:
             lastFetch_ = -1;
             closeCard();
         }
-        if (role == Role::None && reqName_->text().empty() && !ws().adminKey().name.empty()) reqName_->setText(ws().adminKey().name);
         rebuild();
         if (f.rfind("fiche:", 0) == 0 && role == Role::Plus) openCard(f.substr(6), false);
         // Arriver sur la page : relire ce que le service sait (sans bruit ; au plus une fois par minute).
@@ -1205,12 +862,11 @@ protected:
                                static_cast<ui::Widget*>(cardRights_), static_cast<ui::Widget*>(cardRetire_), static_cast<ui::Widget*>(myCard_),
                                static_cast<ui::Widget*>(cardDerog_),
                                static_cast<ui::Widget*>(overview_), static_cast<ui::Widget*>(who_), static_cast<ui::Widget*>(createKey_),
-                               static_cast<ui::Widget*>(restore_), static_cast<ui::Widget*>(reqName_), static_cast<ui::Widget*>(reqEmail_),
-                               static_cast<ui::Widget*>(reqCode_), static_cast<ui::Widget*>(send_), static_cast<ui::Widget*>(service_), static_cast<ui::Widget*>(check_)})
+                               static_cast<ui::Widget*>(restore_), static_cast<ui::Widget*>(reqCode_), static_cast<ui::Widget*>(send_),
+                               static_cast<ui::Widget*>(service_), static_cast<ui::Widget*>(check_)})
             wd->setVisibility(ui::Visibility::Collapsed);
         for (auto* a : anchors_) a->setVisibility(ui::Visibility::Collapsed);
         if (card_) card_->setVisibility(ui::Visibility::Collapsed);
-        requestsLink_->setVisibility(ui::Visibility::Collapsed);   // 1.47.0 (agent A)
         if (role == Role::None) layoutNone(b);
         else if (role == Role::Pending) layoutPending(b);
         else if (card_ && !cardKey_.empty()) layoutCard(b);
@@ -1287,13 +943,8 @@ private:
             host_.navigate("droits");
         };
         a.retire = [this](const std::string& key) { askRetire(key); };
-        a.verify = [this](const std::string& key) {
-            selectedKey_ = key;
-            openAdd(key);
-        };
-        a.refuse = [this](const std::string& key) { refuseRequest(key); };
         a.select = [this](const std::string& key) { syncTable(key); };
-        a.addAdmin = [this] { openAdd({}); };
+        a.addAdmin = [this] { openAdd(); };
         a.criticality = [this] {
             auto alive = alive_;
             host_.openDialog(makeCriticalityDialog(host_, [this, alive] {
@@ -1390,7 +1041,7 @@ private:
     // ------------------------------------------------------------------ la fiche
     void openCard(const std::string& key, bool own) {
         const ab::Person* p = data_->person(key);
-        if (!p || p->kind == ab::Person::Kind::Pending) return;
+        if (!p) return;
         if (shownRole_ != Role::Plus && !(own && key == ws().adminKey().keyHex)) return;   // un admin : sa fiche seulement
         if (card_) {
             (void)removeChild(*card_);
@@ -1436,7 +1087,7 @@ private:
         ask.before = data_->statsBefore;
         std::string sig = ask.period.from + ">" + ask.period.to + "#" + std::to_string(changes::current());   // 1.48.1 : un changement : relus
         for (const auto& p : data_->people) {
-            if (p.kind == ab::Person::Kind::Pending || p.key.size() != 64) continue;
+            if (p.key.size() != 64) continue;
             ask.keys.push_back(p.key);
             ask.ids.push_back(p.id);
             ask.names.push_back(p.name);
@@ -1584,14 +1235,6 @@ private:
             from_->setVisibility(fits ? ui::Visibility::Visible : ui::Visibility::Collapsed);
             to_->setVisibility(fits ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         }
-        // 1.47.0 (agent A) : les demandes d'admin en attente -> leur liste (s'il y a la place apres les onglets)
-        if (const std::size_t n = fetched_.haveRequests ? fetched_.requests.size() : 0; n > 0) {
-            requestsLink_->setText(std::to_string(n) + (n > 1 ? " demandes d'admin en attente : Voir la liste" : " demande d'admin en attente : Voir la liste"));
-            const float lw2 = requestsLink_->naturalWidth();
-            const float limit = from_->visible() ? from_->bounds().x - 12.f : tr;
-            requestsLink_->setBounds({tx, y + 6.f, lw2, 22.f});
-            requestsLink_->setVisibility(tx + lw2 <= limit ? ui::Visibility::Visible : ui::Visibility::Collapsed);
-        }
         y += 42.f;
         tabsBottom_ = y;
         y = placeBanner(y + 12.f);
@@ -1610,14 +1253,12 @@ private:
     void paintBoard(const ui::PaintContext& ctx) {
         auto& r = ctx.r;
         r.drawText({x0_, titleY_}, "Administrateurs", gfx::semibold(kF28), ab::kInk);
-        int active = 0, waiting = 0, gone = 0;
+        int active = 0, gone = 0;
         for (const auto& row : rows_) {
-            if (row.kind == AdminRow::Kind::Pending) ++waiting;
-            else if (row.retired) ++gone;
+            if (row.retired) ++gone;
             else ++active;
         }
         std::string lead = count(static_cast<std::size_t>(active), "actif", "actifs");
-        if (waiting) lead += ", " + std::to_string(waiting) + " en attente";
         if (gone) lead += ", " + count(static_cast<std::size_t>(gone), "retir\xC3\xA9", "retir\xC3\xA9s");
         lead += " \xC2\xB7 du " + ch::fr::ddmm(data_->period.first) + " au " + ch::fr::ddmm(data_->period.last) + ", " + compareText();
         Color lc = ab::kMuted;
@@ -1813,25 +1454,6 @@ private:
             r.order = order++;
             (a.active() ? rows_ : retired).push_back(std::move(r));
         }
-        // Les demandes recues (l'admin+).
-        if (role == Role::Plus && fetched_.haveRequests)
-            for (const auto& q : fetched_.requests) {
-                AdminRow r;
-                r.kind = AdminRow::Kind::Pending;
-                r.key = q.key;
-                r.id = q.id;
-                r.name = q.name;
-                r.email = q.email;
-                r.pc = q.pc;
-                r.machine = q.machine;
-                r.software = q.software;
-                r.received = q.received;
-                r.fingerprint = q.fingerprint;
-                r.mismatch = q.fingerprintMismatch;
-                r.color = color++;
-                r.order = order++;
-                rows_.push_back(std::move(r));
-            }
         for (auto& r : retired) rows_.push_back(std::move(r));
         // Le choix : garde, sinon le premier admin (la maquette), sinon l'admin+.
         if (!selected()) {
@@ -1850,7 +1472,7 @@ private:
             std::vector<ab::Person> people;
             for (const auto& r : rows_) {
                 ab::Person p;
-                p.kind = r.kind == AdminRow::Kind::Plus ? ab::Person::Kind::Plus : r.kind == AdminRow::Kind::Pending ? ab::Person::Kind::Pending : ab::Person::Kind::Admin;
+                p.kind = r.kind == AdminRow::Kind::Plus ? ab::Person::Kind::Plus : ab::Person::Kind::Admin;
                 p.key = r.key;
                 p.id = r.id;
                 p.name = r.name;
@@ -1863,7 +1485,6 @@ private:
                 p.version = r.version;
                 p.since = r.since;
                 p.retired = r.retired;
-                p.received = r.received;
                 p.seen = r.seen;
                 p.rights = r.rights;
                 p.color = r.kind == AdminRow::Kind::Plus ? 0 : r.order;
@@ -1933,7 +1554,6 @@ private:
     }
 
     static std::string stateText(const AdminRow& r) {
-        if (r.kind == AdminRow::Kind::Pending) return "En attente d'acceptation";
         if (r.retired) return "Retir\xC3\xA9";
         return "Actif";
     }
@@ -1942,12 +1562,12 @@ private:
         const bool busy = host_.busy && host_.busy();
         const bool ready = ws().service().ready();
         add_->setEnabled(ready && !busy);
-        add_->setTooltip(ready ? std::string("Trois \xC3\xA9tapes : son nom ; il installe l'Admin et envoie sa demande ; vous lisez l'empreinte au t\xC3\xA9l\xC3\xA9phone, tu acceptes.")
-                               : std::string("Il faut d'abord le service des licences (Service en ligne) : la demande du futur admin y arrive."));
+        add_->setTooltip(ready ? std::string("Son nom, son profil, le PC de son Studio : son code d'invitation fait de lui un admin d\xC3\xA8s l'installation de XPG Admin.")
+                               : std::string("Il faut d'abord le service des licences (Service en ligne) : le code d'invitation y est v\xC3\xA9rifi\xC3\xA9."));
         reload_->setEnabled(ready && !fetching_);
         const bool configured = ws().service().configured;
         send_->setEnabled(configured && !busy);
-        send_->setTooltip(configured ? std::string("Ta cl\xC3\xA9 d'admin na\xC3\xAEt sur ce PC ; ta demande part au service des licences.")
+        send_->setTooltip(configured ? std::string("Ta cl\xC3\xA9 d'admin na\xC3\xAEt sur ce PC ; ton code d'invitation accept\xC3\xA9, tu es admin.")
                                      : std::string("Il faut d'abord l'adresse du service des licences (R\xC3\xA9gler le service\xE2\x80\xA6)."));
         check_->setEnabled(configured && !busy && !checking_);
     }
@@ -1966,15 +1586,11 @@ private:
         auto out = std::make_shared<Fetched>();
         auto alive = alive_;
         const auto work = [w, role, out] {
+            // 1.51.0 : l'admin+ signe d'abord les admins inscrits par leur code (la liste les montre tout de suite)
+            if (role == Role::Plus) (void)w->admitInvitedAdmins();
             OpResult r = w->serviceAdmins(out->view);
             out->haveView = r.ok;
             if (!r.ok) out->problem = r.message;
-            if (role == Role::Plus) {
-                const OpResult q = w->pendingAdminRequests(out->requests);
-                out->haveRequests = q.ok;
-                if (!q.ok && out->problem.empty()) out->problem = q.message;
-                if (q.ok && r.ok && !out->requests.empty()) r.message += " " + q.message;
-            }
             return r;
         };
         const auto done = [this, alive, out](const OpResult&) {
@@ -1993,9 +1609,9 @@ private:
         showButtons();
     }
 
-    void openAdd(const std::string& requestKey) {
+    void openAdd() {
         auto alive = alive_;
-        host_.openDialog(makeAddAdminDialog(host_, requestKey, [this, alive] {
+        host_.openDialog(makeAddAdminDialog(host_, [this, alive] {
             if (*alive) fetch(false);
         }));
     }
@@ -2015,86 +1631,51 @@ private:
         }));
     }
 
-    void refuseRequest(const std::string& key) {
-        const AdminRow* s = nullptr;
-        for (const auto& r : rows_)
-            if (r.key == key) s = &r;
-        if (!s || s->kind != AdminRow::Kind::Pending) return;
-        const Workspace* w = &ws();
-        auto alive = alive_;
-        if (!host_.runSlow("Refuser la demande de " + s->name, [w, key] { return w->refuseAdmin(key); },
-                           [this, alive](const OpResult& r) {
-                               if (*alive && r.ok) fetch(false);
-                           }))
-            host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
-    }
-
-    void sendRequest() {
-        const std::string name = trimmed(reqName_->text()), email = trimmed(reqEmail_->text());
-        if (name.empty() || email.empty()) {
-            host_.report(OpResult::fail(name.empty() ? "ton nom : l'admin+ le voit dans ta demande" : "ton courriel : l'admin+ s'en sert pour te joindre"));
+    // 1.51.0 : XPG Admin - devenir admin avec le code d'invitation (celui de l'installateur, sinon le champ) ; un code
+    // refuse (inconnu, expire, deja servi) : la phrase du service, le code se retape.
+    void join() {
+        const std::string typed = trimmed(reqCode_->text());
+        const std::string code = typed.empty() ? ws().pendingInvitationCode() : typed;
+        if (code.empty()) {
+            invitationProblem_ = "Tape ton code d'invitation (INV-XXXX-XXXX) : il est dans le message de l'admin+.";
+            lastState_ = "invitation";
+            showButtons();
+            invalidateLayout();
             return;
         }
         const Workspace* w = &ws();
-        auto fp = std::make_shared<std::string>();
         auto alive = alive_;
-        // 1.49.0 (docs/ADMINS.md, par. 12) : XPG Admin envoie sa demande avec le code d'invitation (invitation.txt, sinon
-        // le champ) ; un code refuse se retape.
-        if (license_admin::classique()) {
-            const std::string typed = trimmed(reqCode_->text());
-            const std::string code = typed.empty() ? ws().pendingInvitationCode() : typed;
-            if (code.empty()) {
-                invitationProblem_ = "Tape ton code d'invitation (INV-XXXX-XXXX) : il est dans le message de l'admin+.";
-                lastState_ = "invitation";
-                showButtons();
-                invalidateLayout();
-                return;
-            }
-            auto refused = std::make_shared<bool>(false);
-            if (!host_.runSlow("Demande pour devenir admin", [w, name, email, code, refused] { return w->requestAdminInvited(name, email, code, refused.get()); },
-                               [this, alive, refused](const OpResult& r) {
-                                   if (!*alive) return;
-                                   if (r.ok) {
-                                       invitationProblem_.clear();
-                                       reqCode_->setText({});
-                                       lastState_ = "attente";
-                                       lastCheck_ = ws().now();
-                                   } else if (*refused) {
-                                       invitationProblem_ = r.message.rfind("Refus\xC3\xA9 : ", 0) == 0 ? r.message.substr(10) : r.message;
-                                       if (!invitationProblem_.empty() && invitationProblem_[0] >= 'a' && invitationProblem_[0] <= 'z')
-                                           invitationProblem_[0] = static_cast<char>(invitationProblem_[0] - 'a' + 'A');
-                                       lastState_ = "invitation";
-                                   }
-                                   showButtons();
-                                   invalidateLayout();
-                               }))
-                host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
-            return;
-        }
-        if (!host_.runSlow("Demande pour devenir admin", [w, name, email, fp] { return w->requestAdmin(name, email, fp.get()); },
-                           [this, alive](const OpResult& r) {
+        auto refused = std::make_shared<bool>(false);
+        if (!host_.runSlow("Devenir admin (ton code d'invitation)", [w, code, refused] { return w->joinWithInvitation(code, refused.get()); },
+                           [this, alive, refused](const OpResult& r) {
                                if (!*alive) return;
                                if (r.ok) {
-                                   lastState_ = "attente";
+                                   invitationProblem_.clear();
+                                   reqCode_->setText({});
+                                   lastState_ = r.output == "admis" ? std::string("admis") : std::string("inscrit");
                                    lastCheck_ = ws().now();
+                               } else {
+                                   invitationProblem_ = sentence(r.message.rfind("Refus\xC3\xA9 : ", 0) == 0 ? r.message.substr(10) : r.message);
+                                   lastState_ = "invitation";
                                }
+                               (void)refused;
+                               showButtons();
+                               invalidateLayout();
                            }))
             host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
     }
 
-    void checkRequest() {
+    void checkJoin() {
         if (checking_) return;
         const Workspace* w = &ws();
         auto x = std::make_shared<AdminRefresh>();
         auto alive = alive_;
         checking_ = true;
-        if (!host_.runSlow("Ta demande d'admin", [w, x] { return w->refreshAdminState(nullptr, x.get()); },
+        if (!host_.runSlow("Ton ajout comme admin", [w, x] { return w->refreshAdminState(nullptr, x.get()); },
                            [this, alive, x](const OpResult&) {
                                if (!*alive) return;
                                checking_ = false;
-                               lastState_ = x->accepted ? std::string("acceptee") : x->requestState;
-                               // 1.49.0 : un code refuse, pas encore retape : la demande n'est pas partie (le champ reste)
-                               if (lastState_ == "aucune" && !invitationProblem_.empty()) lastState_ = "invitation";
+                               lastState_ = x->admitted ? std::string("admis") : x->joinState;
                                lastCheck_ = ws().now();
                                showButtons();
                                invalidate();
@@ -2105,6 +1686,12 @@ private:
         showButtons();
     }
 
+    // Une phrase : une majuscule, un point.
+    static std::string sentence(std::string s) {
+        if (!s.empty() && s[0] >= 'a' && s[0] <= 'z') s[0] = static_cast<char>(s[0] - 'a' + 'A');
+        if (!s.empty() && s.back() != '.' && s.back() != '!' && s.back() != '?') s += '.';
+        return s;
+    }
 
     [[nodiscard]] int rowAt(gfx::Point p) const {
         if (!rowsRect_.contains(p)) return -1;
@@ -2153,14 +1740,12 @@ private:
         const Workspace& w = ws();
         // Le titre et sa ligne.
         r.drawText({x0_, titleY_}, "Administrateurs", gfx::semibold(kF28), c.text);
-        int active = 0, waiting = 0, gone = 0;
+        int active = 0, gone = 0;
         for (const auto& row : rows_) {
-            if (row.kind == AdminRow::Kind::Pending) ++waiting;
-            else if (row.retired) ++gone;
+            if (row.retired) ++gone;
             else ++active;
         }
         std::string lead = "Les PC o\xC3\xB9 l'Admin est install\xC3\xA9 \xC2\xB7 " + count(static_cast<std::size_t>(active), "actif", "actifs");
-        if (waiting) lead += ", " + std::to_string(waiting) + " en attente";
         if (gone) lead += ", " + count(static_cast<std::size_t>(gone), "retir\xC3\xA9", "retir\xC3\xA9s");
         lead += w.role() == Role::Retired ? std::string(" \xC2\xB7 ton acc\xC3\xA8s d'admin a \xC3\xA9t\xC3\xA9 retir\xC3\xA9") : std::string(" \xC2\xB7 tu es admin");
         if (fetching_) lead += " \xC2\xB7 relev\xC3\xA9 en cours\xE2\x80\xA6";
@@ -2257,39 +1842,31 @@ private:
     void layoutNone(const Rect& b) {
         titleY_ = b.y + 26.f;
         const float top = titleY_ + 84.f;
-        const float gap = 20.f;
-        const float cw = std::min(560.f, (w_ - gap) * 0.5f);
-        // 1.49.0 (docs/ADMINS.md, par. 12) : XPG Admin (l'Admin classique) n'a que le chemin de l'admin (B, l'invitation) ;
-        // l'Admin+ sans la cle de l'editeur n'a que la cle de l'editeur (A : la creer, la restaurer), jamais B.
+        // 1.49.0 : XPG Admin (l'Admin classique) n'a que le chemin de l'admin (1.51.0 : son code d'invitation) ;
+        // l'Admin+ sans la cle de l'editeur n'a que la cle de l'editeur (la creer, la restaurer).
         if (license_admin::classique()) {
             noneA_ = {};
-            noneB_ = {x0_, top, std::min(640.f, w_), 430.f};
+            noneB_ = {x0_, top, std::min(640.f, w_), 330.f};
             layoutForm(noneB_);
             return;
         }
         noneA_ = {x0_, top, std::min(640.f, w_), 330.f};
         noneB_ = {};
-        (void)cw;
-        (void)gap;
         const float bx = noneA_.x + 24.f;
         createKey_->setBounds({bx, noneA_.bottom() - 62.f, buttonWidth(*createKey_, 200.f), 38.f});
         restore_->setBounds({createKey_->bounds().right() + 10.f, noneA_.bottom() - 62.f, buttonWidth(*restore_, 160.f), 38.f});
         show(createKey_, true);
         show(restore_, true);
     }
+    // 1.51.0 : la carte << Ton code d'invitation >> (XPG Admin) - le code de l'installateur (dit), sinon le champ.
     void layoutForm(const Rect& card) {
         const float fx = card.x + 24.f, fw = card.w - 48.f;
-        reqName_->setBounds({fx, card.y + 178.f, fw, 34.f});
-        reqEmail_->setBounds({fx, card.y + 246.f, fw, 34.f});
-        send_->setBounds({fx, card.bottom() - 62.f, buttonWidth(*send_, 180.f), 38.f});
-        show(reqName_, true);
-        show(reqEmail_, true);
-        // 1.49.0 : XPG Admin - le code d'invitation : celui de l'installateur (dit), sinon le champ
-        fileCode_ = license_admin::classique() ? ws().pendingInvitationCode() : std::string();
-        if (license_admin::classique() && fileCode_.empty()) {
-            reqCode_->setBounds({fx, card.y + 314.f, std::min(fw, 260.f), 34.f});
+        fileCode_ = license_admin::classique() && lastState_ != "invitation" ? ws().pendingInvitationCode() : std::string();
+        if (fileCode_.empty()) {
+            reqCode_->setBounds({fx, card.y + 158.f, std::min(fw, 260.f), 36.f});
             show(reqCode_, true);
         }
+        send_->setBounds({fx, card.bottom() - 62.f, buttonWidth(*send_, 170.f), 38.f});
         show(send_, true);
         if (!ws().service().configured) {
             service_->setBounds({send_->bounds().right() + 10.f, card.bottom() - 62.f, buttonWidth(*service_, 150.f), 38.f});
@@ -2305,13 +1882,13 @@ private:
         // 1.49.0 : l'Admin classique, le chemin de l'admin seul ; l'Admin+, la cle de l'editeur seule (et la phrase du contrat).
         const bool classic = license_admin::classique();
         r.drawText({x0_, titleY_ + 40.f},
-                   fit(r, classic ? std::string("Ce PC n'a encore aucune cl\xC3\xA9 d'admin : ta demande part avec ton invitation, l'admin+ l'accepte.")
+                   fit(r, classic ? std::string("Ce PC n'a encore aucune cl\xC3\xA9 d'admin : ton code d'invitation fait de lui un admin.")
                                   : std::string("Ce programme est celui de l'admin+. Un admin installe XPG Admin, re\xC3\xA7u avec son invitation."),
                        kF14, w_),
                    kF14, c.textMuted);
         if (classic) {
             cardBox(r, th, noneB_);
-            paintForm(ctx, noneB_, false);
+            paintForm(ctx, noneB_);
             return;
         }
         // A : la cle de l'editeur
@@ -2331,7 +1908,7 @@ private:
         // B (devenir admin) : jamais dans l'Admin+ (1.49.0) - un admin installe XPG Admin.
     }
 
-    void paintForm(const ui::PaintContext& ctx, const Rect& card, bool again) {
+    void paintForm(const ui::PaintContext& ctx, const Rect& card) {
         auto& r = ctx.r;
         const auto& th = ctx.theme;
         const auto& c = th.color;
@@ -2339,34 +1916,25 @@ private:
         const Rect ib{fx, card.y + 24.f, 40.f, 40.f};
         r.fillRoundedRect(ib, rgb(0x0E7490), 11.f);
         ui::drawIcon(r, ui::Icon::User, {ib.x + 11.f, ib.y + 11.f, 18.f, 18.f}, rgb(0xFFFFFF));
-        r.drawText({fx + 54.f, card.y + 26.f}, again ? "Envoyer ta demande de nouveau" : "Demander \xC3\xA0 devenir admin", gfx::semibold(kF16), c.text);
-        r.drawText({fx + 54.f, card.y + 48.f}, "ta cl\xC3\xA9 na\xC3\xAEt sur ce PC \xC2\xB7 l'admin+ la certifie", kF13, c.textMuted);
-        const bool classic = license_admin::classique();
+        r.drawText({fx + 54.f, card.y + 26.f}, "Ton code d'invitation", gfx::semibold(kF16), c.text);
+        r.drawText({fx + 54.f, card.y + 48.f}, "ta cl\xC3\xA9 na\xC3\xAEt sur ce PC \xC2\xB7 le code fait de toi un admin", kF13, c.textMuted);
         (void)drawWrapped(r, fx, card.y + 82.f, fw,
-                          classic ? std::string("Donne ton nom et ton courriel : ta demande part au service avec ton code d'invitation. L'Admin te montre "
-                                                "ensuite 6 chiffres \xC3\xA0 dire \xC3\xA0 l'admin+.")
-                                  : std::string("L'admin+ t'a fait installer l'Admin ? Donne ton nom et ton courriel : ta demande part au service, l'admin+ "
-                                                "t'appelle et tu lui lis ton empreinte."),
+                          "Le code est dans le message de l'admin+ (INV-XXXX-XXXX, valable 48 h, une seule fois). Accept\xC3\xA9, tu es admin avec le profil qu'il "
+                          "a choisi : ni demande, ni code \xC3\xA0 lui dire.",
                           kF14, c.text, 21.f, 3);
-        r.drawText({fx, reqName_->bounds().y - 20.f}, "Pr\xC3\xA9nom et nom", gfx::semibold(kF13), c.text);
-        r.drawText({fx, reqEmail_->bounds().y - 20.f}, "Courriel", gfx::semibold(kF13), c.text);
-        float below = reqEmail_->bounds().bottom() + 14.f;
-        if (classic) {
-            // 1.49.0 : le code d'invitation (pose par l'installateur, ou a taper ; refuse : la phrase du service)
-            if (!fileCode_.empty()) {
-                r.drawText({fx, card.y + 300.f}, "Code d'invitation", gfx::semibold(kF13), c.text);
-                r.drawText({fx, card.y + 322.f}, fit(r, fileCode_ + " (pos\xC3\xA9 par l'installateur)", kF14, fw), kF14, c.textMuted);
-                below = card.y + 348.f;
-            } else {
-                r.drawText({fx, reqCode_->bounds().y - 20.f}, "Code d'invitation", gfx::semibold(kF13), c.text);
-                r.drawText({reqCode_->bounds().right() + 12.f, reqCode_->bounds().y + 9.f},
-                           fit(r, "dans le message de l'admin+ (48 h)", kF12, std::max(10.f, fx + fw - reqCode_->bounds().right() - 12.f)), kF12, c.textMuted);
-                below = reqCode_->bounds().bottom() + 8.f;
-            }
-            if (!invitationProblem_.empty()) {
-                (void)drawWrapped(r, fx, below, fw, invitationProblem_, kF13, c.error, 18.f, 2);
-                below += 20.f;
-            }
+        float below = card.y + 206.f;
+        if (!fileCode_.empty()) {
+            r.drawText({fx, card.y + 140.f}, "Code d'invitation", gfx::semibold(kF13), c.text);
+            r.drawText({fx, card.y + 162.f}, fit(r, fileCode_ + " (pos\xC3\xA9 par l'installateur)", kF14, fw), kF14, c.textMuted);
+        } else {
+            r.drawText({fx, reqCode_->bounds().y - 20.f}, "Code d'invitation", gfx::semibold(kF13), c.text);
+            r.drawText({reqCode_->bounds().right() + 12.f, reqCode_->bounds().y + 10.f},
+                       fit(r, "dans le message de l'admin+ (48 h)", kF12, std::max(10.f, fx + fw - reqCode_->bounds().right() - 12.f)), kF12, c.textMuted);
+            below = reqCode_->bounds().bottom() + 10.f;
+        }
+        if (!invitationProblem_.empty()) {
+            (void)drawWrapped(r, fx, below, fw, invitationProblem_, kF13, c.error, 18.f, 2);
+            below += 38.f;
         }
         if (!ws().service().configured)
             (void)drawWrapped(r, fx, below, fw,
@@ -2374,20 +1942,29 @@ private:
                               kF13, c.warning, 19.f, 3);
     }
 
-    // ------------------------------------------------------------------ en attente
+    // ------------------------------------------------------------------ ajout en cours (1.51.0)
+    // Le code est accepte (ou une cle d'avant attend) : l'Admin+ signe la cle d'office des qu'il est en ligne. Rien a lire,
+    // rien a dire ; la coquille regarde toutes les 15 s. Le service n'a pas d'inscription pour cette cle (une cle d'avant,
+    // un code refuse) : la carte du code, pour le taper.
     void layoutPending(const Rect& b) {
         titleY_ = b.y + 26.f;
         const float top = titleY_ + 84.f;
         const float cw = std::min(640.f, w_);
-        pendingCard_ = {x0_, top, cw, 470.f};
+        pendingCard_ = {x0_, top, cw, 330.f};
         check_->setBounds({pendingCard_.x + 24.f, pendingCard_.bottom() - 60.f, buttonWidth(*check_, 170.f), 38.f});
         show(check_, true);
-        requestSent_ = ws().account().requestSent != 0;   // 1.49.0 : une demande d'avant (l'empreinte) reste montree
-        if (lastState_ == "refusee" || lastState_ == "aucune" || lastState_ == "invitation") {
-            noneB_ = {pendingCard_.right() + 20.f, top, std::max(360.f, std::min(520.f, x0_ + w_ - pendingCard_.right() - 20.f)), 430.f};
-            if (noneB_.right() > x0_ + w_ + 1.f) noneB_ = {x0_, pendingCard_.bottom() + 20.f, cw, 430.f};
+        if (pendingUnknown()) {
+            noneB_ = {pendingCard_.right() + 20.f, top, std::max(360.f, std::min(520.f, x0_ + w_ - pendingCard_.right() - 20.f)), 330.f};
+            if (noneB_.right() > x0_ + w_ + 1.f) noneB_ = {x0_, pendingCard_.bottom() + 20.f, cw, 330.f};
             layoutForm(noneB_);
         }
+    }
+
+    // Une cle sans inscription connue : le service n'en a pas (<< aucune >>), un code refuse, ou une cle d'avant la 1.51
+    // (aucune inscription notee sur ce poste) - la carte du code, pour le taper.
+    [[nodiscard]] bool pendingUnknown() const {
+        if (lastState_ == "aucune" || lastState_ == "invitation") return true;
+        return lastState_.empty() && ws().account().joinedAt == 0;
     }
 
     void paintPending(const ui::PaintContext& ctx) {
@@ -2395,64 +1972,48 @@ private:
         const auto& th = ctx.theme;
         const auto& c = th.color;
         const Workspace& w = ws();
+        const AccountInfo a = w.account();
+        const bool unknown = pendingUnknown();
         r.drawText({x0_, titleY_}, "Administrateurs", gfx::semibold(kF28), c.text);
-        r.drawText({x0_, titleY_ + 40.f}, fit(r, "Ta demande pour devenir admin attend l'acceptation de l'admin+.", kF14, w_), kF14, c.textMuted);
+        r.drawText({x0_, titleY_ + 40.f},
+                   fit(r, unknown ? std::string("Ce PC a une cl\xC3\xA9 d'admin, pas encore dans la liste : ton code d'invitation l'y fait entrer.")
+                                  : std::string("Ton code d'invitation est accept\xC3\xA9 : tu es admin d\xC3\xA8s que l'Admin+ a sign\xC3\xA9 ta cl\xC3\xA9 (tout seul)."),
+                       kF14, w_),
+                   kF14, c.textMuted);
         cardBox(r, th, pendingCard_);
-        const Rect band{pendingCard_.x + 1.f, pendingCard_.y + 1.f, pendingCard_.w - 2.f, 44.f};
-        r.fillRoundedRect(band, rgb(0x111A2E), 11.f);
-        r.fillRect({band.x, band.y + 30.f, band.w, 14.f}, rgb(0x111A2E));
-        r.drawText({band.x + 18.f, band.y + 13.f}, "License Manager", gfx::semibold(kF14), rgb(0xFFFFFF));
-        const std::string tag = (w.adminKey().name.empty() ? std::string("toi") : w.adminKey().name) + " \xC2\xB7 admin en attente";
-        r.drawText({band.right() - 18.f - r.measure(tag, kF13).width, band.y + 14.f}, tag, kF13, rgb(0xC7D0E0));
         const float fx = pendingCard_.x + 24.f, fw = pendingCard_.w - 48.f;
-        float y = band.bottom() + 20.f;
-        // 1.49.0 (docs/ADMINS.md, par. 12) : XPG Admin, une demande partie avec l'invitation - les 6 chiffres a dire ; pas
-        // encore partie (un code refuse) - rien a dire ; sinon (une demande d'avant) l'empreinte au telephone.
-        const std::string code = w.pendingConfirmation();
-        if (!code.empty() && lastState_ != "invitation") {
-            r.drawText({fx, y}, "L'admin+ doit accepter ta cl\xC3\xA9", gfx::semibold(FontId{20}), c.text);
-            y += 32.f;
-            r.drawText({fx, y}, fit(r, "Dis ce code \xC3\xA0 ton admin+ : " + code, gfx::semibold(kF14), fw), gfx::semibold(kF14), c.text);
-            y += 30.f;
-            paintFingerprint(r, th, {fx, y, std::min(fw, 360.f), 84.f}, code, 2, 84.f, gfx::semibold(FontId{34}));
-            y += 98.f;
-            (void)drawWrapped(r, fx, y, fw, "Il le tape dans ses Demandes d'admin : c'est ce qui prouve que la demande vient de toi.", kF13, c.textMuted, 19.f, 2);
-            y += 48.f;
-        } else if (license_admin::classique() && code.empty() && (lastState_ == "invitation" || !requestSent_)) {
-            r.drawText({fx, y}, "Ta demande n'est pas encore partie", gfx::semibold(FontId{20}), c.text);
-            y += 32.f;
-            (void)drawWrapped(r, fx, y, fw, "Tape ton code d'invitation (dans le message de l'admin+, valable 48 h), puis envoie ta demande.", kF14, c.textMuted, 21.f, 3);
-            y += 176.f;
-        } else {
-            r.drawText({fx, y}, "L'admin+ doit accepter ta cl\xC3\xA9", gfx::semibold(FontId{20}), c.text);
-            y += 32.f;
-            r.drawText({fx, y}, "Il va t'appeler. Lis-lui ton empreinte :", kF14, c.textMuted);
-            y += 30.f;
-            paintFingerprint(r, th, {fx, y, fw, 132.f}, w.adminKey().fingerprint, 3, 62.f, gfx::semibold(FontId{26}));
-            y += 146.f;
+        float y = pendingCard_.y + 24.f;
+        drawTick(r, fx, y + 6.f, unknown ? c.textDisabled : c.ok);
+        r.drawText({fx + 26.f, y}, unknown ? std::string("Pas encore de code accept\xC3\xA9 pour ta cl\xC3\xA9") : std::string("Tu es admin : ajout en cours"),
+                   gfx::semibold(FontId{20}), c.text);
+        y += 36.f;
+        std::string who = a.name.empty() || a.name == "Admin XPG" ? std::string() : a.name;
+        if (!a.profile.empty()) who += (who.empty() ? "" : " \xC2\xB7 ") + std::string("profil ") + a.profile;
+        if (!a.invitationId.empty()) who += (who.empty() ? "" : " \xC2\xB7 ") + std::string("invitation ") + a.invitationId;
+        if (!who.empty()) {
+            r.drawText({fx, y}, fit(r, who, kF14, fw), kF14, c.text);
+            y += 28.f;
         }
-        r.drawText({fx, y}, "En attendant, l'Admin ne peut rien signer.", kF14, c.text);
-        y += 26.f;
-        std::string st = "L'Admin regarde ta demande seul, toutes les 15 s.";
+        (void)drawWrapped(r, fx, y, fw,
+                          unknown ? std::string("Le service n'a pas d'inscription pour ta cl\xC3\xA9 : tape le code d'invitation que t'envoie l'admin+ (\xC3\xA0 droite).")
+                                  : std::string("L'Admin+ de l'\xC3\xA9" "diteur ajoute ta cl\xC3\xA9 \xC3\xA0 la liste sign\xC3\xA9" "e des admins d'office, d\xC3\xA8s qu'il est en ligne : "
+                                                "rien \xC3\xA0 faire, rien \xC3\xA0 lui dire. Tes droits s'ouvrent alors tout seuls, puis l'archive arrive."),
+                          kF14, c.textMuted, 21.f, 4);
+        y += 92.f;
+        std::string st = "XPG Admin regarde seul, toutes les 15 s.";
         Color ink = c.textMuted;
-        if (lastState_ == "refusee") {
-            st = "L'admin+ a refus\xC3\xA9 ta demande. Parle-lui, puis envoie-la de nouveau.";
+        if (lastState_ == "invitation" && !invitationProblem_.empty()) {
+            st = invitationProblem_;
             ink = c.error;
-        } else if (lastState_ == "invitation") {
-            st = invitationProblem_.empty() ? std::string("Ta demande n'est pas partie : tape ton code d'invitation.") : invitationProblem_;   // 1.49.0
-            ink = c.error;
-        } else if (lastState_ == "aucune") {
-            st = "Le service n'a plus ta demande : envoie-la de nouveau.";
-            ink = c.warning;
         } else if (lastCheck_) {
-            st = "V\xC3\xA9rifi\xC3\xA9" "e " + agoFr(w.now(), lastCheck_) + " : en attente. " + st;
+            st = "V\xC3\xA9rifi\xC3\xA9 " + agoFr(w.now(), lastCheck_) + ". " + st;
         }
         (void)drawWrapped(r, fx, y, fw, st, kF13, ink, 19.f, 2);
         r.drawText({check_->bounds().right() + 14.f, check_->bounds().y + 11.f}, fit(r, "cl\xC3\xA9 " + w.adminKey().id, kF12, fw - check_->bounds().w - 20.f), kF12,
                    c.textMuted);
-        if (lastState_ == "refusee" || lastState_ == "aucune" || lastState_ == "invitation") {
+        if (unknown) {
             cardBox(r, th, noneB_);
-            paintForm(ctx, noneB_, true);
+            paintForm(ctx, noneB_);
         }
     }
 
@@ -2485,7 +2046,6 @@ private:
     ui::DatePicker*        to_{nullptr};
     ui::Button*            deploy_{nullptr};
     ab::LinkButton*        back_{nullptr};
-    ab::LinkButton*        requestsLink_{nullptr};   // 1.47.0 (agent A) : << N demandes d'admin en attente : Voir la liste >>
     ui::Button*            cardJournal_{nullptr};
     ui::Button*            cardRights_{nullptr};
     ui::Button*            cardRetire_{nullptr};
@@ -2497,11 +2057,8 @@ private:
     ab::ScrolledView*      card_{nullptr};
     ui::Button*            createKey_{nullptr};
     ui::Button*            restore_{nullptr};
-    ui::InputText*         reqName_{nullptr};
-    ui::InputText*         reqEmail_{nullptr};
-    ui::InputText*         reqCode_{nullptr};      // 1.49.0 : le code d'invitation (XPG Admin, sans invitation.txt)
-    std::string            fileCode_, invitationProblem_;   // 1.49.0 : celui de l'installateur ; la phrase d'un code refuse
-    bool                   requestSent_{false};               // 1.49.0 : demande-admin.json (une demande est partie)
+    ui::InputText*         reqCode_{nullptr};      // 1.51.0 : le code d'invitation (XPG Admin, sans invitation.txt)
+    std::string            fileCode_, invitationProblem_;   // celui de l'installateur ; la phrase d'un code refuse
     ui::Button*            send_{nullptr};
     ui::Button*            service_{nullptr};
     ui::Button*            check_{nullptr};
@@ -2519,8 +2076,8 @@ private:
 
 PagePtr makeAdminsPage(ShellHost host) { return std::make_unique<AdminsPage>(std::move(host)); }
 
-menu::MenuPtr makeAddAdminDialog(ShellHost host, std::string requestKey, std::function<void()> done) {
-    return std::make_unique<AddAdminDialog>(std::move(host), std::move(requestKey), std::move(done));
+menu::MenuPtr makeAddAdminDialog(ShellHost host, std::function<void()> done) {
+    return std::make_unique<AddAdminDialog>(std::move(host), std::move(done));
 }
 
 } // namespace license_admin::gui

@@ -20449,7 +20449,8 @@ const std::vector<Topic>& topics() {
                          "`Vue_Accueil.Pompe_1`, ou `Pompe_1` dans sa vue\tName, Kind, View (lecture) ; X, "
                          "Y, Width, Height, Visible, Enabled, Text, Fill, Stroke, Font, Image, Opacity, "
                          "Blink, Layer, Style ; Parent, Children, Pressed, Focused, Shown (lecture) ; toute "
-                         "autre propri\xC3\xA9t\xC3\xA9 par son nom\nFont\tune police du projet\tName, "
+                         "autre propri\xC3\xA9t\xC3\xA9 par son nom ; Get() : un POINTER TO Object vers "
+                         "lui\nFont\tune police du projet\tName, "
                          "Family, Style, Glyphs, Format\nTexture\tune image des ressources\tName, Width, "
                          "Height, Format\nSound\tun son des ressources ou de la biblioth\xC3\xA8que de "
                          "sons\tName, Duration, Playing, Volume\nStyle\tun style nomm\xC3\xA9 (du projet ou "
@@ -20491,9 +20492,36 @@ const std::vector<Topic>& topics() {
                          "sans objet d\xC3\xA9place l'objet de l'action.", {}},
              {K::Bullet, "Une **fonction du projet** du m\xC3\xAAme nom (une fonction `Show` \xC3\xA0 toi) "
                          "passe avant la native.", {}},
+             {K::Heading, "Un pointeur vers un objet : Vue.Objet, Get(), ADR", {}},
+             {K::Paragraph, "Un objet \xC3\xA9" "crit **sans propri\xC3\xA9t\xC3\xA9** (`Vue_Accueil.Carte_1`, "
+                         "`Carte_1` dans un script de sa vue, `Pop_Info.Bouton_OK` dans une popup) "
+                         "d\xC3\xA9signe l'objet lui-m\xC3\xAAme : il va dans une variable `Object`, `REF_TO "
+                         "Object` ou `POINTER TO Object`. La m\xC3\xA9thode **Get()** de chaque objet rend un "
+                         "`POINTER TO Object` vers lui, comme `ADR(Vue_Accueil.Carte_1)`.", {}},
+             {K::Code, "VAR\n    ObjPtr : POINTER TO Object;\nEND_VAR\nObjPtr := Vue_Accueil.Carte_1;      "
+                         "(* ou Vue_Accueil.Carte_1.Get(), ADR(Vue_Accueil.Carte_1) *)\nIF ObjPtr <> NULL "
+                         "THEN\n    ObjPtr^.Visible := FALSE;       (* l'objet de la vue montr\xC3\xA9" "e se "
+                         "cache *)\n    Largeur := ObjPtr^.Width;\n    MoveBy(ObjPtr^, 10, 0);         (* les "
+                         "fonctions sur les objets le prennent *)\nEND_IF;", "ST"},
+             {K::Code, "/* les memes noms, l'API de la cible */\nObject *objPtr = Vue_Accueil.Carte_1.Get();   /* ou "
+                         "&Vue_Accueil.Carte_1 */\nif (objPtr != NULL) {\n    objPtr->Visible = 0;\n    Largeur = "
+                         "objPtr->Width;\n    MoveBy(objPtr, 10, 0);\n}", "C"},
+             {K::Code, "Object* objPtr = Vue_Accueil.Carte_1.Get();     // ou &Vue_Accueil.Carte_1\nif (objPtr) {\n    "
+                         "objPtr->Visible = false;\n    Largeur = objPtr->Width;\n    MoveBy(objPtr, 10, 0);\n}", "C++"},
+             {K::Bullet, "Le pointeur se compare \xC3\xA0 **NULL** (et \xC3\xA0 un autre : `=` si c'est le "
+                         "m\xC3\xAAme objet), se passe \xC3\xA0 une fonction (`p : POINTER TO Object`), et `p^` "
+                         "se lit et s'\xC3\xA9" "crit comme l'objet : `p^.X`, `p^.Text := 'Pr\xC3\xAAt'`, "
+                         "`Hide(p^)`.", {}},
+             {K::Bullet, "**L\xC3\xA0 o\xC3\xB9 une valeur simple est attendue** (`R := Vue_Accueil.Carte_1;` "
+                         "avec R un nombre, un texte ou un BOOL ; `IF Vue_Accueil.Carte_1 THEN`), il manque la "
+                         "propri\xC3\xA9t\xC3\xA9 : la v\xC3\xA9rification le dit (\xC2\xAB chemin incomplet "
+                         "\xC2\xBB) - \xC3\xA9" "cris `Vue_Accueil.Carte_1.Visible`.", {}},
+             {K::Bullet, "L'**aide \xC3\xA0 la saisie** propose `Get()` apr\xC3\xA8s `Vue_Accueil.Carte_1.` (et "
+                         "apr\xC3\xA8s `o.` ou `p^.`). Une fonction `Get` d'un symbole passe avant.", {}},
              {K::Heading, "Les fonctions sur les objets (Natives \xE2\x80\xBA Objets)", {}},
              {K::Table, "Geste\tFonctions\nTrouver\tGetObject(nom) : POINTER TO Object (NULL s'il n'existe "
-                         "pas) ; ObjectsOf(motif), ObjectsIn(X, Y, W, H), ObjectsOfKind('Voyant') : LIST OF "
+                         "pas) ; Vue.Objet.Get() : POINTER TO Object (l'objet lui-m\xC3\xAAme, comme ADR(Vue.Objet)) "
+                         "; ObjectsOf(motif), ObjectsIn(X, Y, W, H), ObjectsOfKind('Voyant') : LIST OF "
                          "Object\nModifier, copier\tEditObject(Obj.Prop, valeur) ; CopyObjectTo(source, "
                          "cible, {Source.Width, \xE2\x80\xA6}) - {} : tout sauf le nom ; ResetObject(obj) ; "
                          "ObjectProp(obj, 'cl\xC3\xA9')\nPosition, taille\tMoveObject(obj, X, Y), MoveBy, "
@@ -20542,7 +20570,7 @@ const std::vector<Topic>& topics() {
                          "sous-ensemble du langage, dit par **En-t\xC3\xAAte du projet**).", {}},
          },
          {"scripts", "cycle-vue", "couleurs-semantiques", "styles-nommes", "ressources", "bibliotheque-polices"},
-         {"Object", "Font", "Texture", "Sound", "Style", "This", "GetObject", "ObjectsOf", "ObjectsIn", "ObjectsOfKind", "EditObject", "CopyObjectTo", "ResetObject", "ObjectProp", "MoveObject", "MoveBy", "ResizeObject", "ResizeBy", "PlaceObject", "AlignTop", "AlignBottom", "AlignLeft", "AlignRight", "AlignCenterH", "AlignCenterV", "AlignCenter", "JustifyH", "JustifyV", "SameWidth", "SameHeight", "SameSize", "ArrangeGrid", "ShowIf", "HideIf", "EnableIf", "BlinkIf", "Show", "Hide", "Enable", "Disable", "BringToFront", "SendToBack", "BringForward", "SetLayer", "GetResource", "GetFont", "GetTexture", "GetSound", "GetStyle", "Fonts", "Textures", "Sounds", "Styles", "TextWidth", "HasGlyph", "Play", "Stop", "ApplyStyle", "StyleValue", "Color"},
+         {"Object", "Font", "Texture", "Sound", "Style", "This", "GetObject", "ObjectsOf", "ObjectsIn", "ObjectsOfKind", "EditObject", "CopyObjectTo", "ResetObject", "ObjectProp", "MoveObject", "MoveBy", "ResizeObject", "ResizeBy", "PlaceObject", "AlignTop", "AlignBottom", "AlignLeft", "AlignRight", "AlignCenterH", "AlignCenterV", "AlignCenter", "JustifyH", "JustifyV", "SameWidth", "SameHeight", "SameSize", "ArrangeGrid", "ShowIf", "HideIf", "EnableIf", "BlinkIf", "Show", "Hide", "Enable", "Disable", "BringToFront", "SendToBack", "BringForward", "SetLayer", "GetResource", "GetFont", "GetTexture", "GetSound", "GetStyle", "Fonts", "Textures", "Sounds", "Styles", "TextWidth", "HasGlyph", "Play", "Stop", "ApplyStyle", "StyleValue", "Color", "Get"},
          {"scripts", "fonctions"},
          {},
          "",

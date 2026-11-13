@@ -17,8 +17,8 @@ const lea = nouvelleCle(); // licence_creer, demandes
 const marc = nouvelleCle(); // offres (puis retire)
 const anne = nouvelleCle(); // annonces, licence_prolonger, licence_revoquer, poste_retirer
 const intrus = nouvelleCle();
-const zoe = nouvelleCle(); // demande a devenir admin (acceptee : << demandes >>)
-const yan = nouvelleCle(); // demande a devenir admin (refusee)
+const zoe = nouvelleCle(); // 1.51.0 : inscrite par son code d'invitation, puis dans la liste (<< demandes >>)
+const yan = nouvelleCle(); // 1.51.0 : un code refuse ; un Admin d'avant sans code (410)
 const EMIS = now(); // les documents ecrits deux fois (manifestes, messages) : le meme texte
 const posteDe = () => hasard(16); // l'identifiant d'une machine (systemMachineId)
 const machines = new Map([lea, marc, anne].map((k) => [k.hex, posteDe()]));
@@ -232,7 +232,7 @@ describe("les routes d'un admin, selon ses droits (§ 6)", () => {
     it("les routes de l'admin+ seul : 403 droit pour un admin", async () => {
         for (const [m, chemin, corps] of [
             ["GET", "/admin/journal"],
-            ["GET", "/admin/admins/demandes"],
+            ["GET", "/admin/admins/inscrits"],
             ["PUT", "/admin/certificat", { certificat: "x" }],
             ["PUT", "/admin/trousseau", { cle: lea.hex, scelle: "AAAA" }],
             ["GET", "/admin/versions"],
@@ -280,86 +280,98 @@ describe("un admin retire (§ 3, § 6)", () => {
     });
 });
 
-describe("devenir admin : la demande d'admin (§ 4)", () => {
-    const corps = (nom) => ({ nom, courriel: nom.toLowerCase() + "@exemple.invalid", pc: "PC-" + nom.toUpperCase(), poste: hasard(16), logiciel: "XPG-License-Admin 1.44.0" });
+describe("devenir admin : l'inscription par code d'invitation, sans demande (1.51.0, § 4)", () => {
+    const corps = (nom, invitation) => ({ invitation, nom, courriel: nom.toLowerCase() + "@exemple.invalid", pc: "PC-" + nom.toUpperCase(), poste: hasard(16), logiciel: "XPG-Admin 1.51.0" });
+    const inviter = async (nom) => {
+        const r = await appel(svc, "POST", "/admin/admins/invitation", { cle: editeur, corps: { nom, courriel: nom.toLowerCase() + "@exemple.invalid", profil: "Admin LV1" } });
+        assert.equal(r.statut, 201, r.texte);
+        return r.json;
+    };
+    let invZoe = null;
 
-    it("deposer : 201, l'empreinte (24 hexadecimaux en 6 groupes) ; une ligne << demande_admin >>", async () => {
-        const r = await appel(svc, "POST", "/v1/admins/demande", { cle: zoe, corps: corps("Zoé") });
+    it("s'inscrire : 201 inscrit, l'empreinte, l'invitation ; aucune ligne << demande_admin >> au journal", async () => {
+        invZoe = await inviter("Zoé");
+        const r = await appel(svc, "POST", "/v1/admins/inscription", { cle: zoe, corps: corps("Zoé", invZoe.code) });
         assert.equal(r.statut, 201, r.texte);
         const attendue = sha256Hex(zoe.pub).slice(0, 24).toUpperCase().match(/.{4}/g).join(" ");
         assert.equal(r.json.empreinte, attendue);
-        assert.match(r.json.empreinte, /^[0-9A-F]{4}( [0-9A-F]{4}){5}$/);
-        assert.equal(r.json.etat, "attente");
-        const e = await appel(svc, "GET", "/v1/admins/demande?cle=" + zoe.hex, { cle: zoe });
-        assert.equal(e.json.etat, "attente");
-        erreur(await appel(svc, "GET", "/v1/admins/demande?cle=" + yan.hex, { cle: zoe }), 400, "champ");
-        erreur(await appel(svc, "GET", "/v1/admins/demande", { cle: yan }), 404, "demande");
+        assert.equal(r.json.etat, "inscrit");
+        assert.equal(r.json.invitation.id, invZoe.id);
+        assert.equal(r.json.invitation.profil, "Admin LV1");
+        const e = await appel(svc, "GET", "/v1/admins/inscription", { cle: zoe });
+        assert.equal(e.statut, 200, e.texte);
+        assert.equal(e.json.etat, "inscrit");
+        assert.equal(e.json.invitation.id, invZoe.id);
+        erreur(await appel(svc, "GET", "/v1/admins/inscription", { cle: yan }), 404, "inscription");
         const j = await appel(svc, "GET", "/admin/journal?depuis=0", { cle: editeur });
-        const d = j.json.lignes.map((t) => JSON.parse(t)).find((l) => JSON.parse(l.entree).action === "demande_admin");
-        assert.ok(d);
-        assert.equal(JSON.parse(d.entree).detail.cle, zoe.hex);
-        assert.ok(!d.entree.includes("exemple.invalid"), "le courriel n'est pas ecrit au journal");
+        assert.ok(!j.json.lignes.some((t) => JSON.parse(JSON.parse(t).entree).action === "demande_admin"), "plus de demande d'admin au journal");
     });
 
-    it("mal faite : 400 ; une cle deja admin : 409 deja", async () => {
-        erreur(await appel(svc, "POST", "/v1/admins/demande", { cle: yan, corps: { ...corps("Yan"), courriel: "pas une adresse" } }), 400, "champ");
-        erreur(await appel(svc, "POST", "/v1/admins/demande", { cle: yan, corps: { ...corps("Yan"), poste: "123" } }), 400, "champ");
-        erreur(await appel(svc, "POST", "/v1/admins/demande", { cle: yan, corps: { ...corps("Yan"), nom: "" } }), 400, "champ");
-        erreur(await appel(svc, "POST", "/v1/admins/demande", { cle: lea, corps: corps("Léa") }), 409, "deja");
-        erreur(await appel(svc, "POST", "/v1/admins/demande", { cle: editeur, corps: corps("Éditeur") }), 409, "deja");
+    it("mal faite : 400 ; sans code : 400 ; une cle deja admin : 200 admis ; l'editeur : 409", async () => {
+        const inv = await inviter("Yan");
+        erreur(await appel(svc, "POST", "/v1/admins/inscription", { cle: yan, corps: { ...corps("Yan", inv.code), courriel: "pas une adresse" } }), 400, "champ");
+        erreur(await appel(svc, "POST", "/v1/admins/inscription", { cle: yan, corps: { ...corps("Yan", inv.code), poste: "123" } }), 400, "champ");
+        erreur(await appel(svc, "POST", "/v1/admins/inscription", { cle: yan, corps: corps("Yan") }), 400, "champ");
+        const deja = await appel(svc, "POST", "/v1/admins/inscription", { cle: lea, corps: corps("Léa", inv.code) });
+        assert.equal(deja.statut, 200, deja.texte);
+        assert.equal(deja.json.etat, "admis");
+        erreur(await appel(svc, "POST", "/v1/admins/inscription", { cle: editeur, corps: corps("Éditeur", inv.code) }), 409, "deja");
+        // le code n'a pas servi (aucune inscription n'est passee)
+        const ok = await appel(svc, "POST", "/v1/admins/inscription", { cle: nouvelleCle(), corps: corps("Yan", inv.code) });
+        assert.equal(ok.statut, 201, ok.texte);
     });
 
-    it("l'admin+ les voit (empreinte, nom, courriel, PC) ; un admin non", async () => {
-        assert.equal((await appel(svc, "POST", "/v1/admins/demande", { cle: yan, corps: corps("Yan") })).statut, 201);
-        const r = await appel(svc, "GET", "/admin/admins/demandes", { cle: editeur });
-        assert.equal(r.statut, 200);
-        const z = r.json.demandes.find((d) => d.cle === zoe.hex);
+    it("l'admin+ voit les inscrits (GET /admin/admins/inscrits, /admin/etat) ; un admin non", async () => {
+        const r = await appel(svc, "GET", "/admin/admins/inscrits", { cle: editeur });
+        assert.equal(r.statut, 200, r.texte);
+        const z = r.json.inscrits.find((d) => d.cle === zoe.hex);
         assert.equal(z.nom, "Zoé");
         assert.equal(z.courriel, "zoé@exemple.invalid");
         assert.equal(z.pc, "PC-ZOÉ");
         assert.equal(z.id, zoe.id);
         assert.match(z.empreinte, /^[0-9A-F]{4}( [0-9A-F]{4}){5}$/);
-        assert.ok(Number.isInteger(z.recue));
-        assert.equal((await appel(svc, "GET", "/admin/etat", { cle: editeur })).json.admins_demandes, 2);
+        assert.ok(Number.isInteger(z.inscrit));
+        assert.equal(z.invitation.id, invZoe.id);
+        assert.equal(z.invitation.par, editeur.id, "invite par : la cle de l'editeur qui a cree le code");
+        const n = r.json.inscrits.length;
+        assert.equal((await appel(svc, "GET", "/admin/etat", { cle: editeur })).json.admins_inscrits, n);
+        assert.equal((await appel(svc, "GET", "/admin/etat", { cle: editeur })).json.admins_demandes, undefined, "plus de demandes d'admin");
+        erreur(await appel(svc, "GET", "/admin/admins/inscrits", { cle: lea }), 403, "droit");
     });
 
-    it("refuser : etat refusee ; accepter = la publier dans la liste : etat acceptee, la demande close", async () => {
-        assert.equal((await appel(svc, "POST", "/admin/admins/demande/refuser", { cle: editeur, corps: { cle: yan.hex } })).statut, 200);
-        assert.equal((await appel(svc, "GET", "/v1/admins/demande?cle=" + yan.hex, { cle: yan })).json.etat, "refusee");
-        erreur(await appel(svc, "POST", "/admin/admins/demande/refuser", { cle: editeur, corps: { cle: intrus.hex } }), 404, "demande");
+    it("la liste signee qui la porte : admis, l'inscription close ; les routes des demandes d'avant : 410", async () => {
+        const avant = (await appel(svc, "GET", "/admin/admins/inscrits", { cle: editeur })).json.inscrits;
         const r = await publier(liste([fiche(zoe, "Zoé", ["demandes"])]));
         assert.equal(r.statut, 200, r.texte);
-        assert.equal(r.json.demandes_acceptees, 1);
-        assert.equal((await appel(svc, "GET", "/v1/admins/demande?cle=" + zoe.hex, { cle: zoe })).json.etat, "acceptee");
-        assert.deepEqual((await appel(svc, "GET", "/admin/admins/demandes", { cle: editeur })).json.demandes, []);
+        assert.equal(r.json.inscrits_admis, 1);
+        assert.equal((await appel(svc, "GET", "/v1/admins/inscription", { cle: zoe })).json.etat, "admis");
+        const apres = (await appel(svc, "GET", "/admin/admins/inscrits", { cle: editeur })).json.inscrits;
+        assert.equal(apres.length, avant.length - 1);
+        assert.ok(!apres.some((d) => d.cle === zoe.hex));
         assert.equal((await appel(svc, "GET", "/admin/etat", { cle: zoe })).json.role, "admin", "Zoe est admin");
-        erreur(await appel(svc, "POST", "/v1/admins/demande", { cle: zoe, corps: corps("Zoé") }), 409, "deja");
+        erreur(await appel(svc, "GET", "/admin/admins/demandes", { cle: editeur }), 410, "mise_a_jour");
+        erreur(await appel(svc, "GET", "/admin/admins/demandes?toutes=1", { cle: editeur }), 410, "mise_a_jour");
+        erreur(await appel(svc, "POST", "/admin/admins/demande/refuser", { cle: editeur, corps: { cle: yan.hex } }), 410, "mise_a_jour");
     });
 
-    // 1.47.0 : la liste << Demandes d'admin >> de l'Admin (docs/ADMINS.md, par. 4) - les closes aussi ; plusieurs acceptees
-    // d'un coup : UNE liste (numero + 1) qui les porte toutes, chaque demande close.
-    it("?toutes=1 : les closes aussi (etat, maj) ; deux acceptees par une seule liste", async () => {
-        const t = await appel(svc, "GET", "/admin/admins/demandes?toutes=1", { cle: editeur });
-        assert.equal(t.statut, 200, t.texte);
-        const etats = Object.fromEntries(t.json.demandes.map((d) => [d.cle, d.etat]));
-        assert.equal(etats[yan.hex], "refusee");
-        assert.equal(etats[zoe.hex], "acceptee");
-        assert.ok(t.json.demandes.every((d) => Number.isInteger(d.maj) && Number.isInteger(d.recue)));
-        assert.deepEqual((await appel(svc, "GET", "/admin/admins/demandes", { cle: editeur })).json.demandes, [], "sans ?toutes : les seules en attente");
-        erreur(await appel(svc, "GET", "/admin/admins/demandes?toutes=1", { cle: lea }), 403, "droit");
-        const [a1, a2] = [nouvelleCle(), nouvelleCle()];
-        for (const [k, n] of [
-            [a1, "Hugo"],
-            [a2, "Nina"],
-        ])
-            assert.equal((await appel(svc, "POST", "/v1/admins/demande", { cle: k, corps: corps(n) })).statut, 201);
+    // Un XPG Admin 1.49 ou 1.50 (POST /v1/admins/demande) : avec un code, c'est l'inscription (sa reponse d'avant) ; sans, 410.
+    it("compat : un ancien XPG Admin avec un code s'inscrit (etat << attente >> puis << acceptee >>) ; sans code : 410", async () => {
+        erreur(await appel(svc, "POST", "/v1/admins/demande", { cle: yan, corps: { ...corps("Yan"), invitation: undefined } }), 410, "mise_a_jour");
+        const inv = await inviter("Hugo");
+        const hugo = nouvelleCle();
+        const r = await appel(svc, "POST", "/v1/admins/demande", { cle: hugo, corps: corps("Hugo", inv.code) });
+        assert.equal(r.statut, 201, r.texte);
+        assert.equal(r.json.etat, "attente");
+        assert.deepEqual(r.json.invitation, { id: inv.id, nom: "Hugo", profil: "Admin LV1" });
+        assert.equal((await appel(svc, "GET", "/v1/admins/demande?cle=" + hugo.hex, { cle: hugo })).json.etat, "attente");
+        assert.ok((await appel(svc, "GET", "/admin/admins/inscrits", { cle: editeur })).json.inscrits.some((d) => d.cle === hugo.hex), "listee comme inscrite");
         const avant = (await appel(svc, "GET", "/v1/etat")).json.admins;
-        const r = await publier(liste([fiche(zoe, "Zoé", ["demandes"]), fiche(a1, "Hugo", ["licence_creer"]), fiche(a2, "Nina", [])]));
-        assert.equal(r.statut, 200, r.texte);
-        assert.equal(r.json.demandes_acceptees, 2, "les deux closes par la meme liste");
-        assert.equal((await appel(svc, "GET", "/v1/etat")).json.admins, avant + 1, "une seule liste de plus");
-        for (const k of [a1, a2]) assert.equal((await appel(svc, "GET", "/v1/admins/demande?cle=" + k.hex, { cle: k })).json.etat, "acceptee");
-        assert.deepEqual((await appel(svc, "GET", "/admin/admins/demandes", { cle: editeur })).json.demandes, []);
+        const p = await publier(liste([fiche(zoe, "Zoé", ["demandes"]), fiche(hugo, "Hugo", ["licence_creer"])]));
+        assert.equal(p.statut, 200, p.texte);
+        assert.equal((await appel(svc, "GET", "/v1/etat")).json.admins, avant + 1);
+        assert.equal((await appel(svc, "GET", "/v1/admins/demande?cle=" + hugo.hex, { cle: hugo })).json.etat, "acceptee");
+        erreur(await appel(svc, "GET", "/v1/admins/demande?cle=" + hugo.hex, { cle: zoe }), 400, "champ");
+        erreur(await appel(svc, "GET", "/v1/admins/demande", { cle: nouvelleCle() }), 404, "demande");
     });
 });
 

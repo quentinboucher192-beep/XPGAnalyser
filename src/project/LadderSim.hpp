@@ -21,9 +21,16 @@
 //                  un DFB du projet...) est appelee par l'environnement, comme en
 //                  ST ; une fonction (ADD, GT_INT, MOVE, SEL, LIMIT, INT_TO_REAL...)
 //                  est evaluee par l'interpreteur ST ;
-//    saut          ->> ETIQ : si alimente, la suite reprend au reseau d'etiquette ETIQ
-//                  (plus loin seulement : un saut en arriere est refuse, comme
-//                  Control Expert) ; RETURN : la section s'arrete la.
+//    saut          ->> ETIQ (jumpCoil) : si alimente, la suite reprend a la ligne de
+//                  l'etiquette ETIQ (labelCell) ; un saut en arriere est permis, borne
+//                  (une boucle sans fin est dite) ; RETURN (retCoil) : la section
+//                  s'arrete la.
+//
+//  L'ORDRE. Un reseau de Control Expert est fait de LIGNES : des rangees reliees
+//  entre elles (liaisons verticales, blocs sur plusieurs rangees). Les lignes
+//  s'executent de haut en bas, chacune entiere (colonne par colonne) avant la
+//  suivante : une bobine ecrite en haut est lue par un contact plus bas, au meme
+//  cycle.
 //
 //  Tout passe par sim::Environment (lire, ecrire, appeler) : le Runtime d'API
 //  Studio, ou celui d'un autre (une receptivite de GRAFCET ecrite en LD).
@@ -57,6 +64,9 @@ namespace project::ladder {
     [[nodiscard]] const std::vector<std::string>& compileWarnings(const Program&) noexcept;
     [[nodiscard]] const Diagram& diagramOf(const Program&) noexcept;
     [[nodiscard]] const std::string& sectionNameOf(const Program&) noexcept;
+    // Combien de memoires de front (contacts et bobines P / N) : deux programmes qui en
+    // ont autant peuvent se passer leur State (la modification en ligne).
+    [[nodiscard]] int edgeMemories(const Program&) noexcept;
 
     // ---- l'etat en direct (le dernier passage) ----------------------------------
     struct LiveBlock {

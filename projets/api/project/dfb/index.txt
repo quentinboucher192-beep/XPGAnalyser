@@ -1,0 +1,5 @@
+# DFB types, in declaration order.
+BUILDING
+DFB_GRAFCETENGINE
+DFB_SYS_CLOCK
+DFB_EQ_PUMP

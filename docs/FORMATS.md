@@ -96,6 +96,10 @@ Règles d'écriture :
 - chaque fichier IHM se termine par la ligne `fin` : un fichier coupé est refusé au chargement ;
 - une clé inconnue est signalée dans le rapport de chargement (`LoadReport::warnings`).
 
+1.51.0 : une section **SFC** (GRAFCET natif) reste rangée en `<section>.xml`, le `<SFCProgram>` de Control Expert tel quel (`src/project/Sfc.hpp`). L'éditeur de GRAFCET d'API Studio y écrit le même XML (étapes, transitions, divergences, sauts, liens, actions, `transitionSource`/`actionSource`) : seuls les éléments modifiés sont réécrits, le reste garde ses octets. Une section SFC **neuve** n'est plus le texte `(* nom *)` mais un `<SFCProgram>` à une étape initiale. **Le format ne change pas** : une version d'avant lit, conserve et réexporte ces sections comme tout GRAFCET de Control Expert (lecture en texte seulement).
+
+1.51.0 : une section **LD** (ladder) reste rangée en `<section>.xml`, le `<LDSource>` de Control Expert tel quel (`src/project/Ladder.hpp`). L'éditeur de ladder d'API Studio y écrit le même XML : seuls les **réseaux** (`networkLD`) modifiés sont réécrits, aux conventions du fichier lu (fins de ligne, tabulations ; contacts, bobines, `HLink`/`emptyCell` regroupés, `shortCircuit` et `VLink` pour les liaisons verticales, `FFBBlock` dans la suite de sa rangée avec `EN`/`ENO` écrits, `control` `jumpCoil`/`retCoil`, `labelCell`, `compareBlock`/`operateBlock`, `textBox`) ; un attribut ou un élément inconnu est gardé tel quel, un réseau non touché garde ses octets. Une section LD **neuve** n'est plus le texte `(* nom *)` mais un `<LDSource nbColumns="11">` à un réseau vide. **Le format ne change pas** : une version d'avant lit, conserve et réexporte ces sections comme tout ladder de Control Expert (lecture en texte seulement).
+
 ---
 
 <a id="format-ihm"></a>
@@ -169,6 +173,7 @@ Règles d'écriture :
 
 - `installation.ini`, posé à côté de l'exécutable par l'installateur, signale une version installée et donne les dossiers par défaut ; `XPGAnalyser.ini` (réglages partagés) les remplace clé par clé. Sans `installation.ini`, les dossiers suivent le dossier de travail. Détail : [CONFIG-INI.md](CONFIG-INI.md).
 - Tous ces dossiers sont listés dans l'application (accueil › **Dossiers** ; **Projet › Dossiers de l'application…** ; **À propos**).
+- 1.51.0, l'Admin (`%LOCALAPPDATA%\XPG\LicenseAdmin`, détail : [ADMINS.md](ADMINS.md) § 4 et 12) : `invitations-admins.json` (l'Admin+) gagne `droits` (les droits choisis à l'invitation), `admis` et `admis_le` (la clé signée d'office) ; une 1.50 les ignore (et les perd si elle réécrit le fichier : l'Admin+ retombe alors sur le profil par son nom). XPG Admin écrit `inscription-admin.json` (`xpg-inscription-admin/1` : le nom, le courriel, le profil de l'invitation, son id, l'heure) à la place de `demande-admin.json` (encore lu pour le courriel). Le service : `admins_invitations` gagne `par` (la clé de l'éditeur qui a créé l'invitation) ; la table `admins_demandes` garde son nom et ses colonnes (une sauvegarde d'avant se restaure telle quelle) et porte les inscriptions par code.
 
 ---
 

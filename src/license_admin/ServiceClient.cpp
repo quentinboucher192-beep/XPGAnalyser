@@ -739,7 +739,7 @@ void readAdminWatch(const Value& reply, AdminWatch& out) {
     // 1.44.0 : plusieurs admins
     out.admins = num("admins");
     out.journal = num("journal");
-    out.adminRequests = num("admins_demandes");
+    out.invitedWaiting = num("admins_inscrits");   // 1.51.0 : plus de demandes d'admin
     out.publishedVersion = clean(reply.str("version_publiee"), 40);
     out.orders = num("commandes");   // 1.46.0 : la boutique
     out.toDeliver = num("a_livrer");

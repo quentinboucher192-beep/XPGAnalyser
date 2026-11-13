@@ -3,6 +3,7 @@
 #include "../import/XmlReader.hpp"
 
 #include <algorithm>
+#include <map>
 #include <cctype>
 #include <cstdlib>
 #include <tuple>
@@ -226,7 +227,8 @@ namespace project {
             }
             else if (t == "FFBBlock") {
                 const auto type = e.attr("typeName");
-                const auto inst = e.attr("instanceName");
+                auto inst = e.attr("instanceName");
+                if (!inst.empty() && inst.front() == '.') inst.clear();   // 1.51.0 : une fonction (".1")
                 const auto label = inst.empty() ? type : inst;
                 row.push_back(Cell{ "{" + label + "}", ' ' });
 
@@ -250,13 +252,17 @@ namespace project {
                 blocks.push_back(std::move(b));
             }
             else if (t == "control") {
-                row.push_back(Cell{ "->> " + e.attr("label"), '-' });
+                // 1.51.0 : typeControl="jumpCoil" (->> ETIQ) ou "retCoil" (RETURN)
+                std::string kind = e.attr("typeControl");
+                for (auto& ch : kind) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                row.push_back(Cell{ kind.find("RET") != std::string::npos ? std::string("<RETURN>") : "->> " + e.attr("label"), '-' });
             }
             else if (t == "labelCell") {
                 row.push_back(Cell{ e.attr("label") + ":", ' ' });
             }
             else if (t == "VLink") {
-                if (!row.empty()) row.back().bar = true;
+                // 1.51.0 : une case sans fil, sa liaison verticale au bord droit (Control Expert)
+                row.push_back(Cell{ {}, ' ', 1, true });
             }
             else if (t != "objPosition") {
                 row.push_back(Cell{ "<" + t + ">", ' ' });
@@ -288,7 +294,14 @@ namespace project {
                     }
                     Row r;
                     r.number = number++;
+                    r.line.network = network - 1;     // 1.51.0 : le schema y va
+                    r.line.row = r.number;
+                    const auto blocksBefore = blocks.size();
                     for (const auto& e : k.kids) cellsOf(e, r.cells, r.line, blocks, r.number);
+                    for (auto bi = blocksBefore; bi < blocks.size(); ++bi) {
+                        blocks[bi].network = network - 1;
+                        blocks[bi].row = r.number + 1;
+                    }
                     rows.push_back(std::move(r));
                 }
 
@@ -388,6 +401,27 @@ namespace project {
                                 if (!v.empty()) g.text += std::string("  ") + k + " = " + v;
                             }
                         }
+                        // 1.51.0 (S) : ses actions (une variable d'action est ECRITE par l'etape)
+                        std::string acts;
+                        for (const auto& a : e.kids) {
+                            if (a.name != "action") continue;
+                            std::string q = a.attr("qualifier", "N");
+                            if (q == "NONE") q = "N";
+                            std::string name, time;
+                            bool section = false;
+                            if (const auto* an = a.child("actionName"))
+                                for (const auto& c : an->kids) {
+                                    name = trimmed(c.text);
+                                    section = c.name == "sectionName";
+                                }
+                            if (const auto* tv = a.child("tValue"))
+                                for (const auto& c : tv->kids) if (!trimmed(c.text).empty()) time = trimmed(c.text);
+                            if (name.empty()) continue;
+                            acts += (acts.empty() ? "" : ", ") + q + " " + (section ? "[" + name + "]" : name)
+                                  + (time.empty() ? "" : " " + time);
+                            if (!section) g.writes.push_back(name);
+                        }
+                        if (!acts.empty()) g.text += "  actions : " + acts;
                     }
                     else if (e.name == "transition") {
                         std::string cond;
@@ -409,6 +443,8 @@ namespace project {
                     else if (e.name == "parBranch") g.text = "divergence en ET";
                     else if (e.name == "parJoint") g.text = "convergence en ET";
                     else continue;                                     // liens, commentaires
+                    g.cellX = x;     // 1.51.0 (S) : le schema y va
+                    g.cellY = y;
                     items.emplace_back(x, y, std::move(g));
                 }
                 std::stable_sort(items.begin(), items.end(), [](const auto& a, const auto& b) {
@@ -429,10 +465,30 @@ namespace project {
         void listSfc(const Node& sfc, std::vector<GraphLine>& out) {
             for (const auto& k : sfc.kids)
                 if (k.name == "chartSource" || k.name == "SFCSource") listChart(k, out, "");
+            // 1.51.0 (S) : la case de ce qui utilise chaque section (transition, etape)
+            std::map<std::string, std::pair<int, int>> usedAt;
             for (const auto& k : sfc.kids) {
-                if (k.name != "transitionSource") continue;
+                if (k.name != "chartSource") continue;
+                for (const auto& net : k.kids)
+                    for (const auto& e : net.kids) {
+                        const auto* pos = e.child("objPosition");
+                        if (!pos) continue;
+                        const std::pair<int, int> at{ pos->number("posX", -1), pos->number("posY", -1) };
+                        if (const auto* tc = e.child("transitionCondition"))
+                            if (const auto* sn = tc->child("sectionName")) usedAt["T:" + trimmed(sn->text)] = at;
+                        for (const auto& a : e.kids)
+                            if (a.name == "action")
+                                if (const auto* an = a.child("actionName"))
+                                    if (const auto* sn = an->child("sectionName")) usedAt["A:" + trimmed(sn->text)] = at;
+                    }
+            }
+            for (const auto& k : sfc.kids) {
+                if (k.name != "transitionSource" && k.name != "actionSource") continue;
+                const bool action = k.name == "actionSource";
                 out.push_back(note({}));
-                out.push_back(note("(* r\xC3\xA9" "ceptivit\xC3\xA9 " + k.attr("name") + " *)"));
+                out.push_back(note(action ? "(* action " + k.attr("name") + " *)"
+                                          : "(* r\xC3\xA9" "ceptivit\xC3\xA9 " + k.attr("name") + " *)"));
+                const auto first = out.size();
                 for (const auto& body : k.kids) {
                     if (body.name == "LDSource") listLd(body, out, "  ");
                     else if (body.name == "FBDSource") listFbd(body, out, "  ");
@@ -445,12 +501,22 @@ namespace project {
                             auto line = text.substr(from, end - from);
                             if (!line.empty() && line.back() == '\r') line.pop_back();
                             GraphLine g = note("  " + line);
-                            g.reads = namesIn(line);
+                            // 1.51.0 (S) : une action ST ecrit ce qu'elle affecte
+                            if (const auto at = line.find(":="); action && at != std::string::npos) {
+                                g.writes = namesIn(std::string_view(line).substr(0, at));
+                                g.reads = namesIn(std::string_view(line).substr(at + 2));
+                            }
+                            else g.reads = namesIn(line);
                             out.push_back(std::move(g));
                             from = end + 1;
                         }
                     }
                 }
+                if (const auto f = usedAt.find((action ? "A:" : "T:") + k.attr("name")); f != usedAt.end())
+                    for (auto i = first; i < out.size(); ++i) {
+                        out[i].cellX = f->second.first;
+                        out[i].cellY = f->second.second;
+                    }
             }
         }
 
@@ -476,13 +542,18 @@ namespace project {
         std::string headerOf(const Section& s) {
             std::string text;
             const auto lang = std::string(toString(s.language));
-            text += "(* Section " + lang + " gard\xC3\xA9" "e telle que Control Expert l'a \xC3\xA9" "crite : elle se lit ici,\n"
-                    "   elle se modifie dans Control Expert. API Studio la conserve et la r\xC3\xA9" "exporte \xC3\xA0 l'identique.\n";
+            // 1.51.0 : le ladder se dessine et se modifie (bouton Schema) ; (S) le GRAFCET (SFC) aussi
+            if (s.language == PouLanguage::LD || s.language == PouLanguage::SFC)
+                text += "(* Section " + lang + " gard\xC3\xA9" "e telle que Control Expert l'a \xC3\xA9" "crite : ici sa lecture en texte ;\n"
+                        "   le bouton Sch\xC3\xA9ma la dessine et la modifie. Ce qui n'est pas touch\xC3\xA9 se r\xC3\xA9" "exporte \xC3\xA0 l'identique.\n";
+            else
+                text += "(* Section " + lang + " gard\xC3\xA9" "e telle que Control Expert l'a \xC3\xA9" "crite : elle se lit ici,\n"
+                        "   elle se modifie dans Control Expert. API Studio la conserve et la r\xC3\xA9" "exporte \xC3\xA0 l'identique.\n";
             if (s.language == PouLanguage::LD)
                 text += "   [X] contact, [/X] contact inverse, [P X] [N X] fronts ; (X) bobine, (/X) inverse,\n"
                         "   (S X) (R X) mise \xC3\xA0 1 / \xC3\xA0 0 ; | liaison verticale (OU) ; {BLOC} : d\xC3\xA9tail sous le r\xC3\xA9seau. *)\n";
             else if (s.language == PouLanguage::SFC)
-                text += "   Le graphe, colonne par colonne (ligne, \xC3\xA9l\xC3\xA9ment), puis chaque r\xC3\xA9" "ceptivit\xC3\xA9. *)\n";
+                text += "   Le graphe, colonne par colonne (ligne, \xC3\xA9l\xC3\xA9ment), puis chaque r\xC3\xA9" "ceptivit\xC3\xA9 et chaque action. *)\n";
             else
                 text += "   Les blocs du r\xC3\xA9seau et leurs broches. *)\n";
             text += "\n";

@@ -1,0 +1,85 @@
+# DFB type interface.
+name = DFB_GRAFCETENGINE
+version = 1.49
+attribute = TypeCodeCheckSumString = 0
+attribute = TypeSignatureCheckSumString = 0
+attribute = UseNewTplSignAlgo = TRUE
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+Enable ; BOOL ;  ; Input ;  ;  ;  ; 
+ModeReq ; INT ;  ; Input ;  ;  ;  ; 
+FreezeReq ; BOOL ;  ; Input ;  ;  ;  ; 
+PauseReq ; BOOL ;  ; Input ;  ;  ;  ; 
+StepReq ; BOOL ;  ; Input ;  ;  ;  ; 
+InitReq ; BOOL ;  ; Input ;  ;  ;  ; 
+ResetInitialReq ; BOOL ;  ; Input ;  ;  ;  ; 
+ResetAllReq ; BOOL ;  ; Input ;  ;  ;  ; 
+TsNow ; TIME ;  ; Input ;  ;  ;  ; 
+NtpcNow ; Display_NTPC ;  ; Input ;  ;  ;  ; 
+ForceBackReq ; BOOL ;  ; Input ;  ;  ;  ; 
+ForceNextReq ; BOOL ;  ; Input ;  ;  ;  ; 
+ForceStepFromId ; INT ;  ; Input ;  ;  ;  ; 
+ForceStepToId ; INT ;  ; Input ;  ;  ;  ; 
+Steps ; ARRAY[0..27] OF ST_GC_Step ;  ; InOut ;  ;  ;  ; 
+Transitions ; ARRAY[0..27] OF ST_GC_Transition ;  ; InOut ;  ;  ;  ; 
+Actions ; ARRAY[0..27] OF ST_GC_Action ;  ; InOut ;  ;  ;  ; 
+Debug ; ST_GC_Debug ;  ; Output ;  ;  ;  ; 
+Finished ; BOOL ;  ; Output ;  ;  ;  ; 
+InternalInitDone ; BOOL ;  ; Public ;  ;  ;  ; 
+Runtime ; ST_GC_Runtime ;  ; Public ;  ;  ;  ; 
+ModeReqOut ; INT ;  ; Public ;  ;  ;  ; 
+NeedToResetPause ; BOOL ;  ; Public ;  ;  ;  ; 
+pauseToReevaluateCondition ; BOOL ;  ; Public ;  ;  ;  ; 
+howManyResets ; INT ;  ; Public ;  ;  ;  ; 
+i ; INT ;  ; Public ;  ;  ;  ; 
+j ; INT ;  ; Public ;  ;  ;  ; 
+k ; INT ;  ; Public ;  ;  ;  ; 
+srcId ; INT ;  ; Public ;  ;  ;  ; 
+dstId ; INT ;  ; Public ;  ;  ;  ; 
+allSrcActive ; BOOL ;  ; Public ;  ;  ;  ; 
+anySrcActive ; BOOL ;  ; Public ;  ;  ;  ; 
+sIdx ; INT ;  ; Public ;  ;  ;  ; 
+aIdx ; INT ;  ; Public ;  ;  ;  ; 
+tIdx ; INT ;  ; Public ;  ;  ;  ; 
+sid ; INT ;  ; Public ;  ;  ;  ; 
+isFromStep ; BOOL ;  ; Public ;  ;  ;  ; 
+doneBack ; BOOL ;  ; Public ;  ;  ;  ; 
+doneNext ; BOOL ;  ; Public ;  ;  ;  ; 
+isDest ; BOOL ;  ; Public ;  ;  ;  ; 
+focusStep ; INT ;  ; Public ;  ;  ;  ; 
+ConfigChecked ; BOOL ;  ; Public ;  ;  ;  ; 
+HistFill ; INT ;  ; Public ;  ;  ;  ; 
+activeStepQty ; INT ;  ; Public ;  ;  ;  ; 
+firstStepId ; INT ;  ; Public ;  ;  ;  ; 
+firstStepName ; string[4] ;  ; Public ;  ;  ;  ; 
+h ; INT ;  ; Public ;  ;  ;  ; 
+finalSrcOnValidatedTr ; BOOL ;  ; Public ;  ;  ;  ; 
+isInitState ; BOOL ;  ; Public ;  ;  ;  ; 
+PrevInitState ; BOOL ;  ; Public ;  ;  ;  ; 
+InitPulse ; BOOL ;  ; Public ;  ;  ;  ; 
+InitPulseCount ; INT ;  ; Public ;  ;  ;  ; 
+SectionsAuthorized ; BOOL ;  ; Public ;  ;  ;  ; 
+stepIdStr ; STRING ;  ; Local ;  ;  ;  ; 
+actionIdStr ; STRING ;  ; Local ;  ;  ;  ; 
+changedNow ; BOOL ;  ; Local ;  ; la situation a change pendant cet appel ;  ; 
+held ; BOOL ;  ; Local ;  ; fige, pas a pas ou fini : le temps ne compte pas ;  ; 
+resetAll ; BOOL ;  ; Local ;  ; toutes les actions a remettre a zero ;  ; 
+forced ; BOOL ;  ; Local ;  ; un forcage a ete fait pendant cet appel ;  ; 
+anyFired ; BOOL ;  ; Local ;  ; au moins une transition franchie ;  ; 
+hasExit ; BOOL ;  ; Local ;  ; une etape finale a une transition de sortie ;  ; 
+doReset ; BOOL ;  ; Local ;  ;  ;  ; 
+firstEn ; BOOL ;  ; Local ;  ; premier cycle de la condition d'une action ;  ; 
+nSrc ; INT ;  ; Local ;  ; SourceCount borne a 0..3 ;  ; 
+nDst ; INT ;  ; Local ;  ; DestCount borne a 0..3 ;  ; 
+dtScan ; TIME ;  ; Local ;  ; temps pas encore compte aux receptivites ;  ; 
+dtActs ; TIME ;  ; Local ;  ; temps pas encore compte aux actions ;  ; 
+lineTmp ; string[32] ;  ; Local ;  ;  ;  ; 
+wasActive ; ARRAY[0..27] OF BOOL ;  ; Local ;  ; la situation avant le changement ;  ; 
+resetStep ; ARRAY[0..27] OF BOOL ;  ; Local ;  ; etapes dont les actions repartent de zero ;  ; 
+claimed ; ARRAY[0..27] OF BOOL ;  ; Local ;  ; etapes deja prises par une transition franchissable ;  ; 
+frozenTimeCount ; INT ;  ; Local ;  ; appels de suite sans que TsNow avance ;  ; 
+
+# section ; name ; language ; order ; activation ; logic ; file
+section ; Init ; ST ; 0 ;  ;  ; Init.st
+section ; Main ; ST ; 0 ;  ;  ; Main.st
+section ; Debug ; ST ; 0 ;  ;  ; Debug.st

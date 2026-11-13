@@ -34,6 +34,7 @@
 #include "../sim/Runtime.hpp"
 #include "../ui/Widget.hpp"
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -53,14 +54,40 @@ namespace app {
         Remove,
     };
 
-    // Ce qui est choisi. Les Proprietes suivent.
-    enum class GrafcetPart : std::uint8_t { None, Step, Transition, Action };
+    // Ce qui est choisi. Les Proprietes suivent. Item (1.51.0, S) : un autre
+    // element d'un GRAFCET natif (saut, divergence, lien, texte).
+    enum class GrafcetPart : std::uint8_t { None, Step, Transition, Action, Item };
 
     class GrafcetView final : public ui::Widget {
     public:
         explicit GrafcetView(std::string id = {});
 
         void setChart(grafcet::Chart chart);
+
+        // ---- 1.51.0 (S) : UN GRAFCET NATIF (SFC), dessine par cette vue ---------
+        // Le dessin vient de `build` (la grille de Control Expert, project/SfcDiagram)
+        // au lieu de grafcet::buildDiagram ; l'etat en simulation, des fonctions
+        // (plus les tableaux Steps_/Trans_/Acts_) ; la barre du moteur devient
+        // Initialiser / Activer / Desactiver l'etape choisie.
+        struct External {
+            std::function<grafcet::Diagram(const grafcet::MeasureText&, const project::ChartLayout&)> build;
+            std::function<std::optional<bool>(int)> stepActive;
+            std::function<std::string(int)>         stepTime;
+            std::function<std::optional<bool>(int)> transitionTrue;
+            std::function<bool(int)>                transitionEnabled;
+            std::function<std::optional<bool>(int)> actionRunning;
+            std::function<bool(int)>                stepFault;     // supervision (tmin / tmax) en defaut
+            std::function<std::string(GrafcetPart, int)> tooltip;
+            std::function<bool(int, bool)>          forceStep;     // activer / desactiver
+            std::function<bool()>                   init;          // la situation initiale
+            std::function<std::string(int)>         stepName;
+        };
+        void setExternal(External external);
+        [[nodiscard]] bool external() const noexcept { return static_cast<bool>(external_.build); }
+        // Le dessin est a refaire (le modele a change) sans changer de grafcet.
+        void rebuildDiagram() { dirty_ = true; invalidate(); }
+        const core::SignalPtr<int> itemSelected = core::Signal<int>::create();
+        [[nodiscard]] int itemAt(gfx::Point) const;
         [[nodiscard]] const grafcet::Chart& chart() const noexcept { return chart_; }
 
         // Emprunte, jamais possede, relu a chaque image. Nul : pas de simulation,
@@ -138,7 +165,8 @@ namespace app {
         // reinitialiser, Etape precedente, Etape suivante, Forcer (l'etape choisie).
         // Un clic DEMANDE : la vue dit ce que le moteur va faire, et n'ecrit
         // Ctrl_<nom>.Cmd.* (ST_GC_CTRL) qu'apres Confirmer (Echap : rien).
-        enum class EngineCommand : std::uint8_t { None, Init, ResetAll, ForceBack, ForceNext, ForceSituation };
+        enum class EngineCommand : std::uint8_t { None, Init, ResetAll, ForceBack, ForceNext, ForceSituation,
+                                                  SfcActivate, SfcDeactivate };   // 1.51.0 (S) : les deux dernieres
         void askEngine(EngineCommand cmd);
         [[nodiscard]] EngineCommand pendingEngine() const noexcept { return pendingCmd_; }
         [[nodiscard]] std::string engineText(EngineCommand cmd) const;
@@ -197,6 +225,8 @@ namespace app {
 
         grafcet::Chart   chart_;
         grafcet::Diagram diagram_;
+        External         external_;           // 1.51.0 (S)
+        std::vector<BarBox> itemBoxes_;       // 1.51.0 (S) : sauts, divergences, liens, textes
         bool             dirty_{ true };
         std::vector<grafcet::Check> checks_;
         sim::Runtime* runtime_{ nullptr };

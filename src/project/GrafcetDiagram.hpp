@@ -75,6 +75,10 @@ namespace grafcet {
         int         level{ 0 }, column{ 0 };
         std::string number;           // "3"
         std::string name;             // le nom du programme ("X10") s'il differe de X<numero>
+        // 1.51.0 (S) : un GRAFCET natif (SFC) ecrit le nom de l'etape dans la case
+        // (vide : "X" + number) ; une macro-etape a ses deux traits.
+        std::string label;
+        bool        macro{ false };
     };
 
     struct DiagramAction {
@@ -134,7 +138,22 @@ namespace grafcet {
         std::vector<int> from;            // a l'arrivee : les transitions qui y menent
     };
 
+    // 1.51.0 (S) : un texte du graphe (textBox de Control Expert).
+    struct DiagramNote {
+        gfx::Rect   box;
+        std::string text;
+    };
+    // 1.51.0 (S) : un element qui se choisit sans etre une etape, une transition
+    // ni une action : un saut, une divergence, un lien, un texte (son id : l'element SFC).
+    struct DiagramItemBox {
+        int         id{ -1 };
+        gfx::Rect   box;
+        std::string what;             // "saut vers S_0", "divergence en OU"...
+    };
+
     struct Diagram {
+        std::vector<DiagramNote>       notes;    // 1.51.0 (S)
+        std::vector<DiagramItemBox>    items;    // 1.51.0 (S)
         std::vector<DiagramStep>       steps;
         std::vector<DiagramAction>     actions;
         std::vector<DiagramTransition> transitions;

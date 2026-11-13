@@ -8896,13 +8896,13 @@ borner(&debit, 120.0f);
 == objets-scripts | Les objets et les ressources dans les scripts : Object, Font, Texture, Sound, Style
 : Un script désigne un objet d'une vue (`Object`), une police (`Font`), une image (`Texture`), un son (`Sound`) ou un style nommé (`Style`) comme n'importe quelle valeur : en variable, en paramètre, dans une liste, par un pointeur. 38 fonctions agissent sur les objets (les trouver, les modifier, les placer, les aligner, les montrer ou les cacher) et 16 sur les ressources.
 @depuis 1.27.0
-@mots Object, Font, Texture, Sound, Style, This, GetObject, ObjectsOf, ObjectsIn, ObjectsOfKind, EditObject, CopyObjectTo, ResetObject, ObjectProp, MoveObject, MoveBy, ResizeObject, ResizeBy, PlaceObject, AlignTop, AlignBottom, AlignLeft, AlignRight, AlignCenterH, AlignCenterV, AlignCenter, JustifyH, JustifyV, SameWidth, SameHeight, SameSize, ArrangeGrid, ShowIf, HideIf, EnableIf, BlinkIf, Show, Hide, Enable, Disable, BringToFront, SendToBack, BringForward, SetLayer, GetResource, GetFont, GetTexture, GetSound, GetStyle, Fonts, Textures, Sounds, Styles, TextWidth, HasGlyph, Play, Stop, ApplyStyle, StyleValue, Color
+@mots Object, Font, Texture, Sound, Style, This, GetObject, ObjectsOf, ObjectsIn, ObjectsOfKind, EditObject, CopyObjectTo, ResetObject, ObjectProp, MoveObject, MoveBy, ResizeObject, ResizeBy, PlaceObject, AlignTop, AlignBottom, AlignLeft, AlignRight, AlignCenterH, AlignCenterV, AlignCenter, JustifyH, JustifyV, SameWidth, SameHeight, SameSize, ArrangeGrid, ShowIf, HideIf, EnableIf, BlinkIf, Show, Hide, Enable, Disable, BringToFront, SendToBack, BringForward, SetLayer, GetResource, GetFont, GetTexture, GetSound, GetStyle, Fonts, Textures, Sounds, Styles, TextWidth, HasGlyph, Play, Stop, ApplyStyle, StyleValue, Color, Get
 @lieux scripts, fonctions
 @voir scripts, cycle-vue, couleurs-semantiques, styles-nommes, ressources, bibliotheque-polices
 ### Les cinq types de l'IHM
 Une valeur de ces types est une **poignée** : elle désigne la chose, elle ne la copie pas. Deux poignées du même objet sont égales ; une poignée neuve vaut **NULL**.
 | Type | Ce qu'il désigne | Ses attributs |
-| Object | un objet d'une vue : `Vue_Accueil.Pompe_1`, ou `Pompe_1` dans sa vue | Name, Kind, View (lecture) ; X, Y, Width, Height, Visible, Enabled, Text, Fill, Stroke, Font, Image, Opacity, Blink, Layer, Style ; Parent, Children, Pressed, Focused, Shown (lecture) ; toute autre propriété par son nom |
+| Object | un objet d'une vue : `Vue_Accueil.Pompe_1`, ou `Pompe_1` dans sa vue | Name, Kind, View (lecture) ; X, Y, Width, Height, Visible, Enabled, Text, Fill, Stroke, Font, Image, Opacity, Blink, Layer, Style ; Parent, Children, Pressed, Focused, Shown (lecture) ; toute autre propriété par son nom ; Get() : un POINTER TO Object vers lui |
 | Font | une police du projet | Name, Family, Style, Glyphs, Format |
 | Texture | une image des ressources | Name, Width, Height, Format |
 | Sound | un son des ressources ou de la bibliothèque de sons | Name, Duration, Playing, Volume |
@@ -8952,9 +8952,42 @@ Sur la **vue montrée** (la simulation, le poste), exactement comme `Vue.Objet.X
 - Un **nom court** (`Pompe_1`) se cherche dans la vue du script de vue (ou de l'action) qui tourne, sinon dans la vue montrée ; `Vue_B.Cadre` vise une autre vue.
 - **This** : dans une action d'objet, l'objet lui-même. `MoveObject(X, Y)` sans objet déplace l'objet de l'action.
 - Une **fonction du projet** du même nom (une fonction `Show` à toi) passe avant la native.
+### Un pointeur vers un objet : Vue.Objet, Get(), ADR
+Un objet écrit **sans propriété** (`Vue_Accueil.Carte_1`, `Carte_1` dans un script de sa vue, `Pop_Info.Bouton_OK` dans une popup) désigne l'objet lui-même : il va dans une variable `Object`, `REF_TO Object` ou `POINTER TO Object`. La méthode **Get()** de chaque objet rend un `POINTER TO Object` vers lui, comme `ADR(Vue_Accueil.Carte_1)`.
+```ST
+VAR
+    ObjPtr : POINTER TO Object;
+END_VAR
+ObjPtr := Vue_Accueil.Carte_1;      (* ou Vue_Accueil.Carte_1.Get(), ADR(Vue_Accueil.Carte_1) *)
+IF ObjPtr <> NULL THEN
+    ObjPtr^.Visible := FALSE;       (* l'objet de la vue montrée se cache *)
+    Largeur := ObjPtr^.Width;
+    MoveBy(ObjPtr^, 10, 0);         (* les fonctions sur les objets le prennent *)
+END_IF;
+```
+```C
+/* les memes noms, l'API de la cible */
+Object *objPtr = Vue_Accueil.Carte_1.Get();   /* ou &Vue_Accueil.Carte_1 */
+if (objPtr != NULL) {
+    objPtr->Visible = 0;
+    Largeur = objPtr->Width;
+    MoveBy(objPtr, 10, 0);
+}
+```
+```C++
+Object* objPtr = Vue_Accueil.Carte_1.Get();     // ou &Vue_Accueil.Carte_1
+if (objPtr) {
+    objPtr->Visible = false;
+    Largeur = objPtr->Width;
+    MoveBy(objPtr, 10, 0);
+}
+```
+- Le pointeur se compare à **NULL** (et à un autre : `=` si c'est le même objet), se passe à une fonction (`p : POINTER TO Object`), et `p^` se lit et s'écrit comme l'objet : `p^.X`, `p^.Text := 'Prêt'`, `Hide(p^)`.
+- **Là où une valeur simple est attendue** (`R := Vue_Accueil.Carte_1;` avec R un nombre, un texte ou un BOOL ; `IF Vue_Accueil.Carte_1 THEN`), il manque la propriété : la vérification le dit (« chemin incomplet ») - écris `Vue_Accueil.Carte_1.Visible`.
+- L'**aide à la saisie** propose `Get()` après `Vue_Accueil.Carte_1.` (et après `o.` ou `p^.`). Une fonction `Get` d'un symbole passe avant.
 ### Les fonctions sur les objets (Natives › Objets)
 | Geste | Fonctions |
-| Trouver | GetObject(nom) : POINTER TO Object (NULL s'il n'existe pas) ; ObjectsOf(motif), ObjectsIn(X, Y, W, H), ObjectsOfKind('Voyant') : LIST OF Object |
+| Trouver | GetObject(nom) : POINTER TO Object (NULL s'il n'existe pas) ; Vue.Objet.Get() : POINTER TO Object (l'objet lui-même, comme ADR(Vue.Objet)) ; ObjectsOf(motif), ObjectsIn(X, Y, W, H), ObjectsOfKind('Voyant') : LIST OF Object |
 | Modifier, copier | EditObject(Obj.Prop, valeur) ; CopyObjectTo(source, cible, {Source.Width, …}) - {} : tout sauf le nom ; ResetObject(obj) ; ObjectProp(obj, 'clé') |
 | Position, taille | MoveObject(obj, X, Y), MoveBy, ResizeObject(obj, W, H), ResizeBy, PlaceObject(obj, X, Y, W, H) |
 | Aligner | AlignTop, AlignBottom, AlignLeft, AlignRight, AlignCenterH, AlignCenterV, AlignCenter (liste [, référence]) - sans référence : sur la liste elle-même |
@@ -8975,7 +9008,7 @@ Dans un script, `@Alarme` s'écrit seul, comme une constante : c'est le texte `'
 - Une **expression (fx)** peut lire (`ObjectsOf('Pompe_*').Count`, `Color(@Alarme)`) mais pas agir : AlignTop, ShowIf, Play se font dans un script ou une action.
 - L'**aide à la saisie** propose, après `o.` ou `p^.`, les attributs du type, triés, avec leur type.
 ### Dans un script C ou C++
-Les mêmes noms (l'API de la cible) : `Object* titre = GetObject("Titre_Accueil");`. Comme tout script C et C++, ils sont édités et vérifiés, pas exécutés en simulation.
+Les mêmes noms (l'API de la cible) : `Object* titre = GetObject("Titre_Accueil");`. Un script C ou C++ est compilé et exécuté en simulation par le moteur des scripts (un sous-ensemble du langage, dit par **En-tête du projet**).
 
 == donnees-scripts | JSON et expressions régulières dans les scripts
 : Tes scripts lisent et écrivent du JSON, et fouillent un texte au motif, directement — tout en local, sans réseau. Un fichier ou une ressource JSON se lit en une valeur **ANY** (`JSON_LIRE`), s'interroge par clé et par indice ; une trame texte se découpe au motif (`REGEX_`).

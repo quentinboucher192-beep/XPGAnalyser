@@ -1396,7 +1396,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME mastimport   COMMAND mastimport_test ${XPG_FIXTURE} ${XHW_FIXTURE})
     xpg_add_test(NAME projectstats COMMAND projectstats_test ${XPG_FIXTURE})
     xpg_add_test(NAME graphxml COMMAND graphxml_test)
-    xpg_add_test(NAME ladder   COMMAND ladder_test)                         # 1.51.0 : le ladder (LD)
+    xpg_add_test(NAME ladder   COMMAND ladder_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ld_sfc)   # 1.51.0 : le ladder (LD), le projet fictif
     xpg_add_test(NAME simdebugui   COMMAND simdebugui_test ${XPG_FIXTURE})   # ---- Lot API 8 : Simulation > Debogage ----
     xpg_add_test(NAME dialogwindow COMMAND dialogwindow_test)                # ---- Lot API 8 : les dialogues dans la fenetre detachee ----
     xpg_add_test(NAME crashreport COMMAND crashreport_test)                  # 1.12.28 : la fenetre du plantage et du blocage

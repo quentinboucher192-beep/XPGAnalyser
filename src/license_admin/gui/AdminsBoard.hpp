@@ -59,22 +59,23 @@ inline constexpr Color kVioletInk = Color::rgb(0x5B3BE6), kVioletPale = Color::r
 inline constexpr Color kRed = Color::rgb(0xDC2626), kAmberPale = Color::rgb(0xFFF8EB), kRedPale = Color::rgb(0xFEF2F2), kGreenPale = Color::rgb(0xF0FDF4);
 
 // ============================================================================ les donnees
-// Un admin tel que les pages le montrent : l'admin+, un admin de la liste (actif ou retire), une demande recue.
+// Un admin tel que les pages le montrent : l'admin+, un admin de la liste (actif ou retire). 1.51.0 : plus de demande
+// recue (un admin s'ajoute par son code d'invitation, signe d'office).
 struct Person {
-    enum class Kind : std::uint8_t { Plus, Admin, Pending };
+    enum class Kind : std::uint8_t { Plus, Admin };
     Kind                     kind{Kind::Admin};
-    std::string              key;          // sa cle (64 hexa) ; une demande : la cle demandee
+    std::string              key;          // sa cle (64 hexa)
     std::string              id;           // son identifiant au service (xpg-...)
     std::string              name, pc, machine, profile, fingerprint, email, software, version;
-    Seconds                  since{0}, retired{0}, received{0}, seen{0};
+    Seconds                  since{0}, retired{0}, seen{0};
     std::vector<std::string> rights;
     std::string              addedBy;      // << toi >> (l'admin+), le nom de qui l'a ajoute
     int                      color{0};     // l'ordre fixe : 0 l'admin+, puis les admins de la liste (retires compris)
     int                      gaps{-1};     // ses ecarts a son profil (droits ajoutes ou retires pour lui) ; -1 : pas de profil
     bool                     me{false}, mismatch{false};
-    [[nodiscard]] bool active() const noexcept { return kind != Kind::Pending && retired == 0; }
+    [[nodiscard]] bool active() const noexcept { return retired == 0; }
 };
-[[nodiscard]] Color personColor(const Person& p);   // Camille, Lea, Hugo, Nina... ; une demande : gris
+[[nodiscard]] Color personColor(const Person& p);   // Camille, Lea, Hugo, Nina...
 
 // Ce que le service dit d'un admin sur la periode (NaN : inconnu).
 struct AdminFigures {
@@ -116,7 +117,7 @@ struct Data {
     stats::Period       statsPeriod, statsBefore;   // la meme periode, en jours "AAAA-MM-JJ"
     js::Period          period, previous;
     Seconds             now{0};
-    std::vector<Person> people;                     // l'admin+, puis les admins de la liste, puis les demandes
+    std::vector<Person> people;                     // l'admin+, puis les admins de la liste
     js::Overview        ov;                         // les chiffres du journal
     std::vector<js::Line> lines;                    // le journal lu (les plus anciennes d'abord)
     std::vector<std::string> editorKeys;            // les cles de l'editeur (l'admin+), en hexadecimal
@@ -140,7 +141,6 @@ struct Data {
     [[nodiscard]] const AdminFigures*    fig(const std::string& key) const;
     [[nodiscard]] int activeCount() const;
     [[nodiscard]] int retiredCount() const;
-    [[nodiscard]] int pendingCount() const;
 };
 
 // Le calcul local (le fil de l'interface : le journal de ce poste, JournalStats) : `people` deja la.
@@ -258,7 +258,7 @@ ui::Button& makeButton(ui::Widget& parent, std::string text, std::string id, ui:
 // ============================================================================ les vues (leurs fichiers)
 // Ce que les vues demandent a la page (la coquille, les dialogues).
 struct Actions {
-    std::function<void(const std::string& key)> openCard, journalOf, rightsOf, retire, verify, refuse, select;
+    std::function<void(const std::string& key)> openCard, journalOf, rightsOf, retire, select;
     std::function<void(std::vector<std::uint64_t> lines, const std::string& key)> journalLines;   // ces lignes du journal
     std::function<void()>                        addAdmin, criticality, deploy, reload, versions;
     std::function<void(const std::string& key, std::vector<std::string> rights)> removeRights;   // << Retirer ces droits ? >>

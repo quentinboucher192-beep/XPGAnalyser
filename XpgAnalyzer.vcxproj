@@ -578,6 +578,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\FileViewerWindow.cpp" />
     <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
     <ClCompile Include="src\app\HeadlessRenderer.cpp" />
+    <ClCompile Include="src\app\LadderPane.cpp" />
     <ClCompile Include="src\app\Licence.cpp" />
     <ClCompile Include="src\app\LicenceService.cpp" />
     <ClCompile Include="src\app\LicenceShop.cpp" />
@@ -777,9 +778,11 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\project\LadderSim.cpp" />
     <ClCompile Include="src\project\ProjectArchive.cpp" />
     <ClCompile Include="src\project\Sfc.cpp" />
+    <ClCompile Include="src\project\SfcDiagram.cpp" />
     <ClCompile Include="src\project\SfcEdit.cpp" />
     <ClCompile Include="src\sim\Rich.cpp" />
     <ClCompile Include="src\sim\RichPacked.cpp" />
+    <ClCompile Include="src\sim\SfcRuntime.cpp" />
     <ClCompile Include="src\sim\ValueText.cpp" />
     <ClCompile Include="src\ui\NoveltyBoard.cpp" />
     <ClCompile Include="src\ui\NoveltyMarks.cpp" />
@@ -797,6 +800,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\SessionWindow.cpp" />
     <ClCompile Include="src\app\SessionRelayHttp.cpp" />
     <ClCompile Include="src\app\SessionService.cpp" />
+    <ClCompile Include="src\app\SfcPane.cpp" />
     <ClCompile Include="src\app\SvgRenderer.cpp" />
     <ClCompile Include="src\app\Updates.cpp" />
     <ClCompile Include="src\app\UpdateWindows.cpp" />
@@ -1225,6 +1229,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\FileViewer.hpp" />
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
     <ClInclude Include="src\app\HeadlessRenderer.hpp" />
+    <ClInclude Include="src\app\LadderPane.hpp" />
     <ClInclude Include="src\app\Licence.hpp" />
     <ClInclude Include="src\app\LicenceService.hpp" />
     <ClInclude Include="src\app\LicenceShop.hpp" />
@@ -1406,8 +1411,10 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\project\LadderSim.hpp" />
     <ClInclude Include="src\project\ProjectArchive.hpp" />
     <ClInclude Include="src\project\Sfc.hpp" />
+    <ClInclude Include="src\project\SfcDiagram.hpp" />
     <ClInclude Include="src\project\SfcEdit.hpp" />
     <ClInclude Include="src\sim\Rich.hpp" />
+    <ClInclude Include="src\sim\SfcRun.hpp" />
     <ClInclude Include="src\sim\ValueText.hpp" />
     <ClInclude Include="src\ui\NoveltyBoard.hpp" />
     <ClInclude Include="src\ui\NoveltyMarks.hpp" />
@@ -1431,6 +1438,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\SessionWindow.hpp" />
     <ClInclude Include="src\app\SessionRelayHttp.hpp" />
     <ClInclude Include="src\app\SessionService.hpp" />
+    <ClInclude Include="src\app\SfcPane.hpp" />
     <ClInclude Include="src\app\SvgRenderer.hpp" />
     <ClInclude Include="src\app\Updates.hpp" />
     <ClInclude Include="src\app\ZoomMemory.hpp" />
@@ -1511,6 +1519,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\license_admin\gui\GlobeStats.hpp" />
     <ClInclude Include="src\license_admin\gui\ListKit.hpp" />
     <ClInclude Include="src\license_admin\gui\Page.hpp" />
+    <ClInclude Include="src\license_admin\gui\PcPicker.hpp" />
     <ClInclude Include="src\license_admin\gui\Shell.hpp" />
     <ClInclude Include="src\license_admin\gui\StatsKit.hpp" />
     <ClInclude Include="src\license_admin\gui\Workspace.hpp" />

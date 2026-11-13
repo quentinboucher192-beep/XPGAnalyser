@@ -59,8 +59,9 @@ struct Rig {
 // 1.47.0 : << Statistiques >> sous le Tableau de bord (Pilotage), comme la barre laterale des planches 08 a 11 ; << Mon compte >>
 // en tete de Securite, << Demandes d'admin >> apres Administrateurs (l'admin+ seul).
 // 1.48.1 : plus de << Demandes en ligne >> - ses demandes de licence sont dans << Commandes et demandes >>.
+// 1.51.0 : plus de << Demandes d'admin >> - un admin s'ajoute par son code d'invitation, signe d'office.
 const std::string kTitles[] = {"Tableau de bord", "Statistiques", "Licences", "Clients", "Activations", "Offres", "Options", "Fonctionnalit\xC3\xA9s", "Licences flottantes",
-                               "Boutique", "Commandes et demandes", "Mon compte", "R\xC3\xA9vocations", "Administrateurs", "Demandes d'admin", "Journal des admins", "Versions",
+                               "Boutique", "Commandes et demandes", "Mon compte", "R\xC3\xA9vocations", "Administrateurs", "Journal des admins", "Versions",
                                "Service en ligne", "Historique", "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9"};
 constexpr std::size_t kEntries = sizeof(kTitles) / sizeof(kTitles[0]);
 
@@ -95,6 +96,7 @@ int main(int argc, char** argv) {
               "aucune entree grisee : la boutique et les commandes sont de vraies pages (1.46.0)");
         check(has(t, "VENTE EN LIGNE") && !has(t, "PAS ENCORE") && !has(t, "GitHub"), "le menu dit << vente en ligne >> (plus << pas encore >>) ; plus aucun GitHub");
         check(gui::Shell::entry("service") && !gui::Shell::entry("github"), "la page << service >> ; plus de page << github >>");
+        check(!gui::Shell::entry("demandes-admins") && !has(t, "Demandes d'admin"), "1.51.0 : plus de page << Demandes d'admin >>, ni dans le menu");
         check(rig.shell->currentPageId() == "tableau", "on ouvre sur le tableau de bord");
         check(has(t, "Pas de cl\xC3\xA9") && rig.shell->keyStatusTone() == gui::Tone::Error, "<< Pas de cle >> en rouge");
         check(has(t, "Service : non r\xC3\xA9gl\xC3\xA9"), "<< Service : non regle >>");

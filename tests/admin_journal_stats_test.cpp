@@ -350,7 +350,6 @@ int main() {
     leaSvc.amount = 487000;
     leaSvc.adminVersion = "1.47.0";
     in.service["xpg-lea"] = leaSvc;
-    in.pending.push_back({"In\xC3\xA8s Essai", paris(11, 9, 17, 40)});
     const js::Overview v = js::overview(in);
     std::printf("   (%zu lignes au journal d'essai)\n", in.lines.size());
 
@@ -437,7 +436,7 @@ int main() {
           "l'admin+ : ses gestes (r\xC3\xA9serv\xC3\xA9s compris, pas les sauvegardes de la nuit) ; un seul des 14 types (la r\xC3\xA9vocation)");
 
     // ---- la vue d'ensemble ----
-    check(v.activeAdmins == 2 && v.retiredAdmins == 1 && v.pendingAdmins == 1, "en t\xC3\xAAte : 2 admins actifs, 1 retir\xC3\xA9, 1 en attente");
+    check(v.activeAdmins == 2 && v.retiredAdmins == 1, "en t\xC3\xAAte : 2 admins actifs, 1 retir\xC3\xA9 (1.51.0 : plus de demandes en attente)");
     check(v.actions == lea->actions + hugo->actions + nina->actions + cam->actions && v.typed == lea->typed + hugo->typed + nina->typed + cam->typed,
           "les actions de tous (" + std::to_string(v.actions) + ") ; toutes hors r\xC3\xA9serv\xC3\xA9" "es (" + std::to_string(v.typed) + ")");
     check(v.ranking.size() == 4 && v.ranking[0].id == "xpg-lea" && v.ranking[0].licences == 41 && v.ranking[0].amount == 487000 && std::isnan(v.ranking[1].amount),
@@ -474,9 +473,9 @@ int main() {
     check(byKind[js::AlertKind::RecentCritical].size() == 2 && byKind[js::AlertKind::RecentCritical][0]->adminId == "admin+" &&
               byKind[js::AlertKind::RecentCritical][0]->text.find("XPG-2026-00377") != std::string::npos && byKind[js::AlertKind::RecentCritical][0]->gesture == "Voir la ligne",
           "alertes : les actions critiques des 7 derniers jours (Camille ce matin, L\xC3\xA9" "a le 06/11), les plus r\xC3\xA9" "centes d'abord");
-    check(byKind[js::AlertKind::Pending].size() == 1 && byKind[js::AlertKind::Pending][0]->gesture == "V\xC3\xA9rifier et accepter\xE2\x80\xA6" &&
-              byKind[js::AlertKind::Inactive].empty(),
-          "alertes : In\xC3\xA8s attend (V\xC3\xA9rifier et accepter...) ; personne d'inactif");
+    bool accepting = false;   // 1.51.0 : plus de demande d'admin, plus d'alerte << Verifier et accepter... >>
+    for (const auto& a : v.alerts) accepting = accepting || a.gesture.find("accepter") != std::string::npos || a.gestureId == "accepter";
+    check(!accepting && byKind[js::AlertKind::Inactive].empty(), "alertes : aucune demande a accepter (1.51.0) ; personne d'inactif");
     bool sorted = true;
     for (std::size_t i = 1; i < v.alerts.size(); ++i) sorted = sorted && static_cast<int>(v.alerts[i - 1].severity) <= static_cast<int>(v.alerts[i].severity);
     check(sorted, "alertes : Critique, puis Haute, puis \xC3\x80 voir");

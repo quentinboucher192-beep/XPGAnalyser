@@ -1,0 +1,229 @@
+(* LierAlarmes
+
+   Prend un onglet du classeur, exporte en CSV, et branche chacune de ses
+   alarmes dans DFB_ALM_MANAGER : l'UUID, le libelle, le lien vers l'adresse,
+   la gravite, et la ligne qui remonte l'etat a chaque cycle.
+
+   L'UUID PORTE LA PROVENANCE. Il n'est pas tire au hasard : ses 32 bits sont
+   le rack, le module, la voie et le numero de seuil, packes. Un identifiant
+   trouve dans un journal dans cinq ans dit encore de quelle voie il vient,
+   sans aucune table a tenir a jour.
+
+       bits 31..28  genre   1 TOR, 2 seuil analogique
+       bits 27..24  rack    bits 23..18  module
+       bits 17..12  voie    bits 11..8   seuil     bits 7..0  libre
+
+   LA DISPOSITION EST CELLE D'AlmUuid, et la duplication est assumee : la macro
+   ecrit un litteral pour que le fichier genere se lise sans rien executer. Le
+   commentaire pose a cote de chaque UUID en donne les parties, ce qui rend un
+   ecart visible plutot que silencieux. *)
+
+famille := AskChoice('famille', 'Quelle famille contient ce tableau ?',
+                     'Entrees TOR,Sorties TOR,Entrees ANA,Sorties ANA', 'Entrees ANA');
+AskNow();
+
+registre := Ask('registre', 'Nom du registre d alarmes', 'AlmDefs');
+etats    := Ask('etats', 'Nom du tableau d etats', 'AlmState');
+histo    := Ask('histo', 'Nom de l historique', 'AlmHist');
+cmd      := Ask('cmd', 'Nom des commandes', 'AlmCmd');
+stat     := Ask('stat', 'Nom de l etat', 'AlmStat');
+instance := Ask('instance', 'Nom de l instance du gestionnaire', 'GestionAlarmes');
+sInit    := Ask('sInit', 'Section d initialisation du registre', 'Alarmes_Init');
+sCycle   := Ask('sCycle', 'Section cyclique', 'Alarmes_Cycle');
+depart   := AskNumber('depart', 'Premier emplacement libre du registre', 0, 63, '0');
+AskNow();
+
+IF NOT Confirm('Alarmes', 'Enregistrer les alarmes de ' + famille + ' ?') THEN
+    Fail('annule');
+END_IF;
+
+analogique := (famille = 'Entrees ANA') OR (famille = 'Sorties ANA');
+apos := CHR(39);
+
+FOR k := 0 TO 3 DO
+    IF k = 0 THEN nom := 'ST_ALM_Def';
+    ELSIF k = 1 THEN nom := 'ST_ALM_Event';
+    ELSIF k = 2 THEN nom := 'ST_ALM_Cmd';
+    ELSE nom := 'ST_ALM_Stat';
+    END_IF;
+    IF NOT TypeExists(nom) AND LibHasItem(nom) THEN LibImport(nom); END_IF;
+END_FOR;
+IF NOT PouExists('DFB_ALM_MANAGER') AND LibHasItem('DFB_ALM_MANAGER') THEN
+    LibImport('DFB_ALM_MANAGER');
+END_IF;
+
+IF NOT VariableExists(registre) THEN
+    AddVariable(registre, 'ARRAY[0..63] OF ST_ALM_Def', 'Global', '');
+END_IF;
+IF NOT VariableExists(etats) THEN
+    AddVariable(etats, 'ARRAY[0..63] OF BOOL', 'Global', '');
+END_IF;
+IF NOT VariableExists(histo) THEN
+    AddVariable(histo, 'ARRAY[0..255] OF ST_ALM_Event', 'Global', '');
+END_IF;
+IF NOT VariableExists(cmd) THEN
+    AddVariable(cmd, 'ST_ALM_Cmd', 'Global', '');
+END_IF;
+IF NOT VariableExists(stat) THEN
+    AddVariable(stat, 'ST_ALM_Stat', 'Global', '');
+END_IF;
+IF NOT VariableExists(instance) THEN
+    AddVariable(instance, 'DFB_ALM_MANAGER', 'Global', '');
+END_IF;
+
+IF NOT SectionExists(sInit) THEN
+    AddSection(sInit, 'MAST', 'ST', '');
+END_IF;
+IF NOT SectionExists(sCycle) THEN
+    AddSection(sCycle, 'MAST', 'ST', '');
+    AppendToSection(sCycle, instance + '(Count := 64, CycleMs := 20, Cmd := ' + cmd
+        + ', State := ' + etats + ', Defs := ' + registre + ', History := ' + histo
+        + ', Stat := ' + stat + ');');
+END_IF;
+
+t := OpenTable('alarmes');
+IF t < 0 THEN
+    Fail('aucun tableau charge. Bouton Table... : exportez l onglet ' + famille + ' en CSV.');
+END_IF;
+
+(* LE TABLEAU EST-IL BIEN DE CETTE FAMILLE ?
+   Sans ce controle, choisir "Entrees ANA" sur un export TOR produisait 128
+   avertissements "aucune colonne S0_En" et zero alarme - un resultat qui a
+   l'air d'un probleme de donnees alors que c'est une erreur de choix. *)
+IF analogique AND NOT HasColumn(t, 'S0_En') THEN
+    IF HasColumn(t, 'AlarmEn') THEN
+        Fail('ce tableau est un onglet TOR (il a AlarmEn, pas S0_En). '
+             + 'Relancez en choisissant Entrees TOR ou Sorties TOR.');
+    ELSE
+        Fail('ce tableau n a ni S0_En ni AlarmEn : ce n est pas un onglet d E/S.');
+    END_IF;
+END_IF;
+IF NOT analogique AND NOT HasColumn(t, 'AlarmEn') THEN
+    IF HasColumn(t, 'S0_En') THEN
+        Fail('ce tableau est un onglet analogique (il a S0_En, pas AlarmEn). '
+             + 'Relancez en choisissant Entrees ANA ou Sorties ANA.');
+    ELSE
+        Fail('ce tableau n a ni AlarmEn ni S0_En : ce n est pas un onglet d E/S.');
+    END_IF;
+END_IF;
+
+slot := REAL_TO_INT(depart);
+lignes := RowCount(t);
+poses := 0;
+rack := 0;
+module := 0;
+voie := 0;
+genre := 0;
+uuid := 0;
+sev := 1;
+cible := '';
+d := 0;
+
+FOR i := 0 TO lignes - 1 DO
+    adresse := Cell(t, i, 'Adresse');
+    tableau := Cell(t, i, 'Tableau');
+    indice  := Cell(t, i, 'Index');
+    libelle := Cell(t, i, 'Designation');
+
+    IF adresse = '' OR tableau = '' THEN
+        SkipRow('ligne ' + DINT_TO_STRING(i) + ' : adresse ou tableau manquant');
+    ELSE
+        p1 := FIND(adresse, '.', 0);
+        p2 := FIND(adresse, '.', p1 + 1);
+        IF p1 < 0 OR p2 < 0 THEN
+            SkipRow('ligne ' + DINT_TO_STRING(i) + ' : adresse illisible (' + adresse + ')');
+        ELSE
+            (* Le rack suit les lettres : %IW0 donne 0, %I0 donne 0. *)
+            d := 1;
+            WHILE d < p1 AND FIND('0123456789', MID(adresse, d, 1), 0) < 0 DO
+                d := d + 1;
+            END_WHILE;
+            rack   := STRING_TO_INT(MID(adresse, d, p1 - d));
+            module := STRING_TO_INT(MID(adresse, p1 + 1, p2 - p1 - 1));
+            voie   := STRING_TO_INT(MID(adresse, p2 + 1));
+
+            IF analogique THEN
+                genre := 2;
+                FOR k := 0 TO 3 DO
+                    IF Cell(t, i, 'S' + DINT_TO_STRING(k) + '_En') = 'O' THEN
+                        IF slot > 63 THEN
+                            Warn('registre plein : ' + adresse + ' seuil '
+                                 + DINT_TO_STRING(k) + ' non enregistre');
+                        ELSE
+                            uuid := genre * 268435456 + rack * 16777216
+                                  + module * 262144 + voie * 4096 + k * 256;
+                            sev := STRING_TO_INT(Cell(t, i, 'S' + DINT_TO_STRING(k) + '_Sev'));
+                            cible := registre + '[' + DINT_TO_STRING(slot) + ']';
+
+                            AppendToSection(sInit, '');
+                            AppendToSection(sInit, '(* ' + adresse + ' seuil '
+                                + DINT_TO_STRING(k) + '   genre=' + DINT_TO_STRING(genre)
+                                + ' rack=' + DINT_TO_STRING(rack)
+                                + ' module=' + DINT_TO_STRING(module)
+                                + ' voie=' + DINT_TO_STRING(voie) + ' *)');
+                            AppendToSection(sInit, cible + '.Uuid := '
+                                + DINT_TO_STRING(uuid) + ';');
+                            AppendToSection(sInit, cible + '.Label := ' + apos
+                                + MID(libelle, 0, 24) + ' S' + DINT_TO_STRING(k) + apos + ';');
+                            AppendToSection(sInit, cible + '.Link := ' + apos + adresse
+                                + apos + ';');
+                            AppendToSection(sInit, cible + '.Sev := '
+                                + DINT_TO_STRING(sev) + ';');
+                            AppendToSection(sInit, cible + '.Used := TRUE;');
+
+                            AppendToSection(sCycle, etats + '[' + DINT_TO_STRING(slot)
+                                + '] := ' + tableau + '[' + indice + '].Thr['
+                                + DINT_TO_STRING(k) + '].Raised;');
+                            slot := slot + 1;
+                            poses := poses + 1;
+                        END_IF;
+                    END_IF;
+                END_FOR;
+            ELSIF Cell(t, i, 'AlarmEn') = 'O' THEN
+                genre := 1;
+                IF slot > 63 THEN
+                    Warn('registre plein : ' + adresse + ' non enregistre');
+                ELSE
+                    uuid := genre * 268435456 + rack * 16777216
+                          + module * 262144 + voie * 4096;
+                    sev := STRING_TO_INT(Cell(t, i, 'Sev'));
+                    cible := registre + '[' + DINT_TO_STRING(slot) + ']';
+
+                    AppendToSection(sInit, '');
+                    AppendToSection(sInit, '(* ' + adresse
+                        + '   genre=' + DINT_TO_STRING(genre)
+                        + ' rack=' + DINT_TO_STRING(rack)
+                        + ' module=' + DINT_TO_STRING(module)
+                        + ' voie=' + DINT_TO_STRING(voie) + ' *)');
+                    AppendToSection(sInit, cible + '.Uuid := ' + DINT_TO_STRING(uuid) + ';');
+                    AppendToSection(sInit, cible + '.Label := ' + apos
+                        + MID(libelle, 0, 30) + apos + ';');
+                    AppendToSection(sInit, cible + '.Link := ' + apos + adresse + apos + ';');
+                    AppendToSection(sInit, cible + '.Sev := ' + DINT_TO_STRING(sev) + ';');
+                    AppendToSection(sInit, cible + '.Used := TRUE;');
+
+                    AppendToSection(sCycle, etats + '[' + DINT_TO_STRING(slot) + '] := '
+                        + tableau + '[' + indice + '].Alarm;');
+                    slot := slot + 1;
+                    poses := poses + 1;
+                END_IF;
+            END_IF;
+        END_IF;
+    END_IF;
+END_FOR;
+
+IF poses = 0 THEN
+    (* Dire POURQUOI. "0 alarme" tout seul ressemble a une panne de la macro,
+       alors que c'est ce que le classeur contient. *)
+    IF analogique THEN
+        Warn('aucune alarme enregistree : aucune voie de ce tableau n a un seuil actif '
+             + '(colonnes S0_En a S3_En toutes a N). Activez-les dans le classeur, '
+             + 'ou il n y a rien a surveiller sur ces voies.');
+    ELSE
+        Warn('aucune alarme enregistree : aucune voie de ce tableau n a AlarmEn = O. '
+             + 'Une entree TOR ne devient une alarme que si vous le demandez.');
+    END_IF;
+END_IF;
+
+Log(DINT_TO_STRING(poses) + ' alarme(s) enregistree(s), prochain emplacement libre : '
+    + DINT_TO_STRING(slot));

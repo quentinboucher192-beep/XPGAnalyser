@@ -1,0 +1,39 @@
+(* CreerInstanceDFB
+
+   Une instance de bloc qui n'est jamais appelee ne fait rien. Cette macro cree
+   donc la variable ET ecrit la ligne d'appel - les deux, parce que l'une sans
+   l'autre est une moitie de travail qui a l'air terminee. *)
+
+bloc := Ask('bloc', 'Quel bloc ?', 'DFB_IO_ANA08');
+nom  := Ask('nom', 'Nom de l instance', '');
+section := Ask('section', 'Dans quelle section ecrire l appel ? (vide = aucune)', '');
+AskNow();
+
+IF nom = '' THEN
+    Fail('aucun nom donne');
+END_IF;
+
+IF NOT PouExists(bloc) THEN
+    IF LibHasItem(bloc) THEN
+        Log('import du bloc ' + bloc);
+        LibImport(bloc);
+    ELSE
+        Fail('le bloc ' + bloc + ' n existe pas et la bibliotheque ne le propose pas');
+    END_IF;
+END_IF;
+
+IF VariableExists(nom) THEN
+    Log(nom + ' existe deja');
+ELSE
+    AddVariable(nom, bloc, 'Global', '');
+    Log(nom + ' : ' + bloc);
+END_IF;
+
+IF section <> '' THEN
+    IF SectionExists(section) THEN
+        AppendToSection(section, nom + '();');
+        Log('appel ecrit dans ' + section);
+    ELSE
+        Warn('la section ' + section + ' n existe pas : aucun appel ecrit');
+    END_IF;
+END_IF;

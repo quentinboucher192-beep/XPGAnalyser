@@ -373,10 +373,11 @@ public:
         links_ += createKey_->clicked->connect([this] { host_.navigate("securite"); });
         links_ += restore_->clicked->connect([this] { host_.navigate("securite"); });
         links_ += toEditions_->clicked->connect([this] { host_.navigate("editions"); });
-        // 1.44.0 : le second chemin d'un poste sans cle (devenir admin), et ce qu'attend un poste en attente.
-        becomeAdmin_ = addButton("Demander \xC3\xA0 devenir admin\xE2\x80\xA6", "tableau.devenir-admin", ui::Button::Style::Default, ui::Icon::User);
-        becomeAdmin_->setTooltip("L'admin+ t'a fait installer l'Admin : ton nom, ton courriel ; ta cl\xC3\xA9 na\xC3\xAEt sur ce PC, l'admin+ l'accepte.");
-        myFingerprint_ = addButton("Voir mon empreinte", "tableau.voir-empreinte", ui::Button::Style::Primary, ui::Icon::Lock);
+        // 1.44.0 : le second chemin d'un poste sans cle (devenir admin), et ce qu'attend un poste en cours d'ajout.
+        // 1.51.0 : le code d'invitation fait l'admin (plus de demande) ; rien a lire a l'admin+.
+        becomeAdmin_ = addButton("Mon code d'invitation\xE2\x80\xA6", "tableau.devenir-admin", ui::Button::Style::Default, ui::Icon::User);
+        becomeAdmin_->setTooltip("L'admin+ t'a invit\xC3\xA9 : tape ton code d'invitation ; ta cl\xC3\xA9 na\xC3\xAEt sur ce PC et tu es admin.");
+        myFingerprint_ = addButton("O\xC3\xB9 en est mon ajout", "tableau.voir-empreinte", ui::Button::Style::Default, ui::Icon::User);
         toService_ = addButton("Recevoir l'archive", "tableau.aller-service", ui::Button::Style::Primary, ui::Icon::Globe);
         links_ += becomeAdmin_->clicked->connect([this] { host_.navigate("admins"); });
         links_ += myFingerprint_->clicked->connect([this] { host_.navigate("admins"); });
@@ -472,18 +473,19 @@ public:
         hintKind_ = 0;
         const Role role = w.role();
         if (role == Role::None) {
-            // 1.44.0 : deux chemins - le premier PC (la cle de l'editeur, l'admin+) ou un admin que l'admin+ accepte.
+            // 1.44.0 : deux chemins - le premier PC (la cle de l'editeur, l'admin+) ou un admin invite.
             // 1.49.0 (docs/ADMINS.md, par. 12) : XPG Admin n'a que le chemin de l'admin (l'invitation) ; l'Admin+ n'a que la cle
-            // de l'editeur (la creer, la restaurer), jamais << Demander a devenir admin >>.
+            // de l'editeur (la creer, la restaurer). 1.51.0 : plus de demande - le code d'invitation fait l'admin.
             hintKind_ = 1;
             hint_ = license_admin::classique()
-                        ? std::string("Pas encore de cl\xC3\xA9 d'admin sur ce poste : l'admin+ t'a invit\xC3\xA9 ? Ta demande part avec ton code d'invitation "
-                                      "(Administrateurs), puis l'admin+ l'accepte. Sans cl\xC3\xA9, rien ne se signe.")
+                        ? std::string("Pas encore de cl\xC3\xA9 d'admin sur ce poste : l'admin+ t'a invit\xC3\xA9 ? Tape ton code d'invitation (Administrateurs) : "
+                                      "accept\xC3\xA9, tu es admin. Sans cl\xC3\xA9, rien ne se signe.")
                         : std::string("Ce programme est celui de l'admin+. Un admin installe XPG Admin, re\xC3\xA7u avec son invitation. Pour commencer : "
                                       "cr\xC3\xA9" "e la cl\xC3\xA9 de l'\xC3\xA9" "diteur (le premier PC), ou restaure sa sauvegarde. Sans cl\xC3\xA9, rien ne se signe.");
         } else if (role == Role::Pending) {
             hintKind_ = 3;
-            hint_ = "Ta demande pour devenir admin attend l'admin+ : il va t'appeler, lis-lui ton empreinte. En attendant, l'Admin ne peut rien signer.";
+            hint_ = "Ton code d'invitation est accept\xC3\xA9 : l'Admin+ ajoute ta cl\xC3\xA9 \xC3\xA0 la liste des admins d'office, d\xC3\xA8s qu'il est en ligne. "
+                    "Rien \xC3\xA0 faire : tes droits s'ouvrent tout seuls.";
         } else if (role == Role::Retired) {
             hintKind_ = 4;
             hint_ = w.whyNot("licence_creer");

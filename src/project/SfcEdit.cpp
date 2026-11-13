@@ -250,6 +250,19 @@ namespace sfc {
 
     } // namespace
 
+    std::set<std::string> stepNamesInProject(const domain::Project& p, domain::Index except) {
+        std::set<std::string> out;
+        for (std::size_t i = 0; i < p.sections.size(); ++i) {
+            const auto& s = p.sections[i];
+            if (static_cast<domain::Index>(i) == except || s.language != domain::PouLanguage::SFC || !domain::keepsSourceXml(s))
+                continue;
+            const auto c = parse(s.body);
+            for (const auto& it : c.items)
+                if (it.kind == ItemKind::Step) out.insert(upper(it.name));
+        }
+        return out;
+    }
+
     bool validName(std::string_view name) {
         if (name.empty()) return false;
         if (!std::isalpha(static_cast<unsigned char>(name.front())) && name.front() != '_') return false;
@@ -740,9 +753,48 @@ namespace sfc {
         return done("section " + name + " r\xC3\xA9\xC3\xA9" "crite", -1);
     }
 
+    std::size_t rewriteNames(std::string& xml, const std::function<std::size_t(std::string&)>& rename) {
+        auto c = parse(xml);
+        if (!c.ok || !c.editable) return 0;
+        std::size_t total = 0;
+        auto apply = [&](std::string& text, bool& dirty) {
+            if (text.empty()) return;
+            std::string copy = text;
+            const auto n = rename(copy);
+            total += n;
+            if (n > 0 && copy != text) { text = std::move(copy); dirty = true; }
+        };
+        for (auto& it : c.items) {
+            if (it.kind == ItemKind::Transition && (it.cond == CondKind::Variable || it.cond == CondKind::Expression))
+                apply(it.condText, it.dirty);
+            if (it.kind == ItemKind::Step)
+                for (auto& a : it.actions) {
+                    if (!a.isSection) apply(a.name, it.dirty);
+                    if (a.timeIsVariable) apply(a.time, it.dirty);
+                }
+        }
+        for (auto& src : c.sources)
+            if (src.language == domain::PouLanguage::ST || src.language == domain::PouLanguage::IL
+                || src.language == domain::PouLanguage::LD)
+                apply(src.body, src.dirty);
+        if (c.modified()) xml = write(c);
+        return total;
+    }
+
 } // namespace sfc
 
 namespace project {
+
+    namespace {
+        // Comme l'import (XpgParser, countGraphRows) : les "lignes" d'un schema sont ses
+        // etapes, ses transitions et les rangees de ses ladders - les statistiques suivent.
+        std::uint32_t graphRows(std::string_view xml) {
+            std::uint32_t n = 0;
+            for (const std::string_view needle : { "<typeLine>", "<step ", "<transition>", "<transition ", "<FFBBlock " })
+                for (std::size_t at = xml.find(needle); at != std::string_view::npos; at = xml.find(needle, at + needle.size())) ++n;
+            return n;
+        }
+    } // namespace
 
     SfcEditCommand::SfcEditCommand(SfcProjectPtr project, domain::Index section, std::string body, std::string label)
         : project_(std::move(project)), section_(section), newBody_(std::move(body)), label_(std::move(label)) {}
@@ -754,7 +806,7 @@ namespace project {
         auto& s = project_->sections[section_];
         if (!captured_) { oldBody_ = s.body; captured_ = true; }
         s.body = newBody_;
-        s.lineCount = s.body.empty() ? 0u : static_cast<std::uint32_t>(std::count(s.body.begin(), s.body.end(), '\n')) + 1;
+        s.lineCount = graphRows(s.body);
         return core::ok();
     }
 
@@ -762,7 +814,7 @@ namespace project {
         if (!project_ || section_ >= project_->sections.size() || !captured_) return core::ok();
         auto& s = project_->sections[section_];
         s.body = oldBody_;
-        s.lineCount = s.body.empty() ? 0u : static_cast<std::uint32_t>(std::count(s.body.begin(), s.body.end(), '\n')) + 1;
+        s.lineCount = graphRows(s.body);
         return core::ok();
     }
 

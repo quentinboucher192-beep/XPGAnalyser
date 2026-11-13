@@ -243,6 +243,7 @@ public:
     bool setCategory(std::string_view label) {
         if (label == "Tous") chip_ = kAll;
         else if (label == "R\xC3\xA9" "cents") chip_ = kRecents;
+        else if (label == "Types du symbole" && !symbolEntries_.empty()) chip_ = kSymbolTypes;   // 1.51.0
         else {
             bool found = false;
             for (const auto c : tr::kCategories)

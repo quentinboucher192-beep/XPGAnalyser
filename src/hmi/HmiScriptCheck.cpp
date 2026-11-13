@@ -940,9 +940,19 @@ private:
         const auto lineTo = [&](int line) {
             return line >= 1 && static_cast<std::size_t>(line) < lineStarts_.size() ? lineStarts_[static_cast<std::size_t>(line)] : body_.size();
         };
+        // 1.51.0 : le code d'un symbole (sc_.ns : son espace) lit T_Mode#Marche dans SES types d'abord (la portee la plus proche).
+        lang110::EnumValuesFn enumValues = lang110::enumValuesOf(sc_.project);
+        if (!sc_.ns.empty() && sc_.project && symtypes::symbolScope(*sc_.project, sc_.ns))
+            enumValues = [base = enumValues, ns = sc_.ns](std::string_view type) {
+                if (type.find('.') == std::string_view::npos) {
+                    auto own = base(ns + "." + std::string(type));
+                    if (!own.empty()) return own;
+                }
+                return base(type);
+            };
         const auto a = lang110::analyze(code, [this](std::string_view n) { return knownElsewhere(n); },
                                         [this](std::string_view n) { return typeOfName(n); },
-                                        lang110::enumValuesOf(sc_.project), sc_.project);   // 1.10 (S1) : les enumerations
+                                        enumValues, sc_.project);   // 1.10 (S1) : les enumerations
         for (const auto& fn : a.functions) {
             const std::size_t from = lineFrom(fn.firstLine), to = lineTo(fn.lastLine);
             internal_.push_back({fn.name, from, to});

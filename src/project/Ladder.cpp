@@ -210,7 +210,7 @@ namespace project::ladder {
         const bool out = pins[pin].dir == PinDir::Out;
         int k = 0;
         for (std::size_t i = 0; i < pin; ++i) k += ((pins[i].dir == PinDir::Out) == out) ? 1 : 0;
-        return y + (enEno ? 1 : 0) + k;
+        return y + 1 + k;
     }
 
     int Network::blockAt(int row, int col) const noexcept {
@@ -272,20 +272,45 @@ namespace project::ladder {
                 return placed;
             }
 
+            // Une liaison verticale au bord DROIT de ce qui precede (la frontiere courante).
             void link() {
                 ensureCols(col);
                 n.links[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)] = 1;
             }
 
-            void element(const Node& e, Diagram& diagram, std::vector<Block>& blocks);
+            int blockCols{ 2 };   // les colonnes d'un bloc ecrit dans la suite (voir spanOf)
+            void element(const Node& e, std::vector<Block>& blocks);
         };
+
+        // Les colonnes qu'un element occupe dans la suite de sa rangee ; un bloc : 0
+        // (sa part se deduit de la rangee : nbColumns moins le reste).
+        int spanOf(const Node& e) {
+            const auto& t = e.name;
+            if (t == "HLink" || t == "emptyCell") return std::max(1, e.number("nbCells", 1));
+            if (t == "compareBlock" || t == "operateBlock") return std::max(1, e.number("width", 2));
+            if (t == "FFBBlock" || t == "objPosition") return 0;
+            if (t == "shortCircuit") {
+                int n = 0;
+                bool other = false;
+                for (const auto& k : e.kids) {
+                    if (k.name == "VLink") continue;
+                    other = true;
+                    n += spanOf(k);
+                }
+                return other ? n : 1;
+            }
+            if (t == "contact" || t == "coil" || t == "control" || t == "labelCell" || t == "VLink"
+                || t == "jumpCoil" || t == "retCoil" || t == "returnCoil" || t == "label" || t == "jump" || t == "return")
+                return 1;
+            return std::max(1, e.number("nbCells", 1));
+        }
 
         Block readBlock(const Node& e) {
             Block b;
             b.attrs = e.attrs;
             b.type = e.attr("typeName");
             b.instance = e.attr("instanceName");
-            b.width = std::max(1, e.number("width", 3));
+            b.width = std::max(1, e.number("width", 10));
             b.height = std::max(1, e.number("height", 3));
             b.enEno = e.attr("enEnO") == "true";
             b.additionalPins = e.number("additionnalPinNumber", 0);
@@ -315,10 +340,12 @@ namespace project::ladder {
                 }
                 b.extras.push_back(k.raw);
             }
+            // La hauteur couvre au moins ses broches (l'en-tete + une rangee par broche).
+            b.height = std::max(b.height, 1 + std::max(b.inputCount(), b.outputCount()));
             return b;
         }
 
-        void RowReader::element(const Node& e, Diagram& diagram, std::vector<Block>& blocks) {
+        void RowReader::element(const Node& e, std::vector<Block>& blocks) {
             const auto& t = e.name;
             Cell c;
             c.element = t;
@@ -349,14 +376,24 @@ namespace project::ladder {
                 }
             }
             else if (t == "VLink") {
-                diagram.bareVLink = true;
+                // une case sans fil horizontal, une liaison verticale a son bord droit
+                Cell empty;
+                empty.element = t;
+                put(std::move(empty), 1);
                 link();
             }
             else if (t == "shortCircuit") {
+                bool vlink = false, other = false;
                 for (const auto& k : e.kids) {
-                    if (k.name == "VLink") { link(); continue; }
-                    element(k, diagram, blocks);
+                    if (k.name == "VLink") { vlink = true; continue; }
+                    other = true;
+                    element(k, blocks);
                 }
+                if (!other) {
+                    Cell empty;
+                    put(std::move(empty), 1);
+                }
+                if (vlink) link();
             }
             else if (t == "compareBlock" || t == "operateBlock") {
                 c.kind = t == "compareBlock" ? Kind::Compare : Kind::Operate;
@@ -389,10 +426,11 @@ namespace project::ladder {
             }
             else if (t == "FFBBlock") {
                 auto b = readBlock(e);
-                // Place par sa position ; s'il est ecrit a sa colonne dans la suite de
-                // la rangee, il en occupe la largeur.
+                // Dans la suite de sa rangee du haut, il y occupe sa part des colonnes ;
+                // ailleurs, il est place par sa seule position.
                 const bool inFlow = b.x == col && b.y == row;
-                const int w = b.width;
+                b.cols = std::max(1, blockCols);
+                const int w = b.cols;
                 blocks.push_back(std::move(b));
                 if (inFlow) {
                     ensureCols(col + w);
@@ -411,7 +449,13 @@ namespace project::ladder {
 
         bool readNetwork(const Node& net, Diagram& d, Network& n) {
             int row = 0;
+            bool sawLine = false, sawText = false;
             for (const auto& k : net.kids) {
+                if (k.name == "typeLine") sawLine = true;
+                if (k.name == "textBox" && !sawText) {
+                    sawText = true;
+                    n.commentsFirst = !sawLine;
+                }
                 if (k.name == "typeLine") {
                     const Node* empty = k.child("emptyLine");
                     if (empty) {
@@ -422,7 +466,18 @@ namespace project::ladder {
                     }
                     d.ensureRows(n, row + 1);
                     RowReader rr{ d, n, row };
-                    for (const auto& e : k.kids) rr.element(e, d, n.blocks);
+                    // La part d'un bloc ecrit dans la suite : ce que la rangee laisse.
+                    int rest = 0, inFlow = 0;
+                    for (const auto& e : k.kids) {
+                        if (e.name == "FFBBlock") {
+                            // dans la suite seulement s'il est ecrit a sa colonne
+                            const Node* pos = e.child("objPosition");
+                            if (pos && pos->number("posX", -1) == rest && pos->number("posY", -1) == row) ++inFlow;
+                        }
+                        rest += spanOf(e);
+                    }
+                    if (inFlow > 0 && d.columns - rest >= inFlow) rr.blockCols = (d.columns - rest) / inFlow;
+                    for (const auto& e : k.kids) rr.element(e, n.blocks);
                     ++row;
                     continue;
                 }
@@ -447,6 +502,7 @@ namespace project::ladder {
                 }
                 n.extras.push_back(k.raw);
             }
+            n.fileRows = row;
             // Un bloc sous la derniere rangee ecrite : la grille va jusqu'a lui.
             int bottom = std::max(1, n.rows());
             for (const auto& b : n.blocks) bottom = std::max(bottom, b.y + b.height);
@@ -596,7 +652,7 @@ namespace project::ladder {
                 case Kind::Jump: {
                     if (c.element == "control" || c.element.empty()) {
                         std::string typeText = c.typeText.empty() || upper(c.typeText).find("RET") != std::string::npos
-                            ? std::string("jump") : c.typeText;
+                            ? std::string("jumpCoil") : c.typeText;
                         return "<control" + attrsText(c.element == "control" ? c.attrs : kNoAttrs,
                                                       { { "typeControl", typeText }, { "label", c.name } }) + "></control>";
                     }
@@ -605,7 +661,7 @@ namespace project::ladder {
                 case Kind::Return: {
                     if (c.element == "control" || c.element.empty()) {
                         std::string typeText = !c.typeText.empty() && upper(c.typeText).find("RET") != std::string::npos
-                            ? c.typeText : std::string("return");
+                            ? c.typeText : std::string("retCoil");
                         return "<control" + attrsText(c.element == "control" ? c.attrs : kNoAttrs,
                                                       { { "typeControl", typeText } }) + "></control>";
                     }
@@ -666,83 +722,82 @@ namespace project::ladder {
             }
 
             // Une rangee : les elements de gauche a droite, les fils et le vide
-            // regroupes, une liaison verticale avant l'element de sa frontiere.
+            // regroupes ; une liaison verticale sur le bord droit de ce qui la porte
+            // (un groupe dans un shortCircuit, ou une case <VLink> sans fil).
             void writeRow(const Network& n, int row) {
                 const auto& cells = n.cells[static_cast<std::size_t>(row)];
                 const int cols = static_cast<int>(cells.size());
                 line(1, "<typeLine>");
                 int col = 0;
                 std::vector<bool> written(n.blocks.size(), false);
-                auto linkAt = [&](int b) { return n.link(row, b); };
-                auto openLink = [&](int b, bool& wrapped) {
-                    wrapped = false;
-                    if (!linkAt(b)) return;
-                    if (d.bareVLink) { line(2, "<VLink></VLink>"); return; }
+                auto linkAt = [&](int b) { return b > 0 && n.link(row, b); };
+                auto blockStartsAt = [&](int c) {
+                    for (std::size_t i = 0; i < n.blocks.size(); ++i)
+                        if (n.blocks[i].y == row && n.blocks[i].x == c) return static_cast<int>(i);
+                    return -1;
+                };
+                auto isCovered = [&](int c) {
+                    return cells[static_cast<std::size_t>(c)].kind == Kind::Covered || n.blockAt(row, c) >= 0;
+                };
+                auto emit = [&](bool wrapped, const std::string& text) { this->emit(wrapped ? 3 : 2, text); };
+                auto open = [&](bool wrapped) {
+                    if (!wrapped) return;
                     line(2, "<shortCircuit>");
                     line(3, "<VLink></VLink>");
-                    wrapped = true;
                 };
-                auto closeLink = [&](bool wrapped) { if (wrapped) line(2, "</shortCircuit>"); };
+                auto close = [&](bool wrapped) { if (wrapped) line(2, "</shortCircuit>"); };
                 while (col < cols) {
-                    // un bloc qui commence ici
-                    int blockHere = -1;
-                    for (std::size_t i = 0; i < n.blocks.size(); ++i)
-                        if (n.blocks[i].y == row && n.blocks[i].x == col) blockHere = static_cast<int>(i);
-                    if (blockHere >= 0) {
-                        bool wrapped = false;
-                        openLink(col, wrapped);
-                        written[static_cast<std::size_t>(blockHere)] = true;
-                        const auto& b = n.blocks[static_cast<std::size_t>(blockHere)];
-                        writeBlock(b, wrapped ? 3 : 2);
-                        closeLink(wrapped);
-                        col += b.width;
+                    if (const int bi = blockStartsAt(col); bi >= 0) {
+                        written[static_cast<std::size_t>(bi)] = true;
+                        const auto& b = n.blocks[static_cast<std::size_t>(bi)];
+                        writeBlock(b, 2);
+                        col += std::max(1, b.cols);
                         continue;
                     }
                     const auto& c = cells[static_cast<std::size_t>(col)];
-                    const int under = n.blockAt(row, col);
-                    const bool covered = under >= 0 || c.kind == Kind::Covered;
-                    const bool emptyish = covered || c.kind == Kind::Empty;
-                    if (c.kind == Kind::Wire || emptyish) {
-                        // une suite de fils (ou de vide), coupee par une liaison verticale ou un bloc
-                        const bool wire = c.kind == Kind::Wire && !covered;
-                        bool wrapped = false;
-                        openLink(col, wrapped);
+                    const bool covered = isCovered(col);
+                    const bool wire = c.kind == Kind::Wire && !covered;
+                    if (wire || covered || c.kind == Kind::Empty) {
+                        // une suite de fils (ou de vide), jusqu'a une liaison verticale, un bloc ou autre chose
                         int len = 1;
-                        if (!wrapped) {
-                            while (col + len < cols && !linkAt(col + len)) {
-                                const auto& nx = cells[static_cast<std::size_t>(col + len)];
-                                bool blockStarts = false;
-                                for (const auto& b : n.blocks) blockStarts = blockStarts || (b.y == row && b.x == col + len);
-                                if (blockStarts) break;
-                                const bool nxCovered = n.blockAt(row, col + len) >= 0 || nx.kind == Kind::Covered;
-                                const bool nxWire = nx.kind == Kind::Wire && !nxCovered;
-                                const bool nxEmpty = nxCovered || nx.kind == Kind::Empty;
-                                if (wire ? !nxWire : !nxEmpty) break;
-                                ++len;
-                            }
+                        while (col + len < cols && !linkAt(col + len) && blockStartsAt(col + len) < 0) {
+                            const auto& nx = cells[static_cast<std::size_t>(col + len)];
+                            const bool nxCovered = isCovered(col + len);
+                            const bool nxWire = nx.kind == Kind::Wire && !nxCovered;
+                            const bool nxEmpty = nxCovered || nx.kind == Kind::Empty;
+                            if (wire ? !nxWire : !nxEmpty) break;
+                            ++len;
                         }
-                        const char* el = wire ? "HLink" : "emptyCell";
-                        const auto& base = (c.element == el && !covered) ? c.attrs : kNoAttrs;
-                        line(wrapped ? 3 : 2, std::string("<") + el + attrsText(base, { { "nbCells", std::to_string(len) } })
-                                                  + "></" + el + ">");
-                        closeLink(wrapped);
+                        const bool linked = linkAt(col + len);
+                        if (wire) {
+                            const auto& base = c.element == "HLink" ? c.attrs : kNoAttrs;
+                            open(linked);
+                            emit(linked, "<HLink" + attrsText(base, { { "nbCells", std::to_string(len) } }) + "></HLink>");
+                            close(linked);
+                        }
+                        else {
+                            // du vide : sa derniere case porte la liaison verticale (<VLink>)
+                            const int plain = linked ? len - 1 : len;
+                            if (plain > 0) {
+                                const auto& base = (c.element == "emptyCell" && !covered) ? c.attrs : kNoAttrs;
+                                line(2, "<emptyCell" + attrsText(base, { { "nbCells", std::to_string(plain) } }) + "></emptyCell>");
+                            }
+                            if (linked) line(2, "<VLink></VLink>");
+                        }
                         col += len;
                         continue;
                     }
-                    bool wrapped = false;
-                    openLink(col, wrapped);
+                    const int w = std::max(1, c.width);
+                    const bool linked = linkAt(col + w);
                     bool multi = false;
-                    emit(wrapped ? 3 : 2, cellText(c, wrapped ? 3 : 2, multi));
-                    closeLink(wrapped);
-                    col += std::max(1, c.width);
+                    open(linked);
+                    emit(linked, cellText(c, linked ? 3 : 2, multi));
+                    close(linked);
+                    col += w;
                 }
                 // Un bloc hors de la grille (au-dela de nbColumns) : a la fin de sa rangee.
                 for (std::size_t i = 0; i < n.blocks.size(); ++i)
                     if (!written[i] && n.blocks[i].y == row) writeBlock(n.blocks[i], 2);
-                if (linkAt(cols)) {
-                    if (d.bareVLink) line(2, "<VLink></VLink>");
-                    else { line(2, "<shortCircuit>"); line(3, "<VLink></VLink>"); line(2, "</shortCircuit>"); }
-                }
                 line(1, "</typeLine>");
             }
 
@@ -763,6 +818,18 @@ namespace project::ladder {
                 int last = -1;
                 for (int r = 0; r < n.rows(); ++r)
                     if (!rowIsEmpty(n, r)) last = r;
+                // les rangees vides du bas que le fichier avait (Control Expert en garde)
+                if (last >= 0) last = std::max(last, std::min(n.rows(), n.fileRows) - 1);
+                auto comments = [&] {
+                    for (const auto& c : n.comments) {
+                        if (!c.changed && !c.raw.empty()) { line(1, c.raw); continue; }
+                        std::vector<std::pair<std::string, std::string>> model{
+                            { "width", std::to_string(c.width) }, { "height", std::to_string(c.height) } };
+                        line(1, "<textBox" + attrsText(c.attrs, model) + ">" + encodeText(c.text) + "<objPosition posX=\""
+                                    + std::to_string(c.x) + "\" posY=\"" + std::to_string(c.y) + "\"></objPosition></textBox>");
+                    }
+                };
+                if (n.commentsFirst) comments();
                 int r = 0;
                 if (last < 0) {
                     line(1, "<typeLine>");
@@ -782,13 +849,7 @@ namespace project::ladder {
                     writeRow(n, r);
                     ++r;
                 }
-                for (const auto& c : n.comments) {
-                    if (!c.changed && !c.raw.empty()) { line(1, c.raw); continue; }
-                    std::vector<std::pair<std::string, std::string>> model{
-                        { "width", std::to_string(c.width) }, { "height", std::to_string(c.height) } };
-                    line(1, "<textBox" + attrsText(c.attrs, model) + ">" + encodeText(c.text) + "<objPosition posX=\""
-                                + std::to_string(c.x) + "\" posY=\"" + std::to_string(c.y) + "\"></objPosition></textBox>");
-                }
+                if (!n.commentsFirst) comments();
                 for (const auto& x : n.extras) line(1, x);
                 line(0, "</networkLD>");
             }
@@ -1033,6 +1094,26 @@ namespace project::ladder {
         }
         if (count) *count = n;
         return out;
+    }
+
+    std::size_t rewriteNames(Diagram& d, const std::function<std::size_t(std::string&)>& fn) {
+        std::size_t total = 0;
+        for (auto& n : d.networks) {
+            std::size_t here = 0;
+            for (auto& row : n.cells)
+                for (auto& c : row) {
+                    if (c.kind == Kind::Contact || c.kind == Kind::Coil) here += fn(c.name);
+                    else if (c.kind == Kind::Compare || c.kind == Kind::Operate) here += fn(c.text);
+                }
+            for (auto& b : n.blocks) {
+                if (!b.isFunction()) here += fn(b.instance);
+                for (auto& p : b.pins)
+                    if (!p.effective.empty()) here += fn(p.effective);
+            }
+            if (here) n.modified = true;
+            total += here;
+        }
+        return total;
     }
 
     std::size_t renameVariable(Diagram& d, std::string_view from, std::string_view to) {

@@ -13,7 +13,9 @@
 //      cycle, Etape.x / Etape.t, retard, supervision, N S R L D P1 P0, une
 //      section d'action ST, une receptivite ST et une en LD.
 // =============================================================================
+#include "../src/project/SfcDiagram.hpp"
 #include "../src/project/SfcEdit.hpp"
+#include "../src/project/RenameCommands.hpp"
 #include "../src/sim/Runtime.hpp"
 #include "../src/sim/SfcRun.hpp"
 
@@ -333,10 +335,32 @@ void model() {
     check(ab && ab->andJoin && names(c, ab->sources) == std::vector<std::string>{ "Moteur_A", "Moteur_B" }
               && names(c, ab->targets) == std::vector<std::string>{ "Init" },
           "riche : convergence en ET puis le lien vers Init");
-    check(sfc::conditionText(c, c.items[static_cast<std::size_t>(transitionAt(c, 3, 5))]) == "NOT (Pompe)",
+    check(sfc::conditionText(c, c.items[static_cast<std::size_t>(transitionAt(c, 3, 5))]) == "NOT Pompe",
           "riche : une receptivite inversee");
     check(sfc::conditionText(c, c.items[static_cast<std::size_t>(transitionAt(c, 3, 3))]) == "Niveau < 10",
           "riche : la receptivite d'une section ST");
+
+    // renommer une variable : receptivites, actions, sections ST et LD ; le reste tel quel
+    {
+        std::string x = kRich;
+        const auto n = project::renameInCode(x, "Pompe", "Pompe_1", false);
+        const auto r = sfc::parse(x);
+        int pompe = 0;
+        for (const auto& it : r.items) {
+            for (const auto& a : it.actions) pompe += a.name == "Pompe_1";
+            pompe += it.kind == sfc::ItemKind::Transition && it.condText == "Pompe_1";
+        }
+        check(n == 3 && pompe == 3, "renommer Pompe : les actions S et R et la receptivite NOT Pompe");
+        std::string y = kRich;
+        project::renameInCode(y, "Chaud", "Temp_OK", false);
+        project::renameInCode(y, "Niveau", "Niv", false);
+        check(y.find("contactVariableName=\"Temp_OK\"") != std::string::npos && y.find("<STSource>Niv &lt; 10</STSource>") != std::string::npos,
+              "renommer dans la section LD (contact) et la section ST");
+        check(y.find("stepName=\"Chauffer\"") != std::string::npos && project::renameInCode(y, "Init", "Debut", false) == 0,
+              "les noms d'etape ne sont pas des variables : rien a renommer");
+        std::string z = kRich;
+        check(project::renameInCode(z, "Absent", "Autre", false) == 0 && z == kRich, "rien a renommer : le XML inchange");
+    }
 
     // un element modifie : lui seul change
     auto m = c;
@@ -352,6 +376,57 @@ void model() {
         expect.replace(lit, std::string("<literals max=\"\"").size(), "<literals max=\"t#30s\"");
     }
     check(out == expect, "un champ change : seule sa ligne change dans le XML");
+}
+
+void drawing() {
+    std::printf("\n--- SFC : le dessin (la grille de Control Expert)\n");
+    const auto c = sfc::parse(kRich);
+    const auto t = sfc::resolve(c);
+    sfc::Grid grid;
+    const auto d = sfc::buildDiagram(c, t, grafcet::fixedWidthMeasure(7.f), &grid);
+    check(d.steps.size() == 7 && d.transitions.size() == 7, "dessin : 7 etapes, 7 transitions");
+    check(d.junctions.size() == 4, "dessin : 4 traits (OU et ET)");
+    int ands = 0;
+    for (const auto& j : d.junctions) ands += j.isAnd;
+    check(ands == 2, "dessin : la divergence et la convergence en ET en double trait");
+    check(d.notes.size() == 1 && d.notes[0].text == "cuve d'essai", "dessin : le texte");
+    check(d.actions.size() == 7, "dessin : 7 actions a droite de leur etape");
+    const auto* init = d.step(c.findStep("Init"));
+    check(init && init->initial && init->label == "Init", "dessin : Init, double carre, son nom dans la case");
+    bool qual = false;
+    for (const auto& a : d.actions) qual = qual || (a.qualifier == "L" && a.text == "Vanne" && a.kindText == "t#2s");
+    check(qual, "dessin : l'action L Vanne t#2s");
+    if (const auto* rem = d.step(c.findStep("Remplir"))) {
+        const auto cell = grid.cellAt({ rem->box.x + rem->box.w / 2.f, rem->box.y + rem->box.h / 2.f });
+        check(cell.first == 0 && cell.second == 2, "dessin : la case sous le centre de Remplir est (0, 2)");
+    }
+    const auto* moteurB = d.step(c.findStep("Moteur_B"));
+    const auto* moteurA = d.step(c.findStep("Moteur_A"));
+    check(moteurA && moteurB && moteurB->box.x > moteurA->box.right(), "dessin : la colonne 3 a droite de la colonne 0");
+    bool up = false;
+    for (const auto& seg : d.segments) up = up || seg.arrowUp;
+    check(up, "dessin : le lien qui remonte a Init porte sa fleche");
+    const auto g = sfc::asGrafcet(c, t, "G7_Essai");
+    check(g.steps.size() == 7 && g.transitions.size() == 7, "le meme graphe pour la vue (grafcet::Chart)");
+    const auto k = sfc::checks(c, t);
+    check(k.empty(), "aucun controle en defaut");
+    // la lecture en texte : les actions, et la case de chaque ligne
+    domain::Section sec;
+    sec.language = domain::PouLanguage::SFC;
+    sec.body = kRich;
+    const auto lines = project::graphListing(sec);
+    bool acts = false, pompe = false, cell = false, section = false;
+    for (const auto& l : lines) {
+        acts = acts || l.text.find("actions : S Pompe, L Vanne t#2s, D Alarme t#5s, P1 [A_Compte]") != std::string::npos;
+        for (const auto& w : l.writes) pompe = pompe || w == "Pompe";
+        cell = cell || (l.text.find("\xC3\xA9tape Vider") != std::string::npos && l.cellX == 3 && l.cellY == 4);
+        section = section || (l.text.find("Compteur := Compteur + 1;") != std::string::npos && l.cellX == 0 && l.cellY == 2
+                              && !l.writes.empty() && l.writes[0] == "Compteur");
+    }
+    check(acts, "texte : les actions de Remplir");
+    check(pompe, "texte : Pompe est ecrite par une action");
+    check(cell, "texte : la ligne de Vider sait sa case (3, 4)");
+    check(section, "texte : la section d'action A_Compte, ecrite, a la case de Remplir");
 }
 
 void edits() {
@@ -382,9 +457,10 @@ void edits() {
                                      "\t\t\t\t\t</step>") != std::string::npos,
               "X0 ressort tel quel");
     }
-    // supprimer X2 : la paire part, les rangees remontent - le XML d'origine
-    r = sfc::removeItem(c, c.findStep("X2"));
-    check(r.ok, "supprimer X2 (et sa transition)");
+    // supprimer la nouvelle transition : elle part avec X2 qui la suit, les rangees
+    // remontent - le XML d'origine
+    r = sfc::removeItem(c, transitionAt(c, 1, 4));
+    check(r.ok && c.findStep("X2") < 0, "supprimer la nouvelle transition (et X2 qui la suit)");
     check(sfc::write(c) == kSfc, "ajouter puis supprimer : le XML d'origine, octet pour octet");
 
     // la receptivite : une expression part dans une section ST
@@ -516,6 +592,14 @@ void simulation() {
         const auto outcome = parser.parse(document(), *project, importer::ParseOptions{}, {});
         check(static_cast<bool>(outcome), "le projet d'essai se lit");
     }
+    {
+        const auto x = project::crossReference(*project, "Pompe");
+        check(x.writes.size() >= 2, "references : Pompe ecrite par les actions (S, R)");
+        const auto c = project::crossReference(*project, "Compteur");
+        check(!c.writes.empty(), "references : Compteur ecrit par la section d'action");
+        const auto n = project::crossReference(*project, "Niveau");
+        check(!n.reads.empty(), "references : Niveau lu par la receptivite ST");
+    }
     sim::Runtime rt(project);
     const auto prepared = rt.prepare("MAST");
     check(static_cast<bool>(prepared), "le GRAFCET se prepare");
@@ -604,10 +688,61 @@ void simulation() {
     check(situation(rt) == "Init", "initialiser : la situation initiale au cycle suivant");
 }
 
+// Un GRAFCET modifie se range dans le dossier du projet, se relit, s'exporte et se relit.
+void store() {
+    std::printf("\n--- SFC : modifie, range, rouvert, exporte\n");
+    auto project = std::make_shared<domain::Project>();
+    importer::XpgParser parser;
+    check(static_cast<bool>(parser.parse(document(), *project, importer::ParseOptions{}, {})), "le projet d'essai se lit");
+    domain::Index g7 = domain::kNoIndex;
+    for (std::size_t i = 0; i < project->sections.size(); ++i)
+        if (project->strings.text(project->sections[i].name) == "G7_Essai") g7 = static_cast<domain::Index>(i);
+    if (g7 == domain::kNoIndex) { check(false, "G7_Essai trouve"); return; }
+    auto chart = sfc::parse(project->sections[g7].body);
+    (void)sfc::addStepBelow(chart, chart.findStep("Attente"), "Pause", "", "");
+    (void)sfc::setCondition(chart, transitionAt(chart, 0, 7), "Attente.t > t#1s AND Go_Par", "G7_Essai_T1");
+    project::SfcEditCommand cmd(project, g7, sfc::write(chart), "essai");
+    check(static_cast<bool>(cmd.execute()), "le GRAFCET modifie");
+    const auto edited = project->sections[g7].body;
+    const auto folder = (std::filesystem::temp_directory_path() / "sfc_test_projet").string();
+    std::error_code ec;
+    std::filesystem::remove_all(folder, ec);
+    project::Manifest m;
+    m.name = "Essai_SFC";
+    check(static_cast<bool>(project::ProjectStore::save(*project, m, folder)), "range dans le dossier du projet");
+    const auto opened = project::ProjectStore::open(folder);
+    const domain::Section* back = nullptr;
+    if (opened && opened->project)
+        for (const auto& sec : opened->project->sections)
+            if (opened->project->strings.text(sec.name) == "G7_Essai") back = &sec;
+    check(back && back->body == edited && back->language == domain::PouLanguage::SFC, "rouvert : le meme GRAFCET, octet pour octet");
+    exporter::XpgWriteOptions wo;
+    wo.dateTime = "date_and_time#2026-11-13-10:0:0";
+    const auto out = exporter::writeXpg(*project, wo);
+    check(out && out->find("<transitionSource name=\"G7_Essai_T1\">") != std::string::npos
+              && out->find("stepName=\"Pause\"") != std::string::npos,
+          "exporte (XPG) : l'etape et la section de transition ajoutees");
+    domain::Project again;
+    check(out && static_cast<bool>(parser.parse(*out, again, importer::ParseOptions{}, {})), "l'export se relit");
+    const domain::Section* reread = nullptr;
+    for (const auto& sec : again.sections)
+        if (again.strings.text(sec.name) == "G7_Essai") reread = &sec;
+    if (reread) {
+        const auto c = sfc::parse(reread->body);
+        const auto t = sfc::resolve(c);
+        check(c.findStep("Pause") >= 0 && t.problems.empty(), "relu : Pause est la, aucun probleme");
+    }
+    else check(false, "relu : G7_Essai");
+    check(static_cast<bool>(cmd.undo()) && project->sections[g7].body == kRich, "Ctrl+Z : le GRAFCET d'origine");
+    std::filesystem::remove_all(folder, ec);
+}
+
 void run() {
     model();
+    drawing();
     edits();
     simulation();
+    store();
 }
 
 } // namespace sfctest

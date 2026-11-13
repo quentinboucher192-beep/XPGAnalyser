@@ -1,0 +1,314 @@
+(* ImportES
+
+   Lit un onglet du classeur de configuration, exporte en CSV, et fait TOUT ce
+   qu'il faut pour que les voies fonctionnent. Un export ne contient qu'un
+   onglet, donc une execution traite une famille : relancez-la par famille.
+
+     - importe les DDT et le DFB de la bonne taille,
+     - declare le tableau de voies de chaque carte,
+     - declare l'instance du bloc et ecrit son appel,
+     - cable chaque voie,
+     - ecrit TOUS ses parametres, pas seulement .Raw.
+
+   LA VERSION PRECEDENTE N'ECRIVAIT QUE .Raw. Un tableau de ST_IO_Ana sans
+   echelle, sans seuils et sans instance de bloc ne fait rien du tout : la voie
+   etait cablee vers une structure que personne ne faisait tourner. C'etait une
+   macro qui avait l'air de marcher.
+
+   CE QU'ELLE NE FAIT PAS : elle ne supprime rien. Relancee apres l'ajout de
+   trois voies au classeur, elle ajoute ces trois voies. *)
+
+ou := AskChoice('ou', 'Ou creer les sections ?',
+                'Section de tache (globale),Dans une unite de programme',
+                'Section de tache (globale)');
+famille := AskChoice('famille', 'Quelle famille contient ce tableau ?',
+                     'Entrees TOR,Sorties TOR,Entrees ANA,Sorties ANA', 'Entrees ANA');
+
+(* Ces trois reponses decident des questions suivantes. Sans cette coupure, le
+   meme tour demanderait aussi les quatre noms de section - y compris quand on
+   vient de repondre "une seule". *)
+AskNow();
+
+IF ou = 'Dans une unite de programme' THEN
+    unite := Ask('unite', 'Quelle unite ?', 'Logigrammes_A');
+ELSE
+    unite := '';
+END_IF;
+
+(* UNE SECTION, et le nom propose suit la famille. Le choix "par famille ou une
+   seule" ne voulait rien dire : un export CSV ne contient qu'un onglet, donc une
+   execution ne traite qu'une famille de toute facon. Offrir un decoupage que la
+   macro ne peut pas faire etait une option qui ne decidait de rien. *)
+IF famille = 'Entrees TOR' THEN
+    section := Ask('sectionDI', 'Nom de la section', 'Mapping_DI');
+ELSIF famille = 'Sorties TOR' THEN
+    section := Ask('sectionDO', 'Nom de la section', 'Mapping_DO');
+ELSIF famille = 'Entrees ANA' THEN
+    section := Ask('sectionAI', 'Nom de la section', 'Mapping_AI');
+ELSE
+    section := Ask('sectionAO', 'Nom de la section', 'Mapping_AO');
+END_IF;
+
+tache := Ask('tache', 'Tache appelante', 'MAST');
+cycle := Ask('cycle', 'Periode de la tache, en ms', '20');
+AskNow();
+
+IF NOT Confirm('Import E/S', 'Cabler ' + famille + ' dans ' + section + ' ?') THEN
+    Fail('annule');
+END_IF;
+
+analogique := (famille = 'Entrees ANA') OR (famille = 'Sorties ANA');
+sortie     := (famille = 'Sorties TOR') OR (famille = 'Sorties ANA');
+
+IF analogique THEN
+    typeVoie := 'ST_IO_Ana';
+ELSE
+    typeVoie := 'ST_IO_Dig';
+END_IF;
+
+(* Les types avant les blocs qui les utilisent : un ARRAY OF ST_IO_Ana ne peut
+   pas etre declare avant ST_IO_Ana. *)
+IF analogique AND NOT TypeExists('ST_IO_Thr') AND LibHasItem('ST_IO_Thr') THEN
+    LibImport('ST_IO_Thr');
+END_IF;
+IF NOT TypeExists(typeVoie) AND LibHasItem(typeVoie) THEN
+    LibImport(typeVoie);
+END_IF;
+
+IF NOT PouExists(unite) AND unite <> '' THEN
+    AddProgramUnit(unite, tache);
+END_IF;
+IF NOT SectionExists(section) THEN
+    AddSection(section, tache, 'ST', unite);
+END_IF;
+
+t := OpenTable('es');
+IF t < 0 THEN
+    Fail('aucun tableau charge. Bouton Table... : exportez en CSV l onglet '
+         + famille + ' du classeur, puis chargez-le.');
+END_IF;
+lignes := RowCount(t);
+Log('tableau : ' + DINT_TO_STRING(lignes) + ' voie(s)');
+
+(* Une variable de macro nait a sa premiere AFFECTATION. Celles qu'une
+   comparaison lit avant tout le reste doivent donc exister d'abord - sinon la
+   macro s'arrete sur "n'est pas declaree", ce qui est exact et peu utile. *)
+carteEnCours := '';
+voies := 0;
+n := 0;
+m := 0;
+taille := 0;
+bloc := '';
+instance := '';
+
+(* ---- premier passage : combien de voies par carte ---------------------
+   La taille du tableau et celle du bloc en decoulent, et on ne peut pas les
+   connaitre avant d'avoir vu toutes les lignes de cette carte. *)
+FOR i := 0 TO lignes - 1 DO
+    tableau := Cell(t, i, 'Tableau');
+    indice  := Cell(t, i, 'Index');
+    adresse := Cell(t, i, 'Adresse');
+
+    IF tableau = '' OR adresse = '' THEN
+        SkipRow('ligne ' + DINT_TO_STRING(i) + ' : tableau ou adresse manquant');
+    ELSE
+        (* La derniere voie vue pour cette carte donne sa taille. Les lignes
+           d'une carte se suivent dans le classeur ; si ce n'etait pas le cas,
+           le maximum resterait juste. *)
+        n := STRING_TO_INT(indice) + 1;
+        IF tableau <> carteEnCours THEN
+            IF carteEnCours <> '' THEN
+                Log(carteEnCours + ' : ' + DINT_TO_STRING(voies) + ' voie(s)');
+            END_IF;
+            carteEnCours := tableau;
+            voies := n;
+        ELSIF n > voies THEN
+            voies := n;
+        END_IF;
+    END_IF;
+END_FOR;
+IF carteEnCours <> '' THEN
+    Log(carteEnCours + ' : ' + DINT_TO_STRING(voies) + ' voie(s)');
+END_IF;
+
+(* ---- second passage : declarer, instancier, cabler, configurer -------- *)
+carteEnCours := '';
+FOR i := 0 TO lignes - 1 DO
+    tableau := Cell(t, i, 'Tableau');
+    indice  := Cell(t, i, 'Index');
+    adresse := Cell(t, i, 'Adresse');
+    cible   := tableau + '[' + indice + ']';
+
+    IF tableau <> '' AND adresse <> '' THEN
+
+        IF tableau <> carteEnCours THEN
+            carteEnCours := tableau;
+
+            (* La taille du bloc : la premiere de 4/8/16/32/64 qui contient les
+               voies de cette carte. *)
+            n := 0;
+            FOR k := 0 TO lignes - 1 DO
+                IF Cell(t, k, 'Tableau') = tableau THEN
+                    m := STRING_TO_INT(Cell(t, k, 'Index')) + 1;
+                    IF m > n THEN n := m; END_IF;
+                END_IF;
+            END_FOR;
+
+            IF n <= 4 THEN
+                taille := 4;
+            ELSIF n <= 8 THEN
+                taille := 8;
+            ELSIF n <= 16 THEN
+                taille := 16;
+            ELSIF n <= 32 THEN
+                taille := 32;
+            ELSE
+                taille := 64;
+            END_IF;
+
+            IF analogique THEN
+                bloc := 'DFB_IO_ANA';
+            ELSE
+                bloc := 'DFB_IO_DIG';
+            END_IF;
+            IF taille < 10 THEN
+                bloc := bloc + '0' + DINT_TO_STRING(taille);
+            ELSE
+                bloc := bloc + DINT_TO_STRING(taille);
+            END_IF;
+
+            IF NOT PouExists(bloc) AND LibHasItem(bloc) THEN
+                LibImport(bloc);
+            END_IF;
+
+            (* Le tableau de voies. *)
+            IF NOT VariableExists(tableau) THEN
+                AddVariable(tableau,
+                            'ARRAY[0..' + DINT_TO_STRING(taille - 1) + '] OF ' + typeVoie,
+                            'Global', '');
+            END_IF;
+
+            (* L'INSTANCE DU BLOC, qui manquait entierement. Un tableau de voies
+               sans bloc pour le faire tourner ne fait rien : c'est de la donnee
+               que personne ne lit.
+
+               Le nom suit la convention du classeur : CarteAI_R0S10 donne
+               IO_AI_R0S10, et non IO_CarteAI_R0S10. *)
+            IF STARTSWITH(tableau, 'Carte') THEN
+                instance := 'IO_' + MID(tableau, 5);
+            ELSE
+                instance := 'IO_' + tableau;
+            END_IF;
+            IF NOT VariableExists(instance) THEN
+                AddVariable(instance, bloc, 'Global', '');
+            END_IF;
+
+            (* Un cartouche par carte, avec ce qu'il faut pour s'y retrouver :
+               le bloc, la taille, le nombre de voies. Sans ca, 457 lignes
+               d'affectations forment un pavé que personne ne relit. *)
+            AppendToSection(section, '');
+            AppendToSection(section,
+                '(* ==================================================================== *)');
+            AppendToSection(section, '(*  ' + tableau + '  -  ' + DINT_TO_STRING(n)
+                + ' voie(s)  -  ' + bloc + '  -  instance ' + instance + '  *)');
+            AppendToSection(section,
+                '(* ==================================================================== *)');
+            AppendToSection(section,
+                instance + '(Count := ' + DINT_TO_STRING(n)
+                + ', CycleMs := ' + cycle + ', Chan := ' + tableau + ');');
+        END_IF;
+
+        (* Une ligne vide et un titre par voie : le libelle du classeur, qui
+           est la seule chose qui dise ce que %IW0.10.3 mesure. *)
+        AppendToSection(section, '');
+        AppendToSection(section, '(* -- ' + cible + '  ' + adresse + '  '
+            + Cell(t, i, 'Designation') + ' *)');
+
+        (* ---- le cablage --------------------------------------------- *)
+        IF famille = 'Entrees ANA' THEN
+            AppendToSection(section, cible + '.Raw := INT_TO_REAL(' + adresse + ');');
+        ELSIF famille = 'Sorties ANA' THEN
+            AppendToSection(section, adresse + ' := REAL_TO_INT(' + cible + '.Raw);');
+        ELSIF famille = 'Entrees TOR' THEN
+            AppendToSection(section, cible + '.Raw := ' + adresse + ';');
+        ELSE
+            AppendToSection(section, adresse + ' := ' + cible + '.Raw;');
+        END_IF;
+
+        (* ---- TOUS les parametres, pas seulement .Raw ----------------- *)
+        IF sortie THEN
+            AppendToSection(section, cible + '.IsOut := TRUE;');
+        ELSE
+            AppendToSection(section, cible + '.IsOut := FALSE;');
+        END_IF;
+
+        IF analogique THEN
+            AppendToSection(section, cible + '.RawMin := '
+                + REAL_TO_STRING(STRING_TO_REAL(Cell(t, i, 'RawMin'))) + ';');
+            AppendToSection(section, cible + '.RawMax := '
+                + REAL_TO_STRING(STRING_TO_REAL(Cell(t, i, 'RawMax'))) + ';');
+            AppendToSection(section, cible + '.EngMin := '
+                + REAL_TO_STRING(STRING_TO_REAL(Cell(t, i, 'EngMin'))) + ';');
+            AppendToSection(section, cible + '.EngMax := '
+                + REAL_TO_STRING(STRING_TO_REAL(Cell(t, i, 'EngMax'))) + ';');
+            IF Cell(t, i, 'Clamp') = 'N' THEN
+                AppendToSection(section, cible + '.Clamp := FALSE;');
+            ELSE
+                AppendToSection(section, cible + '.Clamp := TRUE;');
+            END_IF;
+            AppendToSection(section, cible + '.DeadBand := '
+                + REAL_TO_STRING(STRING_TO_REAL(Cell(t, i, 'DeadBand'))) + ';');
+            AppendToSection(section, cible + '.FiltN := '
+                + DINT_TO_STRING(STRING_TO_INT(Cell(t, i, 'FiltN'))) + ';');
+            AppendToSection(section, cible + '.RateMax := '
+                + REAL_TO_STRING(STRING_TO_REAL(Cell(t, i, 'RateMax'))) + ';');
+
+            FOR k := 0 TO 3 DO
+                seuil := cible + '.Thr[' + DINT_TO_STRING(k) + ']';
+                colEn := 'S' + DINT_TO_STRING(k) + '_En';
+                IF Cell(t, i, colEn) = 'O' THEN
+                    AppendToSection(section, seuil + '.En := TRUE;');
+                    IF Cell(t, i, 'S' + DINT_TO_STRING(k) + '_Dir') = 'B' THEN
+                        AppendToSection(section, seuil + '.Dir := 1;');
+                    ELSE
+                        AppendToSection(section, seuil + '.Dir := 0;');
+                    END_IF;
+                    AppendToSection(section, seuil + '.Val := ' + REAL_TO_STRING(
+                        STRING_TO_REAL(Cell(t, i, 'S' + DINT_TO_STRING(k) + '_Val'))) + ';');
+                    AppendToSection(section, seuil + '.Hyst := ' + REAL_TO_STRING(
+                        STRING_TO_REAL(Cell(t, i, 'S' + DINT_TO_STRING(k) + '_Hyst'))) + ';');
+                    AppendToSection(section, seuil + '.DelayMs := ' + DINT_TO_STRING(
+                        STRING_TO_INT(Cell(t, i, 'S' + DINT_TO_STRING(k) + '_DelayMs'))) + ';');
+                    AppendToSection(section, seuil + '.Sev := ' + DINT_TO_STRING(
+                        STRING_TO_INT(Cell(t, i, 'S' + DINT_TO_STRING(k) + '_Sev'))) + ';');
+                ELSE
+                    AppendToSection(section, seuil + '.En := FALSE;');
+                END_IF;
+            END_FOR;
+        ELSE
+            IF Cell(t, i, 'Inv') = 'O' THEN
+                AppendToSection(section, cible + '.Inv := TRUE;');
+            ELSE
+                AppendToSection(section, cible + '.Inv := FALSE;');
+            END_IF;
+            AppendToSection(section, cible + '.DebounceMs := '
+                + DINT_TO_STRING(STRING_TO_INT(Cell(t, i, 'DebounceMs'))) + ';');
+            IF Cell(t, i, 'AlarmEn') = 'O' THEN
+                AppendToSection(section, cible + '.AlarmEn := TRUE;');
+                IF Cell(t, i, 'AlarmState') = '0' THEN
+                    AppendToSection(section, cible + '.AlarmState := FALSE;');
+                ELSE
+                    AppendToSection(section, cible + '.AlarmState := TRUE;');
+                END_IF;
+                AppendToSection(section, cible + '.AlarmDelayMs := '
+                    + DINT_TO_STRING(STRING_TO_INT(Cell(t, i, 'AlarmDelayMs'))) + ';');
+                AppendToSection(section, cible + '.Sev := '
+                    + DINT_TO_STRING(STRING_TO_INT(Cell(t, i, 'Sev'))) + ';');
+            ELSE
+                AppendToSection(section, cible + '.AlarmEn := FALSE;');
+            END_IF;
+        END_IF;
+    END_IF;
+END_FOR;
+
+Log('cablage termine dans ' + section);

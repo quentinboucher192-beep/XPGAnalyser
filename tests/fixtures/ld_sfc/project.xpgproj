@@ -1,0 +1,18 @@
+# API Studio project. Safe to read; edit with care.
+formatVersion = 1
+name = Essai_LD_SFC
+version = 0.0.1
+state = NEW
+created = 2026-11-13
+modified = 2026-11-13 16:28:32
+author = 
+cpu = BME P58 2040
+firmware = 03.20
+comment = Projet FICTIF des essais LADDER et GRAFCET (1.51.0)
+company = Schneider Automation
+product = Control Expert V15.3 - 230214C
+dtd = 41
+content = Fichier source multiprogramme
+content-date = 
+crlf = oui
+edition = api

@@ -461,6 +461,17 @@ HmiOperator* operatorById(Project& p, Id id, OperatorOwner* owner) {
 }
 
 // ------------------------------------------------------------- l'emploi ----
+namespace {
+// 1.51.0 : les operateurs d'un type d'un espace (d'un symbole : S_Pompe.T_Mode) le nomment par son nom court
+// (TO_STRING(T_Mode)) ; une operande ecrite par son nom complet est ce type.
+std::string ownShort(const Project& p, const OperatorOwner& o, std::string_view given) {
+    if (o.kind != OperatorOwner::Kind::Type) return std::string(given);
+    const HmiType* t = p.hmiType(o.id);
+    if (!t || t->ns.empty() || !sameTypeName(given, fullName(*t))) return std::string(given);
+    return t->name;
+}
+} // namespace
+
 const HmiOperator* findOperator(const Project& p, std::string_view op, std::string_view left, std::string_view right,
                                 OperatorOwner* owner) {
     const auto fam = operatorFamily(op);
@@ -472,11 +483,12 @@ const HmiOperator* findOperator(const Project& p, std::string_view op, std::stri
         const OperatorOwner o = ownerByName(p, typeName);
         const auto* list = operatorsOf(p, o);
         if (!list) return;
+        const std::string L = ownShort(p, o, left), R = ownShort(p, o, right);   // 1.51.0 : S_Pompe.T_Mode -> T_Mode
         for (const auto& x : *list) {
             if (x.op != op) continue;
             // La gauche d'un += est modifiee : elle doit etre exactement de son type.
-            const int l = fam == OperatorFamily::Assignment ? (sameTypeName(x.left, left) ? 0 : -1) : matchCost(x.left, left);
-            const int r = matchCost(x.right, right);
+            const int l = fam == OperatorFamily::Assignment ? (sameTypeName(x.left, L) ? 0 : -1) : matchCost(x.left, L);
+            const int r = matchCost(x.right, R);
             if (l < 0 || r < 0) continue;
             if (l + r < bestCost) {
                 bestCost = l + r;
@@ -503,9 +515,10 @@ const HmiOperator* findConversion(const Project& p, std::string_view function, s
         const OperatorOwner o = ownerByName(p, typeName);
         const auto* list = operatorsOf(p, o);
         if (!list) return;
+        const std::string src = ownShort(p, o, source);   // 1.51.0 : S_Pompe.T_Mode -> T_Mode
         for (const auto& x : *list) {
             if (x.op != kConversionOp || upperOf(trimmedOf(x.result)) != target) continue;
-            const int c = matchCost(x.left, source);
+            const int c = matchCost(x.left, src);
             if (c >= 0 && c < bestCost) {
                 bestCost = c;
                 best = &x;
@@ -865,8 +878,13 @@ std::string operatorProblem(const Project& p, const OperatorOwner& owner, const 
     }
     // En double : la meme fonction, les memes operandes, ailleurs dans le projet.
     const std::string key = uniqueKey(o);
+    const auto spaceOf = [&](const OperatorOwner& w) -> std::string {   // 1.51.0 : l'espace d'un type (d'un symbole)
+        const HmiType* t = w.kind == OperatorOwner::Kind::Type ? p.hmiType(w.id) : nullptr;
+        return t ? upperOf(t->ns) : std::string{};
+    };
     for (const auto& x : allOperators(p)) {
         if (x.op->id == o.id || x.op->id == ignore || x.op == &o) continue;
+        if (spaceOf(x.owner) != spaceOf(owner)) continue;   // T_Mode du projet et S_Pompe.T_Mode : deux types
         if (uniqueKey(*x.op) == key)
             return "op\xC3\xA9rateur en double : " + operatorSignature(o)
                  + (x.owner.kind == owner.kind && x.owner.id == owner.id ? std::string(" (d\xC3\xA9j\xC3\xA0 d\xC3\xA9" "fini ici)")

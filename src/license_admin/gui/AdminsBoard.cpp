@@ -20,10 +20,7 @@ namespace license_admin::gui::adminsboard {
 namespace adm = licensing::admins;
 
 // ============================================================================ les donnees
-Color personColor(const Person& p) {
-    if (p.kind == Person::Kind::Pending) return Color::rgb(0xA3ADBF);
-    return ch::colors::admin(p.color);
-}
+Color personColor(const Person& p) { return ch::colors::admin(p.color); }
 
 const Person* Data::person(const std::string& key) const {
     for (const auto& p : people)
@@ -46,7 +43,7 @@ std::string Data::keyOf(const std::string& id) const {
 }
 const Person* Data::personById(const std::string& id) const {
     for (const auto& p : people)
-        if (p.kind != Person::Kind::Pending && journalId(p) == id) return &p;
+        if (journalId(p) == id) return &p;
     return person(id);
 }
 const AdminFigures* Data::fig(const std::string& key) const {
@@ -60,12 +57,7 @@ int Data::activeCount() const {
 }
 int Data::retiredCount() const {
     int n = 0;
-    for (const auto& p : people) n += p.kind != Person::Kind::Pending && p.retired ? 1 : 0;
-    return n;
-}
-int Data::pendingCount() const {
-    int n = 0;
-    for (const auto& p : people) n += p.kind == Person::Kind::Pending ? 1 : 0;
+    for (const auto& p : people) n += p.retired ? 1 : 0;
     return n;
 }
 
@@ -102,10 +94,6 @@ void computeLocal(const Workspace& w, Data& d) {
     for (const auto& k : w.editorKeys()) editors.push_back(deploy::crypto::hex(k));
     d.editorKeys = editors;
     for (const auto& p : d.people) {
-        if (p.kind == Person::Kind::Pending) {
-            in.pending.push_back({p.name, p.received});
-            continue;
-        }
         js::Admin a;
         a.id = journalId(p);   // l'identifiant de sa cle : le journal le cite (admin_droits, les lignes du service)
         a.name = p.name;
@@ -451,7 +439,7 @@ void card(gfx::IRenderer& r, const ui::Theme& th, const Rect& b, float radius) {
 
 void avatarOf(gfx::IRenderer& r, const Rect& box, const Person& p) {
     Color c = personColor(p);
-    if (p.kind != Person::Kind::Pending && p.retired) c = ch::colors::mix(c, Color::rgb(0xFFFFFF), 0.25f);
+    if (p.retired) c = ch::colors::mix(c, Color::rgb(0xFFFFFF), 0.25f);
     kit::avatar(r, box, p.name, c, box.w * 0.28f);
 }
 

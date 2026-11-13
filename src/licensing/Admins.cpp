@@ -131,7 +131,7 @@ const std::vector<ActionType> kActions = {
     {"derogation_expiree", "D\xC3\xA9rogation termin\xC3\xA9" "e", "admins", Level::Medium, false, true},
     {"signature_refusee", "Signature refus\xC3\xA9" "e (certificat r\xC3\xA9voqu\xC3\xA9)", "admins", Level::Critical, true, true},
     {"autre_pc", "Connexion depuis un nouveau PC", "admins", Level::High, true, true},
-    {"demande_admin", "Demande pour devenir admin", "admins", Level::High, true, true},
+    {"demande_admin", "Demande pour devenir admin (avant la 1.51)", "admins", Level::High, true, true},   // 1.51.0 : plus ecrite (les lignes d'avant)
 };
 
 } // namespace
@@ -284,34 +284,6 @@ std::string fingerprint(std::string_view keyHex) {
         out += (c >= 'a' && c <= 'f') ? static_cast<char>(c - 'a' + 'A') : c;
     }
     return out;
-}
-
-// 1.49.0 : le code de confirmation (6 chiffres) - la meme formule que le service (service/src/admins.js).
-std::string confirmationCode(std::string_view keyHex) {
-    crypto::Bytes raw;
-    if (!crypto::unhex(keyHex, raw, 32)) return {};
-    std::string data = "xpg-confirmation-1";
-    data.append(reinterpret_cast<const char*>(raw.data()), raw.size());
-    const auto d = crypto::sha256(std::string_view(data));
-    std::uint64_t n = 0;
-    for (std::size_t i = 0; i < 8; ++i) n = (n << 8) | static_cast<std::uint64_t>(d[i]);
-    const unsigned v = static_cast<unsigned>(n % 1000000u);
-    char b[16];
-    std::snprintf(b, sizeof b, "%03u %03u", v / 1000u, v % 1000u);
-    return b;
-}
-
-bool confirmationMatches(std::string_view keyHex, std::string_view typed) {
-    std::string digits;
-    for (const char c : typed) {
-        if (c >= '0' && c <= '9') digits += c;
-        else if (c != ' ' && c != '\t' && c != '-' && c != '.') return false;
-    }
-    if (digits.size() != 6) return false;
-    std::string want = confirmationCode(keyHex);
-    if (want.empty()) return false;
-    want.erase(std::remove(want.begin(), want.end(), ' '), want.end());
-    return digits == want;
 }
 
 std::string normalizeInvitationCode(std::string_view typed) {

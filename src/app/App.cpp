@@ -46,6 +46,7 @@
 #include "../project/GrafcetEdit.hpp"
 #include "../project/GrafcetRewrite.hpp"
 #include "../project/GrafcetRewrite2.hpp"   // 1.10 (R2) : Ctrl+Z des commandes du grafcet
+#include "../project/SfcEdit.hpp"           // 1.51.0 (S) : Ctrl+Z de l'editeur de GRAFCET natif
 #include "../export/XpgWriter.hpp"          // Vers Control Expert : un autre dossier que src/
 #include "../project/ProjectIcon.hpp"
 #include "../hmi/HmiVersions.hpp"
@@ -3688,7 +3689,9 @@ bool App::stepHistory(bool undo, HistoryEffect& fx, std::string& error) {
                  || dynamic_cast<const project::RenameStepCommand*>(c) != nullptr
                  || dynamic_cast<const project::RemoveTransitionCommand*>(c) != nullptr
                  || dynamic_cast<const project::RemoveActionCommand*>(c) != nullptr
-                 || dynamic_cast<const project::ModifyActionCommand*>(c) != nullptr) fx.text = true;
+                 || dynamic_cast<const project::ModifyActionCommand*>(c) != nullptr
+                 // 1.51.0 (S) : un geste de l'editeur de GRAFCET natif (SFC) ne change que son XML
+                 || dynamic_cast<const project::SfcEditCommand*>(c) != nullptr) fx.text = true;
         else if (dynamic_cast<const hmi::ViewCommand*>(c) == nullptr
                  && dynamic_cast<const hmi::ProjectCommand*>(c) == nullptr) fx.api = true;
     };

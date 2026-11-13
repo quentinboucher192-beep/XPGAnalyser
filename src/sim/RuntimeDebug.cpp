@@ -20,6 +20,7 @@
 // =============================================================================
 #include "Runtime.hpp"
 #include "DebugShared.hpp"   // 1.13.0 : les messages partages avec le debogueur IHM
+#include "../project/LadderSim.hpp"   // 1.51.0 : les fronts d'une section LD (modification en ligne)
 
 #include <algorithm>
 #include <cctype>
@@ -464,6 +465,15 @@ Adoption Runtime::adoptStateFrom(const Runtime& previous) {
     for (auto& [name, state] : blocks_)
         if (const auto it = previous.blocks_.find(name); it != previous.blocks_.end() && it->second.type == state.type)
             state = it->second;
+    // 1.51.0 : les memoires des fronts d'une section LD (contacts, bobines P / N), quand
+    // son schema en a autant qu'avant ; sinon un front de plus, au pire, au premier cycle.
+    for (auto& r : programs_) {
+        if (!r.ladder || !r.ladderState) continue;
+        for (const auto& old : previous.programs_)
+            if (old.ladder && old.ladderState && old.section == r.section && old.scope == r.scope
+                && project::ladder::edgeMemories(*old.ladder) == project::ladder::edgeMemories(*r.ladder))
+                r.ladderState->previous = old.ladderState->previous;
+    }
     // Les courbes suivies, avec leurs points.
     for (const auto& [name, samples] : previous.history_)
         if (known(name)) history_[name] = samples;

@@ -1,4 +1,5 @@
 #include "Macro.hpp"
+#include "Ladder.hpp"   // 1.51.0 : vider une section LD
 
 #include "EditCommands.hpp"
 #include "LibraryCatalog.hpp"
@@ -159,6 +160,11 @@ namespace project {
             previous_ = project_->sections[section_].body;
             project_->sections[section_].body.clear();
             project_->sections[section_].lineCount = 0;
+            // 1.51.0 : un ladder vide reste un ladder (le XML de Control Expert, un reseau).
+            if (project_->sections[section_].language == domain::PouLanguage::LD && !previous_.empty() && previous_.front() == '<') {
+                project_->sections[section_].body = ladder::emptySourceXml(11, project_->sections[section_].owner == domain::kNoIndex ? 2 : 3);
+                project_->sections[section_].lineCount = 1;
+            }
             applied_ = true;
             return core::ok();
         }
@@ -1152,6 +1158,15 @@ namespace project {
             if (at == domain::kNoIndex) {
                 report_.warnings.push_back("AppendToSection : la section '" + wanted
                     + "' n'existe pas");
+                result = Value::boolean(false);
+                return true;
+            }
+            // 1.51.0 : un schema (LD, FBD, SFC) est du XML de Control Expert : une ligne
+            // de texte ajoutee au bout le casserait. Refuse, et dit.
+            if (domain::keepsSourceXml(project_->sections[at])) {
+                report_.warnings.push_back("AppendToSection : la section '" + wanted
+                    + "' est un sch\xC3\xA9ma " + std::string(domain::toString(project_->sections[at].language))
+                    + " (pas du texte) : rien n'est ajout\xC3\xA9");
                 result = Value::boolean(false);
                 return true;
             }

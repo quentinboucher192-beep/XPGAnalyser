@@ -17,6 +17,7 @@
 #include "../core/Command.hpp"
 #include "Sfc.hpp"
 
+#include <functional>
 #include <memory>
 #include <set>
 #include <string>
@@ -35,6 +36,10 @@ namespace sfc {
                                            const std::string& prefix = "S_");
     [[nodiscard]] std::string freeSourceName(const Chart&, const std::string& base,
                                              const std::set<std::string>& takenUpper);
+    // Les noms d'etape de toutes les sections SFC du projet (en majuscules) : une
+    // etape est une variable (Etape.x) - deux GRAFCET ne peuvent pas avoir la meme.
+    [[nodiscard]] std::set<std::string> stepNamesInProject(const domain::Project&,
+                                                           domain::Index except = domain::kNoIndex);
     // Un nom d'etape valable (lettre ou _, puis lettres, chiffres, _).
     [[nodiscard]] bool validName(std::string_view name);
     // Une receptivite qui est une variable (A, B.C, T[2].X, %M10, TRUE) - sinon une expression.
@@ -66,6 +71,12 @@ namespace sfc {
     EditResult moveItem(Chart&, int item, int x, int y);
     // Le texte d'une section de transition ou d'action ST (le volet Code).
     EditResult setSourceBody(Chart&, const std::string& tag, const std::string& name, const std::string& body);
+
+    // Renommer une variable dans un GRAFCET (le renommage du projet) : `rename` est
+    // applique a chaque nom ou texte de code - receptivites, actions, durees, sections
+    // ST (et LD : le texte <LDSource...> entier). Seuls les elements touches sont
+    // reecrits. Rend le nombre de remplacements (0 : `xml` inchange).
+    std::size_t rewriteNames(std::string& xml, const std::function<std::size_t(std::string&)>& rename);
 
 } // namespace sfc
 

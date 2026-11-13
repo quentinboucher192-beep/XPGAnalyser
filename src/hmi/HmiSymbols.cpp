@@ -1324,7 +1324,7 @@ Expansion expandInstance(const Project& p, const Object& inst, int depth, std::s
     const std::string scope = symtypes::scopeOf(p, *sym);
     const auto relink = [&](std::string_view t, bool code) {
         std::string bare = markers::strip(t);
-        if (!scope.empty()) bare = names::qualify(p, bare, scope, {}, false);
+        if (!scope.empty()) bare = symtypes::qualify(p, *sym, bare, false);
         if (!calls) return substituteParams(bare, args, code);
         return substituteParams(qualifySymbolCalls(bare, p, *sym, q), args, code);
     };

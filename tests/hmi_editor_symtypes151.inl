@@ -25,7 +25,7 @@ hmi::Script calledScript(hmi::Project& p, const std::string& name, const std::st
     return s;
 }
 
-hmi::Declaration decl(hmi::Project& p, hmi::DeclKind kind, const std::string& name, const std::string& type, const std::string& value = {}) {
+hmi::Declaration declaration(hmi::Project& p, hmi::DeclKind kind, const std::string& name, const std::string& type, const std::string& value = {}) {
     hmi::Declaration d;
     d.id = p.allocate();
     d.kind = kind;
@@ -147,8 +147,9 @@ void symtypes151() {
         using HP = app::ProjectTreeModel::HmiPart;
         const auto viewNode = app::ProjectTreeModel::pack(NK::HmiView, static_cast<domain::Index>(symId & ((1u << 28) - 1)));
         const auto partNode = tree.childAt(viewNode, static_cast<std::size_t>(HP::Types));
-        check(tree.childCount(viewNode) == static_cast<std::size_t>(HP::Count) && tree.text(partNode) == "Types IHM  [3]",
-              "l'arbre : \xC2\xAB Types IHM  [3] \xC2\xBB sous le symbole (" + tree.text(partNode) + ")");
+        check(tree.childCount(viewNode) == static_cast<std::size_t>(HP::Count) && tree.text(partNode) == "Types IHM"
+                  && tree.counterOf(partNode) == "3",
+              "l'arbre : \xC2\xAB Types IHM \xC2\xBB et sa pastille 3 sous le symbole (" + tree.text(partNode) + " " + tree.counterOf(partNode) + ")");
         check(tree.childCount(partNode) == 3 && app::ProjectTreeModel::kindOf(tree.childAt(partNode, 0)) == NK::HmiTypeNode,
               "... ses trois types, des noeuds de type IHM (le clic ouvre leur page)");
     }
@@ -161,8 +162,8 @@ void symtypes151() {
         f.id = q.allocate();
         f.name = "Haut";
         f.returnType = "BOOL";
-        f.decls.push_back(decl(q, hmi::DeclKind::Parameter, "Seuil", "REAL"));
-        f.decls.push_back(decl(q, hmi::DeclKind::Variable, "e", "T_Etat"));
+        f.decls.push_back(symt151::declaration(q, hmi::DeclKind::Parameter, "Seuil", "REAL"));
+        f.decls.push_back(symt151::declaration(q, hmi::DeclKind::Variable, "e", "T_Etat"));
         f.body = "e.Niveau := Etat.Niveau * 2.0;\nNiv := e.Niveau;\nHaut := Etat.Niveau > Seuil AND Mode = T_Mode#Marche;";
         v.functions.push_back(std::move(f));
         hmi::Script open;
@@ -190,8 +191,8 @@ void symtypes151() {
     p.programs.variables.push_back(variable(p, "Res", "BOOL", "FALSE"));
     p.programs.variables.push_back(variable(p, "Niv", "REAL", "0"));
     p.programs.variables.push_back(variable(p, "Ouvert", "INT", "0"));
-    check(hmi::types::validType(p, "S_Pompe.T_Etat", &why) && hmi::types::membersOf(p, "S_Pompe.T_Etat").size() == 2,
-          "une variable IHM de type S_Pompe.T_Etat (hors du symbole, son nom complet) : ses membres Niveau, Defaut " + why);
+    check(hmi::types::validType(p, "S_Pompe.T_Etat", &why) && hmi::types::membersOf(p, "S_Pompe.T_Etat").size() == 4,
+          "une variable IHM de type S_Pompe.T_Etat (hors du symbole, son nom complet) : ses membres (Valeur, Marche, Niveau, Defaut) " + why);
     View vue = makeView(p, "Vue_Ligne");
     const Id vueId = vue.id;
     const Id inst = placeSymbol(p, vue, "S_Pompe", 10, 10);
@@ -213,7 +214,7 @@ void symtypes151() {
         const bool ran = rt.callScript("Essai", 0.1, &err);
         const auto* res = rt.variable("Res");
         const auto* niv = rt.variable("Niv");
-        check(ran && res && res->asBool() && niv && std::fabs(niv->asReal() - 150.0) < 1e-6,
+        check(ran && res && res->asInteger() != 0 && niv && std::fabs(niv->asReal() - 150.0) < 1e-6,
               "Vue_Ligne.Pompe_1.Haut(50.0) : sa locale e : T_Etat (Niveau, pas le Code du T_Etat du projet), TRUE et Niv = 150 ("
                   + err + (res ? " Res=" + res->display() : std::string()) + (niv ? " Niv=" + niv->display() : std::string()) + ")");
         const bool out = rt.callScript("Dehors", 0.2, &err);
@@ -223,7 +224,7 @@ void symtypes151() {
     {
         const auto issues = hmi::compileWith(p, [](std::string_view) { return false; }, {});
         check(!anyIssue(issues, "T_Etat") && !anyIssue(issues, "T_Mode") && !anyIssue(issues, "S_Pompe"),
-              "Compiler : rien sur les types du symbole (" + issueWith(issues, "T_") + ")");
+              "Compiler : rien sur les types du symbole (" + issueWith(issues, "T_") + " " + issueWith(issues, "S_Pompe") + ")");
         // Hors du symbole, un nom court qui n'est qu'a lui : Compiler propose le nom complet.
         Project q = p;
         q.programs.scripts.push_back(calledScript(q, "Court", "VAR\n  x : T_Libre;\nEND_VAR\nx.Marche := TRUE;"));
@@ -349,7 +350,7 @@ void symtypes151() {
         check(static_cast<bool>(hmi::save(p, dir.string())), "le projet s'\xC3\xA9" "crit");
         const auto back = hmi::load(dir.string());
         const HmiType* t = back.has_value() ? back.value().hmiTypeByName("S_Pompe.T_Etat") : nullptr;
-        check(t && t->symbol == symId && t->members.size() == 2 && back.value().view(symId)->params[0].type == "S_Pompe.T_Etat"
+        check(t && t->symbol == symId && t->members.size() == 4 && back.value().view(symId)->params[0].type == "S_Pompe.T_Etat"
                   && st::typesOf(back.value(), symId).size() == 3,
               "relu : les 3 types du symbole, son parametre");
         // Le fichier : symbole=<id> sur la ligne type_ihm ; une version d'avant l'ignore - un type de l'espace S_Pompe.
@@ -363,7 +364,7 @@ void symtypes151() {
         { std::ofstream out(index, std::ios::binary | std::ios::trunc); out << text; }
         const auto old = hmi::load(dir.string());
         const HmiType* o = old.has_value() ? old.value().hmiTypeByName("S_Pompe.T_Etat") : nullptr;
-        check(o && o->symbol == kNoId && o->members.size() == 2 && old.value().view(vueId) && old.value().variable("Etat1"),
+        check(o && o->symbol == kNoId && o->members.size() == 4 && old.value().view(vueId) && old.value().variable("Etat1"),
               "sans symbole= (une version d'avant) : un type de l'espace S_Pompe, rien ne se perd");
         fs::remove_all(dir, ec);
     }

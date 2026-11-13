@@ -1342,6 +1342,9 @@
     <ClCompile Include="src\app\HeadlessRenderer.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\LadderPane.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\Licence.cpp">
       <Filter>app</Filter>
     </ClCompile>
@@ -1936,6 +1939,9 @@
     <ClCompile Include="src\project\Sfc.cpp">
       <Filter>project</Filter>
     </ClCompile>
+    <ClCompile Include="src\project\SfcDiagram.cpp">
+      <Filter>project</Filter>
+    </ClCompile>
     <ClCompile Include="src\project\SfcEdit.cpp">
       <Filter>project</Filter>
     </ClCompile>
@@ -1943,6 +1949,9 @@
       <Filter>sim</Filter>
     </ClCompile>
     <ClCompile Include="src\sim\RichPacked.cpp">
+      <Filter>sim</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sim\SfcRuntime.cpp">
       <Filter>sim</Filter>
     </ClCompile>
     <ClCompile Include="src\sim\ValueText.cpp">
@@ -1994,6 +2003,9 @@
       <Filter>app</Filter>
     </ClCompile>
     <ClCompile Include="src\app\SessionService.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\SfcPane.cpp">
       <Filter>app</Filter>
     </ClCompile>
     <ClCompile Include="src\app\SvgRenderer.cpp">
@@ -3238,6 +3250,9 @@
     <ClInclude Include="src\app\HeadlessRenderer.hpp">
       <Filter>app</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\LadderPane.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\Licence.hpp">
       <Filter>app</Filter>
     </ClInclude>
@@ -3778,10 +3793,16 @@
     <ClInclude Include="src\project\Sfc.hpp">
       <Filter>project</Filter>
     </ClInclude>
+    <ClInclude Include="src\project\SfcDiagram.hpp">
+      <Filter>project</Filter>
+    </ClInclude>
     <ClInclude Include="src\project\SfcEdit.hpp">
       <Filter>project</Filter>
     </ClInclude>
     <ClInclude Include="src\sim\Rich.hpp">
+      <Filter>sim</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sim\SfcRun.hpp">
       <Filter>sim</Filter>
     </ClInclude>
     <ClInclude Include="src\sim\ValueText.hpp">
@@ -3851,6 +3872,9 @@
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\SessionService.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\SfcPane.hpp">
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\SvgRenderer.hpp">
@@ -4037,6 +4061,9 @@
       <Filter>license_admin\gui</Filter>
     </ClInclude>
     <ClInclude Include="src\license_admin\gui\ListKit.hpp">
+      <Filter>license_admin\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\license_admin\gui\PcPicker.hpp">
       <Filter>license_admin\gui</Filter>
     </ClInclude>
     <ClInclude Include="src\license_admin\gui\StatsKit.hpp">

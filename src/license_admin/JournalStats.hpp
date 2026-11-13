@@ -160,12 +160,6 @@ struct ServiceFigures {
     Seconds     lastSeen{0};                                           // ... vu
 };
 
-// Une demande pour devenir admin (en attente) : une alerte << ... attend >>.
-struct Pending {
-    std::string name;
-    Seconds     received{0};
-};
-
 struct Options {
     int    habitsDays{90};          // la fenetre des habitudes (heures, moyenne par jour), finie a la fin de la periode
     int    habitsMinActions{20};    // moins d'actions : pas assez d'habitudes, rien d'inhabituel
@@ -186,7 +180,6 @@ struct Inputs {
     TimeZone                              tz{TimeZone::paris()};
     std::map<std::string, ServiceFigures> service;   // par id d'admin
     std::string                           latestAdminVersion;   // la derniere version de l'Admin publiee ("" : inconnue)
-    std::vector<Pending>                  pending;
     Options                               options;
 };
 
@@ -294,7 +287,7 @@ struct ShareRow {                     // << qui fait quoi >> : un type (ou << To
     bool             alone{false};    // il est le seul a l'avoir fait
 };
 
-enum class AlertKind : std::uint8_t { Inactive, RightsUnused, AdminOutdated, RefusedSignatures, RecentCritical, UnusualHour, OtherPc, Pending };
+enum class AlertKind : std::uint8_t { Inactive, RightsUnused, AdminOutdated, RefusedSignatures, RecentCritical, UnusualHour, OtherPc };   // 1.51.0 : plus de Pending (plus de demande d'admin)
 enum class Severity : std::uint8_t { Critical, High, ToSee };   // << Critique >>, << Haute >>, << A voir >>
 struct Alert {
     AlertKind                  kind{AlertKind::Inactive};
@@ -302,7 +295,7 @@ struct Alert {
     std::string                adminId, adminName;
     std::string                text;          // << Hugo Essai : 4 actions a une heure inhabituelle pour lui, dim. 08/11 de 23:40 a 23:58 >>
     std::string                gesture;       // le geste propose : << Voir ces 4 actions >>
-    std::string                gestureId;     // "journal", "envoyer-maj", "retirer-droits", "fiche", "accepter"
+    std::string                gestureId;     // "journal", "envoyer-maj", "retirer-droits", "fiche"
     std::vector<std::uint64_t> lines;         // les lignes du journal concernees
     std::vector<std::string>   rights;        // retirer-droits : lesquels
     Seconds                    when{0};
@@ -324,7 +317,7 @@ struct PlusReserved {                 // l'admin+ : ce que lui seul fait (planch
 struct Overview {
     Period                  period, previous;
     std::vector<AdminStats> admins;          // dans l'ordre de Inputs::admins
-    int                     activeAdmins{0}, retiredAdmins{0}, pendingAdmins{0};
+    int                     activeAdmins{0}, retiredAdmins{0};
     int                     actions{0}, actionsBefore{0};   // tous les admins (l'admin+ compris)
     int                     typed{0}, typedBefore{0};       // << Toutes (hors reservees) >>
     double                  change{kUnknown};

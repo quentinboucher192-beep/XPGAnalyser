@@ -231,12 +231,11 @@ protected:
         const Color iconInk = sel ? kVioletSoft : e_.online ? kNightFaint : kNightMuted;
         ui::drawIcon(ctx.r, e_.icon, {r.x + 10.f, r.y + (r.h - 17.f) * 0.5f, 17.f, 17.f}, iconInk);
         // Le nombre (licences, clients, PC) ; les demandes qui attendent ta decision : une pastille ambre. 1.44.0 : les
-        // demandes d'admin (Administrateurs) et les alertes pas encore vues (Journal des admins), ambre aussi.
+        // alertes pas encore vues (Journal des admins), ambre aussi. 1.51.0 : plus de demandes d'admin (Administrateurs).
         const std::string eid = e_.id;
-        const bool demandes = eid == "admins" || eid == "journal" || eid == "commandes" || eid == "demandes-admins";   // 1.46.0 : a livrer ; 1.47.0
+        const bool demandes = eid == "journal" || eid == "commandes";   // 1.46.0 : a livrer
         // 1.48.1 : Commandes et demandes compte aussi les demandes de licence en attente (plus de page Demandes en ligne).
         const int  count = eid == "commandes" ? shell_.ordersToDeliver() + shell_.pendingRequests()
-                           : eid == "admins" || eid == "demandes-admins" ? shell_.pendingAdminRequests()
                            : eid == "journal" ? shell_.unseenAlerts()
                                               : count_;
         float badgeW = 0.f;
@@ -424,7 +423,7 @@ protected:
         switch (w.role()) {
             case Role::Plus: name = w.key().name.empty() ? std::string("Toi") : w.key().name, role = " \xC2\xB7 admin+"; break;
             case Role::Admin: name = w.me() ? w.me()->name : w.adminKey().name, role = " \xC2\xB7 admin"; break;
-            case Role::Pending: name = w.adminKey().name.empty() ? std::string("Toi") : w.adminKey().name, role = " \xC2\xB7 en attente"; break;
+            case Role::Pending: name = w.adminKey().name.empty() ? std::string("Toi") : w.adminKey().name, role = " \xC2\xB7 ajout en cours"; break;   // 1.51.0
             case Role::Retired: name = w.me() ? w.me()->name : w.adminKey().name, role = " \xC2\xB7 admin retir\xC3\xA9"; break;
             // 1.49.0 : sans cle, XPG Admin (l'Admin classique) dit qu'il attend une invitation
             case Role::None: name = license_admin::classique() ? std::string("Admin \xC2\xB7 sur invitation") : std::string("Admin \xC2\xB7 \xC3\x89" "diteur seulement"); break;
@@ -940,7 +939,6 @@ const std::vector<Shell::NavEntry>& Shell::entries() {
         {"revocations", "R\xC3\xA9vocations", ui::Icon::Close, false},
         // 1.44.0 : plusieurs admins (la maquette 1.43.0).
         {"admins", "Administrateurs", ui::Icon::User, false},
-        {"demandes-admins", "Demandes d'admin", ui::Icon::Import, false}, // 1.47.0 : l'admin+ seulement (PageAdminRequests.cpp)
         {"journal", "Journal des admins", ui::Icon::Task, false},         // l'admin+ seulement
         {"versions", "Versions", ui::Icon::Export, false},                // l'admin+ seulement (planche 07)
         {"service", "Service en ligne", ui::Icon::Refresh, false},        // 1.35.0 : a la place de Synchronisation GitHub
@@ -978,7 +976,7 @@ std::string Shell::parentOf(const std::string& pageId) {
 }
 
 bool Shell::plusOnly(const std::string& pageId) {
-    return pageId == "journal" || pageId == "droits" || pageId == "versions" || pageId == "demandes-admins";   // 1.47.0 : les demandes d'admin
+    return pageId == "journal" || pageId == "droits" || pageId == "versions";   // 1.51.0 : plus de page Demandes d'admin
 }
 
 bool Shell::pageAllowed(const std::string& pageId) const { return !plusOnly(pageId) || ws_->role() == Role::Plus; }
@@ -1071,7 +1069,6 @@ Page* Shell::ensurePage(const std::string& id) {
     else if (id == "securite") p = makeSecurityPage(h);
     else if (id == "admins") p = makeAdminsPage(h);     // 1.44.0
     else if (id == "compte") p = makeAccountPage(h);           // 1.47.0 : PageAccount.cpp
-    else if (id == "demandes-admins") p = makeAdminRequestsPage(h);   // 1.47.0 : PageAdminRequests.cpp
     else if (id == "droits") p = makeRightsPage(h);
     else if (id == "journal") p = makeJournalPage(h);
     else if (id == "versions") p = makeVersionsPage(h);
@@ -1274,7 +1271,7 @@ std::string Shell::keyStatusText() const {
     // 1.44.0 : un admin a SA cle (pas celle de l'editeur) ; en attente, retire : dit tel quel.
     switch (ws_->role()) {
         case Role::Admin: return "Admin : " + (ws_->me() ? ws_->me()->name : ws_->adminKey().id);
-        case Role::Pending: return "En attente d'acceptation";
+        case Role::Pending: return "Admin : ajout en cours";   // 1.51.0 : inscrit par son code, l'Admin+ le signe d'office
         case Role::Retired: return "Admin retir\xC3\xA9";
         case Role::Plus:
         case Role::None: break;
@@ -1424,7 +1421,6 @@ bool Shell::autoWatch() {
                      }
                      // 1.44.0 : les admins - une liste plus recente (un droit, un retrait), des lignes au journal.
                      const Role before = ws_->role();
-                     if (st->adminRequests >= 0) pendingAdmins_ = static_cast<int>(st->adminRequests);
                      if (ar->listAdopted || ar->journalNew > 0 || ar->syncKeyReceived) {
                          changes::bump();   // 1.48.1 : un autre admin a change quelque chose
                          ws_->reload();
@@ -1435,6 +1431,13 @@ bool Shell::autoWatch() {
                          } else if (ar->listAdopted && before == Role::Admin) {
                              flash("Tes droits d'admin ont chang\xC3\xA9 : " + std::to_string(ws_->myRights().size()) + " sur 13 (Administrateurs).", Tone::Info);
                          }
+                     }
+                     // 1.51.0 : des admins inscrits par leur code d'invitation, signes d'office (plus de demande a accepter)
+                     if (!ar->invitedAdmitted.empty()) {
+                         std::string who;
+                         for (std::size_t i = 0; i < ar->invitedAdmitted.size(); ++i)
+                             who += (i ? (i + 1 == ar->invitedAdmitted.size() ? " et " : ", ") : "") + ar->invitedAdmitted[i];
+                         flash(who + (ar->invitedAdmitted.size() > 1 ? " sont admins" : " est admin") + " (code d'invitation) : Administrateurs.", Tone::Ok);
                      }
                      if (ar->journalNew > 0) takeAlerts();
                      if (view_) static_cast<ShellView*>(view_)->update();
@@ -1483,41 +1486,69 @@ bool Shell::checkServiceVersion() {
     return true;
 }
 
-// 1.44.0 : EN ATTENTE - la demande d'admin, toutes les 15 s (GET /v1/admins/demande, signe par sa cle) ; acceptee : la
-// liste gardee, la cle de synchro recue par le trousseau (refreshAdminState), puis l'archive recue des que possible.
+// 1.44.0 : EN COURS D'AJOUT - 1.51.0 : l'inscription par code, toutes les 15 s (GET /v1/admins/inscription, signe par sa
+// cle) ; admis (l'Admin+ l'a signee d'office) : la liste gardee, la cle de synchro recue par le trousseau
+// (refreshAdminState), puis l'archive recue des que possible.
 bool Shell::watchPending() {
     const Workspace* w = ws_.get();
     auto x = std::make_shared<AdminRefresh>();
-    if (!runSlow("Ta demande d'admin", [w, x] { return w->refreshAdminState(nullptr, x.get()); },
+    if (!runSlow("Ton ajout comme admin", [w, x] { return w->refreshAdminState(nullptr, x.get()); },
                  [this, x](const OpResult& r) {
-                     if (!r.ok && x->requestState.empty()) {
+                     if (!r.ok && x->joinState.empty()) {
                          lastLive_ = -1;
-                         if (!autoProblemSaid_) flash("Ta demande d'admin : " + r.message, Tone::Warning);
+                         if (!autoProblemSaid_) flash("Ton ajout comme admin : " + r.message, Tone::Warning);
                          autoProblemSaid_ = true;
                          return;
                      }
                      autoProblemSaid_ = false;
                      lastLive_ = steadyNow();
-                     if (x->accepted) {
+                     if (x->admitted) {
                          ws_->reload();
                          refreshPages();
-                         flash("Ta demande est accept\xC3\xA9" "e : tu es admin (" + std::to_string(ws_->myRights().size()) + " droits sur 13)." +
-                                   (x->syncKeyReceived ? " L'archive arrive." : ""),
-                               Tone::Ok);
+                         flash("Tu es admin (" + std::to_string(ws_->myRights().size()) + " droits sur 13)." + (x->syncKeyReceived ? " L'archive arrive." : ""), Tone::Ok);
                          wantArchive_ = x->syncKeyReceived || ws_->service().syncKey;
                          pendingState_.clear();
                          if (view_) static_cast<ShellView*>(view_)->update();
                          return;
                      }
-                     if (x->requestState != pendingState_ && (x->requestState == "refusee" || x->requestState == "aucune")) {
-                         flash(x->requestState == "refusee" ? "L'admin+ a refus\xC3\xA9 ta demande d'admin. Parle-lui, puis envoie-la de nouveau (Administrateurs)."
-                                                            : "Le service n'a plus ta demande d'admin : envoie-la de nouveau (Administrateurs).",
-                               Tone::Warning);
-                     }
-                     pendingState_ = x->requestState;
+                     if (x->joinState != pendingState_ && x->joinState == "aucune")
+                         flash("Le service n'a pas d'inscription pour ta cl\xC3\xA9 : tape le code d'invitation que t'envoie l'admin+ (Administrateurs).", Tone::Warning);
+                     pendingState_ = x->joinState;
                  }))
         return false;
     quietSlow_ = true;
+    return true;
+}
+
+// 1.51.0 : XPG ADMIN, PREMIER LANCEMENT AVEC LE CODE DE L'INSTALLATEUR (invitation.txt) - il devient admin tout seul :
+// la cle nait, le code l'inscrit (Workspace::joinWithInvitation), l'Admin+ la signe d'office. Une fois par lancement ;
+// un code refuse (inconnu, expire, deja servi) : dit, et la carte d'Administrateurs le fait retaper.
+bool Shell::autoJoin() {
+    const Role role = ws_->role();   // sans cle, une cle pas (ou plus) dans la liste : le code de l'installateur sert
+    if (joinTried_ || bg_.running() || !license_admin::classique() || (role != Role::None && role != Role::Pending && role != Role::Retired) ||
+        !ws_->service().ready())
+        return false;
+    joinTried_ = true;   // une fois par lancement (le fichier lu une fois)
+    const std::string code = ws_->pendingInvitationCode();
+    if (code.empty()) return false;
+    const Workspace* w = ws_.get();
+    auto refused = std::make_shared<bool>(false);
+    if (!runSlow("Devenir admin (ton code d'invitation)", [w, code, refused] { return w->joinWithInvitation(code, refused.get()); },
+                 [this, refused](const OpResult& r) {
+                     ws_->reload();
+                     refreshPages();
+                     if (r.ok) {
+                         flash(r.message, Tone::Ok);
+                         nextWatch_ = 0;   // le regard tout de suite : l'Admin+ l'a peut-etre deja signee
+                     } else {
+                         flash((*refused ? std::string("Ton code d'invitation est refus\xC3\xA9 : ") : std::string("Devenir admin : ")) + r.message +
+                                   " (Administrateurs : retape-le).",
+                               Tone::Error);
+                         requestPageFocus("admins", "code-refuse:" + r.message);   // la carte le dit, le code se retape
+                         navigate("admins");
+                     }
+                 }))
+        return false;
     return true;
 }
 
@@ -1652,7 +1683,9 @@ void Shell::Update(const menu::FrameContext& fc) {
         if (nextBackupCheck_ < 0) nextBackupCheck_ = now + 30.0;   // 1.44.0 : la sauvegarde du jour, 30 s apres le lancement
         if (versionCheckAt_ < 0) versionCheckAt_ = now + kVersionCheckFirst;   // 1.45.0
         const bool free = attached_ && manager().top() == this && !bg_.running() && !queued_;
-        if (free && !versionChecked_ && now >= versionCheckAt_) {
+        if (free && !joinTried_ && autoJoin()) {
+            // 1.51.0 : XPG Admin, le code d'invitation de l'installateur : il devient admin tout seul.
+        } else if (free && !versionChecked_ && now >= versionCheckAt_) {
             versionChecked_ = true;   // 1.45.0 : une fois par lancement (Verifier relit ensuite)
             (void)checkServiceVersion();
         } else if (free && wantLicences_) {

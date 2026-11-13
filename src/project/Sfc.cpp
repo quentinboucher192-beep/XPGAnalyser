@@ -1,6 +1,7 @@
 #include "Sfc.hpp"
 
 #include "../import/XmlReader.hpp"
+#include "GraphListing.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -1009,6 +1010,24 @@ namespace sfc {
                     while (!flat.empty() && flat.back() == ';') flat.pop_back();
                     text = flat;
                 }
+                else if (s->language == domain::PouLanguage::LD) {
+                    // les rangees du ladder qui menent a la bobine de la transition, sans la bobine
+                    domain::Section ld;
+                    ld.language = domain::PouLanguage::LD;
+                    ld.body = s->body;
+                    const auto key = upper(t.condText);
+                    for (const auto& line : project::graphListing(ld)) {
+                        bool coil = false;
+                        for (const auto& w : line.writes) coil = coil || upper(w) == key;
+                        if (!coil) continue;
+                        std::string row = line.text;
+                        if (const auto bar = row.find("| "); bar != std::string::npos && bar < 6) row.erase(0, bar + 2);
+                        if (const auto at = row.rfind('('); at != std::string::npos) row.erase(at);
+                        while (!row.empty() && (row.back() == '-' || row.back() == ' ' || row.back() == '|')) row.pop_back();
+                        if (!row.empty()) text += (text.empty() ? "" : " OU ") + row;
+                    }
+                    if (text.empty()) text = "[" + t.condText + " : LD]";
+                }
                 else {
                     text = "[" + t.condText + " : " + std::string(domain::toString(s->language)) + "]";
                 }
@@ -1016,7 +1035,10 @@ namespace sfc {
             else text = "[" + t.condText + "]";
         }
         else text = t.condText;
-        if (t.invert && !text.empty()) text = "NOT (" + text + ")";
+        if (t.invert && !text.empty()) {
+            const bool word = text.find_first_of(" ()<>=+-*/:") == std::string::npos;
+            text = word ? "NOT " + text : "NOT (" + text + ")";
+        }
         return text;
     }
 

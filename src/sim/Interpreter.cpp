@@ -111,6 +111,27 @@ public:
                 auto word = std::string(src_.substr(begin, pos_ - begin));
                 const auto upper = upperOf(word);
 
+                // 1.51.0 (dialecte IHM) : S_Pompe.T_Mode#Marche, Gaz.T_Mode#Auto - le litteral d'une enumeration d'un symbole
+                // ou d'un espace de noms, UN nom (comme T_MODE#Auto) : il se lit aussi dans une etiquette de CASE.
+                if (dialect_ && pos_ + 1 < src_.size() && src_[pos_] == '.' && identStart(src_[pos_ + 1])) {
+                    std::size_t q = pos_, end = 0;
+                    while (end == 0 && q + 1 < src_.size() && src_[q] == '.' && identStart(src_[q + 1])) {
+                        std::size_t r = q + 1;
+                        while (r < src_.size() && identChar(src_[r])) ++r;
+                        if (r + 1 < src_.size() && src_[r] == '#' && identStart(src_[r + 1])) {
+                            end = r + 1;
+                            while (end < src_.size() && identChar(src_[end])) ++end;
+                        }
+                        q = r;
+                    }
+                    if (end != 0) {
+                        word = std::string(src_.substr(begin, end - begin));
+                        pos_ = end;
+                        out.push_back(Token{Tok::Identifier, word, word, startLine, {}});
+                        continue;
+                    }
+                }
+
                 // 1.12.1 (dialecte IHM) : D#2026-10-09, TOD#14:30:00, DT#2026-10-09-14:30:00 (et
                 // DATE#, TIME_OF_DAY#, DATE_AND_TIME#).
                 if (dialect_ && pos_ + 1 < src_.size() && src_[pos_] == '#' && std::isdigit(static_cast<unsigned char>(src_[pos_ + 1]))) {

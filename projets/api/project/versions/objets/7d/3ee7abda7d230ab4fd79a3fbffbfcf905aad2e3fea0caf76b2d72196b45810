@@ -1,0 +1,5 @@
+# Global variables.
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+GC_Builder ; BUILDING ;  ; Global ;  ; construit les grafcets depuis leur texte ;  ; 
+GC_Temps ; TIME ;  ; Global ;  ; le temps des grafcets : le TsNow de chaque moteur ;  ; 
+Horloge ; DFB_SYS_CLOCK ;  ; Global ;  ; le temps reel du cycle : DtMs pour tous les blocs ;  ; 

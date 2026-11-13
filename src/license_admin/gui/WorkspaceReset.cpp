@@ -62,7 +62,8 @@ const char* const kErasedFiles[] = {
     "stats-a-envoyer.json",       // les exclusions des statistiques a envoyer
     "statistiques-tableau.json",  // le dernier releve du tableau de bord
     "admins-vus.jsonl",           // les listes des admins vues (refaite : la liste neuve)
-    "demande-admin.json",
+    "demande-admin.json",         // la demande d'admin d'avant la 1.51
+    "inscription-admin.json",     // 1.51.0 : l'inscription par code d'invitation
     "invitation.txt",
     "invitations-admins.json",
     "journal-a-envoyer.jsonl",    // le journal des admins : il repart de la ligne n 1
@@ -126,7 +127,7 @@ const std::vector<std::string>& Workspace::startOverErased() {
         "Les clients (et leur corbeille)",
         "Les demandes de licence et les commandes de la boutique (leurs lignes)",
         "Les r\xC3\xA9vocations : une nouvelle liste vide, sign\xC3\xA9" "e (num\xC3\xA9ro + 1)",
-        "Les admins : une nouvelle liste sign\xC3\xA9" "e sans aucun admin (num\xC3\xA9ro + 1) ; leurs demandes, les invitations, les d\xC3\xA9rogations, "
+        "Les admins : une nouvelle liste sign\xC3\xA9" "e sans aucun admin (num\xC3\xA9ro + 1) ; les inscrits, les invitations, les d\xC3\xA9rogations, "
         "le trousseau",
         "Les messages envoy\xC3\xA9s aux PC et leurs fichiers joints",
         "Les statistiques (relev\xC3\xA9s, compteurs, globe, exclusions)",

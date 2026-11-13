@@ -738,16 +738,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         links_ += cycleAdd_->clicked->connect([this] { (void)addCycleScript(); });
         cycleAdd_->startDrag = [this] {
             if (!stages_) return;
-            if (!cycleShown_ && split_ && split_->paneCount() == 3) {   // 1.51.0 : cachee (OnOpen choisi) - elle se montre
-                cycleShown_ = true;
-                auto r = split_->ratios();
-                r[2] = std::max(0.05f, r[2] - cycleLent_);
-                cycleLent_ = 0.f;
-                split_->setRatios(r);
-                split_->collapsePane(1, false);
-                split_->setOrder({});
-                layout();
-            }
+            setCycleColumn(true);                  // 1.51.0 : cachee (OnOpen choisi) - elle se montre pour le depot
             stages_->beginExternalDrag(kNoId, "Nouveau script de cycle");
         };
     }
@@ -1070,9 +1061,10 @@ std::string HmiScriptsPane::cycleHint() const {
            "projet existant garde son OnCycle entre 4 et 5 \xE2\x80\x94 rien ne change sans toi.";
 }
 
-void HmiScriptsPane::updateCycleColumn() {
+void HmiScriptsPane::updateCycleColumn() { setCycleColumn(cycleSelected()); }
+
+void HmiScriptsPane::setCycleColumn(bool show) {
     if (general() || !stagesPanel_ || !split_ || split_->paneCount() != 3) return;
-    const bool show = cycleSelected();
     if (show == cycleShown_) return;
     cycleShown_ = show;
     auto r = split_->ratios();
@@ -1086,9 +1078,10 @@ void HmiScriptsPane::updateCycleColumn() {
     split_->setRatios(r);
     split_->collapsePane(1, !show);
     split_->setOrder(show ? std::vector<std::size_t>{} : std::vector<std::size_t>{0, 2, 1});
-    // La phrase du cycle part avec la section (et revient avec elle).
-    if (!show && status_->message() == cycleHint()) status_->setMessage(current() ? statusText_ : std::string{});
+    // La phrase du cycle part avec la section (un script choisi : son etat l'a deja remplacee, updateDiagnostics).
+    if (!show && !current()) status_->setMessage(std::string{});
     invalidateLayout();
+    if (bounds().w > 0.f) layout();       // la place tout de suite (un glisser vers la section peut suivre)
 }
 
 std::string HmiScriptsPane::measuredText(Id id) const {
@@ -1555,6 +1548,10 @@ void HmiScriptsPane::updateDiagnostics() {
         statusText_ = std::to_string(lineCount(sc->body)) + " ligne(s)  \xC2\xB7  " + std::string(hmi::scriptLangKey(sc->lang)) + "  \xC2\xB7  " + said;
         status_->setMessage(statusText_, errors || warnings ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Info);
     }
+    // 1.51.0 : LA BARRE SOUS L'EDITEUR SUIT LES DIAGNOSTICS. Elle montre la faute ou est le curseur (<< Erreur : ObjPtr
+    // n'existe pas... >>) ; elle ne se relisait qu'en bougeant le curseur - ObjPtr declaree ensuite dans l'onglet Variables,
+    // l'ancienne erreur y restait alors que le code etait juste.
+    updateSymbolLine();
 }
 
 // ---- 1.11.21 : les diagnostics du script montre, au panneau du bas (HmiLive.hpp) ----

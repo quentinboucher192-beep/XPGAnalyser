@@ -207,12 +207,13 @@ int main(int argc, char** argv) {
         check(fx.licence("XPG-2026-RZ102", "Atelier Exemple", "PROFESSIONAL", {fx.request("pc2", "PC-ATELIER-2")}).ok, "une licence et sa demande (activations.jsonl)");
         gui::Workspace lea(U(fx.root / "lea"));
         check(lea.serviceConfigure(svc.url()).ok, "le poste de Lea : l'adresse");
-        std::string fp;
-        r = lea.requestAdmin("L\xC3\xA9" "a Essai", "lea@exemple.invalid", &fp);
-        check(r.ok, "Lea demande a devenir admin (" + r.text() + ")");
+        std::string code;   // 1.51.0 : l'invitation, le code, la signature d'office (plus de demande d'admin)
+        check(plus.inviteAdmin("L\xC3\xA9" "a Essai", "lea@exemple.invalid", "Tous les droits", code).ok, "Lea invitee");
+        r = lea.joinWithInvitation(code);
+        check(r.ok, "Lea tape son code : inscrite (" + r.text() + ")");
         lea.reload();
-        r = plus.acceptAdmin(lea.adminKey().keyHex, "Tous les droits");
-        check(r.ok, "acceptee (" + r.text() + ")");
+        r = plus.admitInvitedAdmins();
+        check(r.ok, "signee d'office (" + r.text() + ")");
         plus.reload();
         check(plus.fetchJournal().ok && !plus.journalLines().rows.empty(), "le journal releve (journal-admins.jsonl)");
         check(plus.archiveSync(false, false).ok, "l'archive synchronisee");

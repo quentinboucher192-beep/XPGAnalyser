@@ -36,6 +36,7 @@
 //    --apres S              ... S secondes apres la derniere action (defaut 1)
 // =============================================================================
 #include "Page.hpp"
+#include "PcPicker.hpp"   // 1.51.0 : --choisir un PC (Ajouter un admin)
 #include "Shell.hpp"
 
 #include "../../core/SystemOpen.hpp"
@@ -284,7 +285,7 @@ bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
                 why = "--choisir : " + t + " (attendu : ID=N, N \xE2\x89\xA5 1)";
                 return false;
             }
-            // 1.47.0 : ID=1,2,3 - plusieurs lignes d'un tableau (Demandes d'admin : << Accepter 3 demandes... >>)
+            // 1.47.0 : ID=1,2,3 - plusieurs lignes d'un tableau (un export, une suppression de plusieurs lignes)
             o.actions.push_back({Action::Kind::Choose, t.substr(0, eq), t.find(',', eq) == std::string::npos ? std::to_string(n) : t.substr(eq + 1)});
         } else if (a == "--deplier") {   // 1.48.1 : une ligne d'un tableau depliee (les captures)
             if (!more) return need("ID=N");
@@ -357,6 +358,7 @@ void perform(menu::MenuManager& menus, const Action& a) {
         }
         if (auto* t = dynamic_cast<ui::TableView*>(w)) t->selectModelRows(rows, true);
         else if (auto* d = dynamic_cast<ui::DropDown*>(w)) d->setSelectedIndex(row);
+        else if (auto* pc = dynamic_cast<license_admin::gui::PcPicker*>(w); pc && pc->selectShown(row)) {}   // 1.51.0 : la ligne N montree
         else if (auto* g = dynamic_cast<ui::GlobeCityList*>(w); g && row >= 0 && row < static_cast<int>(g->order().size()))
             g->placeChosen->emit(g->order()[static_cast<std::size_t>(row)]);   // 1.47.0 : une ville de la liste du globe (sa carte s'ouvre)
         else std::fprintf(stderr, "attention : \xC2\xAB %s \xC2\xBB n'est ni un tableau ni une liste (%s)\n", a.id.c_str(), where.c_str());

@@ -1,0 +1,28 @@
+(* VerifierBibliotheque
+
+   Ne modifie rien. Elle regarde et elle rapporte, ce qui est exactement ce
+   qu'on veut avant une mise a jour : savoir ce qui bougerait. *)
+
+retard := 0;
+
+nom := 'ST_IO_Thr';
+IF TypeExists(nom) AND LibIsOutdated(nom) THEN
+    Warn(nom + ' : la bibliotheque propose ' + LibVersion(nom));
+    retard := retard + 1;
+END_IF;
+nom := 'ST_IO_Ana';
+IF TypeExists(nom) AND LibIsOutdated(nom) THEN
+    Warn(nom + ' : la bibliotheque propose ' + LibVersion(nom));
+    retard := retard + 1;
+END_IF;
+nom := 'ST_IO_Dig';
+IF TypeExists(nom) AND LibIsOutdated(nom) THEN
+    Warn(nom + ' : la bibliotheque propose ' + LibVersion(nom));
+    retard := retard + 1;
+END_IF;
+
+IF retard = 0 THEN
+    Log('tout est a jour');
+ELSE
+    Log(DINT_TO_STRING(retard) + ' element(s) en retard sur la bibliotheque');
+END_IF;

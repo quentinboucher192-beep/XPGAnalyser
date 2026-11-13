@@ -571,9 +571,14 @@ int main(int argc, char** argv) {
         check(type(root, "admins.ajouter.nom", "Hugo Essai") && type(root, "admins.ajouter.courriel", "hugo@exemple.invalid"), "1.49.0 : son nom, son courriel");
         check(click(root, "admins.ajouter.lien.creer") && lastOk(rig), "le lien (l'installateur de l'Admin publie) : " + lastText(rig));
         const std::string d = drawMenu(*dlg);
-        check(has(d, "Lien (48 h, une seule fois)") && has(d, "/v1/fichiers/lien?jeton=") && has(d, "Le lien est pr\xC3\xAAt"), "le lien montre ; l'etape 2 le dit");
+        // 1.51.0 : une seule etape - l'invitation prete, son code (montre une fois), le lien ; Fermer
+        check(has(d, "Lien (48 h, une seule fois)") && has(d, "/v1/fichiers/lien?jeton=") && has(d, "Invitation pr\xC3\xAAte"), "le lien montre ; << Invitation prete >>");
+        check(shown(root, "admins.ajouter.fermer") && !shown(root, "admins.ajouter.lien.creer") && shown(root, "admins.ajouter.code.copier") &&
+                  !has(d, "6 chiffres") && !has(d, "empreinte") && !has(d, "Accepter") && !has(d, "Refuser la demande"),
+              "1.51.0 : Fermer, Copier le code ; ni empreinte, ni 6 chiffres, ni Accepter, ni Refuser");
         g_copied.clear();
-        check(click(root, "admins.ajouter.lien.copier") && has(g_copied, "/v1/fichiers/lien?jeton="), "Copier le lien : dans le presse-papiers");
+        check(click(root, "admins.ajouter.lien.copier") && has(g_copied, "/v1/fichiers/lien?jeton=") && has(g_copied, "Ton code d'invitation : INV-"),
+              "Copier le lien et le code : dans le presse-papiers");
     }
     return finish();
 }
