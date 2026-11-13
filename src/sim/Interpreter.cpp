@@ -2666,6 +2666,11 @@ public:
     }
 
     // Lot API 8 : les variables de la ligne, lues au passage d'un point d'arret.
+    // 1.50.1 : un pointeur (le C traduit : p, fin) n a pas de texte litteral : sa cible (-> case 2 sur 4, NULL) au lieu de ?.
+    static std::string pointerShown(const Obj& o) {
+        if (o.type && (o.type->kind == TypeDesc::Kind::Pointer || o.type->kind == TypeDesc::Kind::Ref)) return display(o);
+        return {};
+    }
     std::vector<std::pair<std::string, std::string>> valuesOnLine(std::uint32_t line) {
         std::vector<std::pair<std::string, std::string>> out;
         if (!program_) return out;
@@ -2692,7 +2697,7 @@ public:
                 std::string shown;
                 if (r && !r->o) shown = r->v.display();
                 else if (r && r->o) {
-                    if (!literalText(*r->o, shown)) shown.clear();
+                    if (!literalText(*r->o, shown)) shown = pointerShown(*r->o);
                 }
                 out.emplace_back(name, shown);
                 continue;
@@ -2701,7 +2706,7 @@ public:
                 if (const Place* p = findLocal(name); p && p->obj) {
                     std::string shown;
                     if (p->obj->type && p->obj->type->kind == TypeDesc::Kind::Scalar) shown = p->obj->value.display();
-                    else if (!literalText(*p->obj, shown)) shown.clear();
+                    else if (!literalText(*p->obj, shown)) shown = pointerShown(*p->obj);
                     out.emplace_back(name, shown);
                     continue;
                 }

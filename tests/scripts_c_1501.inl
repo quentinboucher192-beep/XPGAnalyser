@@ -386,6 +386,22 @@ void debogueur() {
         sim::Value r;
         check(b.rt.environment().read("R", r) && r.asInteger() == 20, "le script va au bout : R = 10 + 7 + 3");
     }
+    {   // les valeurs de la ligne d'arret : un pointeur dit sa cible, pas << ? >> (p++, ligne 12)
+        DebugBench b(C, kDebugC);
+        b.rt.setBreakpoints({point(1, b.sc, 12)});
+        (void)b.rt.callScript("Essai", 0.2);
+        check(b.rt.paused() && b.rt.debugHit() && b.rt.debugHit()->line == 12, "arret ligne 12 (p++)");
+        if (b.rt.debugHit()) {
+            std::string vals, pv;
+            for (const auto& [n, val] : b.rt.debugHit()->values) {
+                vals += n + " = " + val + " ; ";
+                if (n == "p") pv = val;
+            }
+            check(!pv.empty() && pv != "?" && pv.find("case 1") != std::string::npos,
+                  "la valeur de p sur la ligne d'arret : sa case (-> case 1 sur 4) : " + vals);
+        }
+        (void)b.rt.debugContinue();
+    }
     {   // une condition en C : i == 2
         DebugBench b(C, kDebugC);
         b.rt.setBreakpoints({point(1, b.sc, 5, "i == 2")});

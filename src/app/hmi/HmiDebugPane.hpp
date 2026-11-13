@@ -128,6 +128,10 @@ private:
     std::shared_ptr<WatchModel>      watchModel_;
     HmiBreakpointMargin              margin_;            // la marge du code montre : des points aussi
     HmiDebugTarget                   codeShown_{};
+    // 1.50.1 : la ligne d'arret deja amenee en vue dans CODE (une seule fois par arret : la molette reste libre)
+    HmiDebugTarget                   revealedCode_{};
+    int                              revealedLine_{-1};
+    std::uint64_t                    revealedCycle_{0};
     std::string                      state_;
     std::string                      message_;
     bool                             messageWarn_{false};

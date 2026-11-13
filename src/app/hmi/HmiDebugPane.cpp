@@ -733,6 +733,17 @@ void HmiDebugPane::rebuildCode() {
         if (!v.empty()) notes.push_back(ui::MultiLineText::LineNote{f->line - 1, v, ui::Tone::Accent});
     }
     code_->setLineNotes(std::move(notes));
+    // 1.50.1 : la ligne de l'arret en vue dans CODE (deux lignes au-dessus pour le contexte), une fois par arret et par
+    // niveau montre : un script plus long que le volet ne cache plus sa ligne d'arret.
+    if (const int line = f ? static_cast<int>(f->line) : 0; line > 0) {
+        const std::uint64_t cycle = rt && rt->debugHit() ? rt->debugHit()->cycle : 0;
+        if (!(code == revealedCode_) || line != revealedLine_ || cycle != revealedCycle_) {
+            revealedCode_ = code;
+            revealedLine_ = line;
+            revealedCycle_ = cycle;
+            code_->scrollToLine(static_cast<std::size_t>(line > 3 ? line - 3 : 0));
+        }
+    }
     margin_.refresh();
 }
 
