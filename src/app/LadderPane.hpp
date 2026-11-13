@@ -141,7 +141,7 @@ namespace app {
     //   ladder-etat ["attendu"]       l'etat au journal ; attendu : doit y figurer
     bool runLadderScript(App& app, LadderPane& pane, const std::vector<std::string>& words, std::string& said, std::string& error);
 
-    // « Aller a » une ligne d'une section (references croisees, recherche) : si son
+    // "Aller a" une ligne d'une section (references croisees, recherche) : si son
     // ladder est ouvert en schema, la rangee de cette ligne y est choisie.
     void revealLadderLine(ui::Widget* root, domain::Index section, std::size_t line);
 

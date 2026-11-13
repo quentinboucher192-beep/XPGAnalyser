@@ -251,7 +251,8 @@ int main(int argc, char** argv) {
             check(has(t, "admin, ajout en cours") && has(t, "Code d'invitation accept\xC3\xA9 le") && has(t, "inv-0011223344556677") &&
                       has(t, "rien : d\xC3\xA8s que l'Admin+ est en ligne"),
                   "l'etat : ajout en cours, le code accepte le ..., son invitation, rien a faire");
-            check(!has(t, "En attente d'acceptation") && !has(t, "lis ton empreinte") && !has(t, "demande"), "1.51.0 : ni attente d'acceptation, ni empreinte a lire, ni demande");
+            check(!has(t, "En attente d'acceptation") && !has(t, "lis ton empreinte") && !has(t, "demande d'admin") && !has(t, "Demande d'admin") && !has(t, "Demander"),
+                  "1.51.0 : ni attente d'acceptation, ni empreinte a lire, ni demande d'admin (les droits disent encore << une demande de licence >>)");
             check(click(*page, "compte.copier-empreinte") && g_copied == fp, "Copier l'empreinte : " + g_copied);
             check(click(*page, "compte.copier-id") && g_copied == nina->keyId(), "Copier l'identifiant : " + g_copied);
             check(shown(*page, "compte.attente") && click(*page, "compte.attente") && rig.navigations.back() == "admins", "Ou en est mon ajout -> Administrateurs");
@@ -442,7 +443,9 @@ int main(int argc, char** argv) {
         check(a && a->profile == "Admin LV2" && a->rights.size() == 6 && b && b->profile == "Admin LV1" && b->rights.size() == 3, "leur profil (LV2, LV1) et ses droits");
         check(wf.ws->fetchJournal(nullptr).ok && journalCount(*wf.ws, "admin_ajouter") == 3, "le journal : une ligne << admin_ajouter >> par nouvel admin (3)");
         const std::string t = draw(*page, 1400.f, 900.f);
-        check(has(t, kLea) && has(t, kHugo) && has(t, kNina) && !has(t, "en attente") && !has(t, "Demandes d'admin"), "Administrateurs : les trois, actifs ; aucune demande");
+        check(has(t, kLea) && has(t, kHugo) && has(t, kNina) && !has(t, "ajout en cours") && !has(t, "attente d'acceptation") && !has(t, "Demandes d'admin") &&
+                  !has(t, "Refuser la demande"),
+              "Administrateurs : les trois, actifs ; aucune demande d'admin (la tuile << Demandes en attente >> : celles de licence)");
     }
     {
         // Lea et Hugo se voient admins (le regard du poste en cours d'ajout)

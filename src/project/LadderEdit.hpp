@@ -70,7 +70,7 @@ namespace project::ladder {
     // deux liaisons verticales. Rend la case du nouveau contact.
     [[nodiscard]] Pos addParallel(Diagram& d, Pos p, int width = 1);
 
-    // ---- les lignes (un « reseau » de Control Expert : des rangees reliees) ----
+    // ---- les lignes (un "reseau" de Control Expert : des rangees reliees) ----
     // Les rangees [r0, r1] de la ligne qui contient `row` (reliees par des
     // liaisons verticales ou un bloc sur plusieurs rangees).
     void rungRows(const Diagram& d, int network, int row, int& r0, int& r1);

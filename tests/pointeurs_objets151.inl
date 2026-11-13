@@ -188,8 +188,8 @@ void objetsCasUtilisateur151() {
     // le script de la capture (151_P3, 151_P4) : sans erreur, et le moteur cache Carte_1 une fois, le dit a la Console
     {
         Case c("(* Cycle *)\nObjPtr := Vue_Accueil.Carte_1;\nIF ObjPtr <> NULL AND ObjPtr^.Visible THEN\n"
-               "    ObjPtr^.Visible := FALSE;            (* Carte_1 se cache, par le pointeur *)\n"
-               "    IHM_LOG(INFO, 'Carte_1 cach\xC3\xA9" "e par ObjPtr^.Visible := FALSE');\nEND_IF;\n",
+               "    ObjPtr^.Visible := FALSE;\n"
+               "    IHM_LOG(INFO, 'Carte_1 cach\xC3\xA9" "e par le pointeur');\nEND_IF;\n",
                {{"ObjPtr", "POINTER TO Object"}});
         const std::string l = live(c), k = compiled(c), g = generated(c);
         check(l.empty() && k.empty() && g.empty(), "le script de la capture : sans erreur" + l + k + g);
@@ -198,7 +198,7 @@ void objetsCasUtilisateur151() {
         rt.start(0.0);
         for (int i = 1; i <= 4; ++i) rt.tick(0.1 * i);
         std::size_t said = 0;
-        for (const auto& j : rt.journal()) said += j.message.find("Carte_1 cach\xC3\xA9" "e par ObjPtr") != std::string::npos;
+        for (const auto& j : rt.journal()) said += j.message.find("Carte_1 cach\xC3\xA9" "e par le pointeur") != std::string::npos;
         sim::Value vis;
         check(said == 1 && rt.environment().read("Vue_Accueil.Carte_1.Visible", vis) && !vis.isTruthy(),
               "le script de la capture : Carte_1 cachee, une ligne a la Console (" + std::to_string(said) + ")");
@@ -266,6 +266,17 @@ void objetsGetAdr151() {
                   && hmi::decledit::valueMisfit(p, "POINTER TO Object", "Vue_Accueil.Carte_1.Get()").empty()
                   && hmi::decledit::valueMisfit(p, "INT", "0").empty(),
               "... NULL, 'Carte_1', Vue_Accueil.Carte_1.Get() : oui ; INT := 0 comme avant");
+        // un projet d'avant : ObjPtr : POINTER TO Object := 0 - la grille Variables le dit (la case Initiale)
+        Case c("ObjPtr := Carte_1;\n", {{"ObjPtr", "POINTER TO Object"}});
+        for (auto& sc : c.doc->project.views.front().scripts)
+            if (sc.id == c.script) sc.decls.front().value = "0";
+        hmi::decledit::Place at;
+        at.kind = hmi::decledit::Place::Kind::ViewScript;
+        at.view = c.view;
+        at.id = c.script;
+        const auto f = hmi::decledit::faults(c.doc->project, hmi::decledit::locate(c.doc->project, at));
+        check(f.size() == 1 && f[0].find("valeur initiale") != std::string::npos && f[0].find("pas 0") != std::string::npos,
+              "ObjPtr : POINTER TO Object := 0 (un projet d'avant) : la grille le dit (" + (f.empty() ? std::string("-") : f[0]) + ")");
     }
     // une fonction Get du projet ne gene pas : Vue.Objet.Get() reste la methode de l'objet
     {

@@ -840,9 +840,19 @@ std::vector<std::string> faults(const Project& p, const Code& c) {
     const TypeKnown known = [&p](std::string_view n) { return types::knownTypeName(p, n); };   // 1.12.20
     const auto found = decl::declarationFaults(*c.decls, c.role, *c.body, known, c.inherited);
     out.resize(c.decls->size());
+    std::shared_ptr<const typereg::Registry> registry;
     for (std::size_t i = 0; i < c.decls->size(); ++i) {
         std::vector<std::string> why = i < found.size() ? found[i] : std::vector<std::string>{};
         const auto& d = (*c.decls)[i];
+        // 1.51.0 : un pointeur, une reference, un objet, un rappel qui vaut un nombre (le 0 d'une variable neuve d'un projet
+        // d'avant, devenue POINTER TO Object) : la case Initiale le dit - en marche, << un DINT ne va pas dans un Object >>.
+        if (!d.computed && d.value.find_first_not_of(" \t") != std::string::npos) {
+            if (!registry) registry = typereg::Registry::build(p);
+            const auto r = registry->resolve(d.type, typereg::UseAll);
+            using C = typereg::Category;
+            if (r.ok && (r.category == C::Reference || r.category == C::Ihm || r.category == C::Callback))
+                if (const std::string bad = valueMisfit(p, d.type, d.value); !bad.empty()) why.push_back("valeur initiale : " + bad);
+        }
         for (const auto& r : c.reserved)
             if (!d.name.empty() && same(d.name, r))
                 why.push_back(c.role == decl::Role::Function ? "le nom de la fonction (son r\xC3\xA9sultat s'\xC3\xA9" "crit " + r + " := ...)"

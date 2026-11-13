@@ -178,7 +178,7 @@ namespace project::ladder {
         std::vector<CBlock> blocks;                         // tries par colonne puis rangee
     };
 
-    // UNE LIGNE (un « reseau » au sens de Control Expert) : des rangees reliees
+    // UNE LIGNE (un "reseau" au sens de Control Expert) : des rangees reliees
     // entre elles (liaisons verticales, blocs sur plusieurs rangees). Les lignes
     // s'executent de haut en bas, chacune entiere avant la suivante.
     struct CUnit {

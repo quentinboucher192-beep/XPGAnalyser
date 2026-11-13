@@ -64,9 +64,17 @@ void testPcPicker(const std::string& source) {
     picker.setQuery("helene");
     check(picker.shown().size() == 1 && picker.selected() && picker.selected()->name == "PC-ESSAI-007", "<< helene >> : sans accents, le client H\xC3\xA9l\xC3\xA8ne Essai");
     picker.setQuery("atelier 12 1.50.1");
-    std::size_t ok = 0;
-    for (const int i : picker.shown()) ok += picker.pcs()[static_cast<std::size_t>(i)].studioVersion == "1.50.1" && picker.pcs()[static_cast<std::size_t>(i)].customer == "Atelier d'essai 12";
-    check(!picker.shown().empty() && ok == picker.shown().size(), "deux mots et une version : chaque terme quelque part (" + picker.countText() + ")");
+    // chaque PC montre a les trois termes quelque part (<< 12 >> : le client, le nom, la licence, l'identifiant...) ;
+    // les clients << Atelier d'essai 12 >> en 1.50.1 (les PC 12, 132, 252) en sont
+    std::size_t ok = 0, wanted = 0;
+    for (const int i : picker.shown()) {
+        const gui::MessagePc& p = picker.pcs()[static_cast<std::size_t>(i)];
+        const std::string all = p.name + " " + p.customer + " " + p.licenseId + " " + p.deviceId + " " + picker.lastSeenText(p);
+        ok += p.studioVersion == "1.50.1" && has(p.customer, "Atelier") && has(all, "12");
+        wanted += p.customer == "Atelier d'essai 12" && p.studioVersion == "1.50.1";
+    }
+    check(!picker.shown().empty() && ok == picker.shown().size() && wanted == 3 && picker.shown().size() < 100,
+          "deux mots et une version : chaque terme quelque part, les trois PC de l'Atelier d'essai 12 en 1.50.1 (" + picker.countText() + ")");
     picker.setQuery("aujourd'hui");
     check(picker.shown().size() == 1 && picker.selected()->name == "PC-ESSAI-005", "<< aujourd'hui >> : la derniere activite se cherche");
     picker.setQuery(picker.pcs()[42].deviceId.substr(0, 10));
@@ -108,10 +116,13 @@ void testPcPicker(const std::string& source) {
     // la souris : un clic choisit une ligne, la molette defile
     t = paint(picker, r, 700.f, 420.f);
     const gfx::Rect pb = picker.bounds();
+    // (Echap a garde le PC choisi par Page bas : la liste ne repart pas forcement de la premiere ligne)
+    const int top = picker.firstVisible();
     (void)picker.dispatch(ui::InputEvent{ui::MouseWheel{{pb.x + 100.f, pb.y + 200.f}, 0.f, -1.f, {}}});
-    check(picker.firstVisible() == 3, "la molette : 3 lignes plus bas");
+    check(picker.firstVisible() == top + 3, "la molette : 3 lignes plus bas (" + std::to_string(top) + " -> " + std::to_string(picker.firstVisible()) + ")");
     (void)picker.dispatch(ui::InputEvent{ui::MouseDown{{pb.x + 100.f, pb.y + 34.f + 8.f + 46.f + 10.f}, ui::MouseButton::Left, 1, {}}});
-    check(picker.selected() && picker.selected() == &picker.pcs()[static_cast<std::size_t>(picker.shown()[4])], "un clic : la ligne choisie (la 5e, apres la molette)");
+    check(picker.selected() && picker.selected() == &picker.pcs()[static_cast<std::size_t>(picker.shown()[static_cast<std::size_t>(top + 4)])],
+          "un clic : la ligne choisie (la 2e montree, apres la molette)");
     // vite : 1 000 PC, 200 recherches
     {
         gui::PcPicker big("essai.pc.grand");

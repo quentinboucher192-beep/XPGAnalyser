@@ -29,7 +29,7 @@ namespace project {
         std::string              text;
         std::vector<std::string> reads;
         std::vector<std::string> writes;
-        // 1.51.0 : d'ou vient la ligne d'un ladder (le schema y va : « Aller a »,
+        // 1.51.0 : d'ou vient la ligne d'un ladder (le schema y va : "Aller a",
         // references croisees) - le reseau (0 : le premier) et la rangee ; -1 : rien.
         int                      network{ -1 };
         int                      row{ -1 };

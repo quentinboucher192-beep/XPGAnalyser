@@ -331,14 +331,14 @@ namespace app {
             const std::string step = external_.stepName ? external_.stepName(forceTarget_) : std::string("?");
             switch (cmd) {
             case EngineCommand::Init:
-                return "Initialiser " + chart_.name + " : toutes les Ã©tapes se dÃ©sactivent, les Ã©tapes "
+                return "Initialiser " + chart_.name + " : toutes les \xC3\xA9tapes se d\xC3\xA9sactivent, les \xC3\xA9tapes "
                        "initiales s'activent au cycle suivant (situation initiale).";
             case EngineCommand::SfcActivate:
-                return "Activer l'Ã©tape " + step + " : elle devient active tout de suite, son temps repart de 0 "
-                       "(les autres Ã©tapes ne changent pas).";
+                return "Activer l'\xC3\xA9tape " + step + " : elle devient active tout de suite, son temps repart de 0 "
+                       "(les autres \xC3\xA9tapes ne changent pas).";
             case EngineCommand::SfcDeactivate:
-                return "DÃ©sactiver l'Ã©tape " + step + " : elle cesse d'Ãªtre active tout de suite "
-                       "(ses actions s'arrÃªtent au cycle suivant).";
+                return "D\xC3\xA9sactiver l'\xC3\xA9tape " + step + " : elle cesse d'\xC3\xAAtre active tout de suite "
+                       "(ses actions s'arr\xC3\xAAtent au cycle suivant).";
             default: return {};
             }
         }
@@ -377,13 +377,13 @@ namespace app {
             if (cmd == EngineCommand::Init && external_.init) { done = external_.init(); what = "situation initiale"; }
             else if ((cmd == EngineCommand::SfcActivate || cmd == EngineCommand::SfcDeactivate) && external_.forceStep) {
                 done = external_.forceStep(forceTarget_, cmd == EngineCommand::SfcActivate);
-                what = std::string(cmd == EngineCommand::SfcActivate ? "activÃ©" "e : " : "dÃ©sactivÃ©" "e : ")
+                what = std::string(cmd == EngineCommand::SfcActivate ? "activ\xC3\xA9" "e : " : "d\xC3\xA9sactiv\xC3\xA9" "e : ")
                      + (external_.stepName ? external_.stepName(forceTarget_) : std::string("?"));
             }
             Firing f;
             f.time = clockNow();
             f.from = f.to = "-";
-            f.condition = (done ? "forcÃ© : " : "refusÃ© : ") + what;
+            f.condition = (done ? "forc\xC3\xA9 : " : "refus\xC3\xA9 : ") + what;
             f.forced = true;
             history_.push_back(std::move(f));
             if (history_.size() > 200) history_.erase(history_.begin());
