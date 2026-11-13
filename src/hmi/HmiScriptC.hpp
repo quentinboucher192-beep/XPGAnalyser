@@ -154,6 +154,10 @@ void showLocals(const Translation&, std::string_view stFunction, std::vector<sim
 // vide : un nom de la traduction, a ne pas montrer.
 [[nodiscard]] std::string shownName(const Translation&, std::string_view stFunction, std::string_view stText);
 
+// 1.50.1 : le texte sans ses parties ecartees par le preprocesseur (#if 0, #ifdef d'une macro absente) : leurs lignes en
+// blanc (les numeros restent) - la verification de forme ne lit pas ce qui ne compte pas.
+[[nodiscard]] std::string withoutInactive(std::string_view code);
+
 // Ce que le moteur prend du C ou du C++, en une phrase (l'ecran : le dialogue Nouveau script, Compiler).
 [[nodiscard]] std::string supportedSubset(ScriptLang lang);
 // Une phrase courte : "C : compile pour le moteur des scripts (un sous-ensemble du C)".

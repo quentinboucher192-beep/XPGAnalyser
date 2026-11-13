@@ -80,6 +80,7 @@ public:
                     directive();
                     continue;
                 }
+                inactive_.push_back(line_);
                 while (i_ < s_.size() && s_[i_] != '\n') ++i_;
                 continue;
             }
@@ -592,6 +593,9 @@ private:
     std::size_t        i_{0};
     int                line_{1};
     bool               sub_{false};       // le texte d'un #define : pas de directive dedans
+public:
+    std::vector<int>   inactive_;         // les lignes ecartees (#if 0...)
+private:
     std::vector<Cond>  conds_;
     std::vector<int>   condLines_;
 };
@@ -2515,7 +2519,7 @@ private:
     }
 
     // L'appel d'un constructeur pour `path` (de type t) avec ces arguments ; vide : rien a construire.
-    std::string construct(const CTP& t, const std::string& path, const std::vector<X>& args, int line) {
+    std::string construct(const CTP& t, const std::string& path, const std::vector<X>& args, int line, bool asBase = false) {
         if (!t) return {};
         if (t->k == CT::K::Array) {
             if (!needsConstruction(t->elem)) return {};
@@ -2526,7 +2530,7 @@ private:
         if (t->k != CT::K::Record || t->rec.empty()) return {};
         const Record* r = record(t->rec);
         if (!r) return {};
-        if (r->abstract) fail(r->c + " est abstraite (une m\xC3\xA9thode virtuelle pure) : elle ne se cr\xC3\xA9" "e pas, une classe d\xC3\xA9riv\xC3\xA9" "e oui", line);
+        if (r->abstract && !asBase) fail(r->c + " est abstraite (une m\xC3\xA9thode virtuelle pure) : elle ne se cr\xC3\xA9" "e pas, une classe d\xC3\xA9riv\xC3\xA9" "e oui", line);
         std::vector<const Method*> ctors;
         for (const auto& m : r->methods)
             if (m.ctor) ctors.push_back(&m);
@@ -2983,7 +2987,7 @@ private:
                 args = constructorArgs();
                 given.erase(it);
             }
-            text += construct(recordType(r.base), "this_c", args, line) + " ";
+            text += construct(recordType(r.base), "this_c", args, line, true) + " ";
         }
         if (r.polymorphic) text += "this_c.cvt_ := " + std::to_string(r.tag) + "; ";
         for (const auto& mem : r.members) {
@@ -3062,7 +3066,7 @@ private:
         const std::size_t header = emit(line, "FUNCTION " + r.initSt + "(VAR_IN_OUT this_c : " + r.st + ")");
         FxScope fx(*this, true, {});
         std::string text;
-        if (!r.base.empty()) text += construct(recordType(r.base), "this_c", {}, line) + " ";
+        if (!r.base.empty()) text += construct(recordType(r.base), "this_c", {}, line, true) + " ";
         if (r.polymorphic) text += "this_c.cvt_ := " + std::to_string(r.tag) + "; ";
         for (const auto& mem : r.members)
             if (!mem.isStatic) text += memberDefault(mem, "this_c." + mem.st, line);
@@ -5665,6 +5669,27 @@ std::string shownName(const Translation& t, std::string_view stFunction, std::st
     for (std::size_t at = out.find("^."); at != std::string::npos; at = out.find("^.")) out.replace(at, 2, "->");
     for (std::size_t at = out.find("this."); at != std::string::npos; at = out.find("this.", at + 6)) out.replace(at, 5, "this->");
     if (!out.empty() && out.back() == '^') out = "*" + out.substr(0, out.size() - 1);
+    return out;
+}
+
+std::string withoutInactive(std::string_view code) {
+    std::string out(code);
+    try {
+        Macros macros;
+        Lexer lex(code, macros);
+        (void)lex.run();
+        if (lex.inactive_.empty()) return out;
+        std::set<int> gone(lex.inactive_.begin(), lex.inactive_.end());
+        int line = 1;
+        for (auto& c : out) {
+            if (c == '\n') {
+                ++line;
+                continue;
+            }
+            if (gone.count(line) && c != '\r') c = ' ';
+        }
+    } catch (const Fault&) {
+    }
     return out;
 }
 

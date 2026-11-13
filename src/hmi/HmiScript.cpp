@@ -571,7 +571,7 @@ std::vector<ScriptDiagnostic> checkScript(ScriptLang lang, std::string_view code
     const std::string st = lang == ScriptLang::ST ? names::blankUsings(markers::strip(code)) : std::string{};
     const std::string_view body = lang == ScriptLang::ST ? std::string_view(st) : code;
     if (lang != ScriptLang::ST) {
-        out = checkC(body, lang);
+        out = checkC(cscript::withoutInactive(body), lang);   // 1.50.1 : sans les parties #if 0
         // 1.50.0 : le C et le C++ sont COMPILES pour le moteur des scripts (traduits ligne pour ligne dans le ST de l'IHM,
         // HmiScriptC.hpp) : la faute du texte C a sa ligne, puis ce que le moteur dit du code traduit (a la meme ligne).
         const bool delimitersOk = std::none_of(out.begin(), out.end(), [](const ScriptDiagnostic& d) { return d.severity == ScriptDiagnostic::Severity::Error; });
