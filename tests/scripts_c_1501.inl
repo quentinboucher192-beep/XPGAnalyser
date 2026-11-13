@@ -25,6 +25,23 @@ void cases(const char* title, const std::vector<Case>& list) {
         const int times = std::string(c.what).find("3 appels") != std::string::npos ? 3 : 1;
         const Run r = run(p, c.lang, c.body, "R", times);
         check(r.value == c.want && r.error.empty(), std::string(c.lang == ScriptLang::C ? "C" : "C++") + " : " + c.what + " -> " + c.want + " : " + obs(r));
+        // Compiler (F7) : sans faute (le texte C, puis ce que le moteur dit de sa traduction)
+        const std::string e = errorsOf(checkScript(c.lang, c.body, "Essai"));
+        check(e.empty(), std::string("Compiler (F7) sans faute : ") + c.what + " (" + e + ")");
+        // la verification du projet (les noms de la traduction : ses fonctions, ses temporaires, ses structures)
+        Project q;
+        addVar(q, "R", c.type, "");
+        Script s;
+        s.id = q.allocate();
+        s.name = "Essai";
+        s.lang = c.lang;
+        s.event = "Appel";
+        s.body = c.body;
+        q.programs.scripts.push_back(s);
+        std::string issues;
+        for (const auto& is : compile(q))
+            if (is.severity == Issue::Severity::Error && is.script == s.id) issues += " | " + std::to_string(is.line) + " " + is.message;
+        check(issues.empty(), std::string("la verification du projet sans faute : ") + c.what + issues);
     }
 }
 
@@ -115,6 +132,9 @@ void pointeurs() {
         {C, "DINT", "void echange(int *a, int *b) {\n  int t = *a;\n  *a = *b;\n  *b = t;\n}\nint x = 1, y = 2;\nechange(&x, &y);\nR = x * 10 + y;\n", "21",
          "echange(&x, &y)"},
         {C, "DINT", "int m[2][3] = {{1, 2, 3}, {4, 5, 6}};\nint *ligne = m[1];\nR = ligne[2] + *(ligne + 1) * 10;\n", "56", "un pointeur sur une ligne d'un tableau de tableaux"},
+        {C, "DINT", "int add(int a, int b) { return a + b; }\nint mul(int a, int b) { return a * b; }\ntypedef int (*Op)(int, int);\nint (*op)(int, int) = add;\n"
+                    "int r1 = op(2, 3);\nop = &mul;\nOp autre = add;\nR = r1 * 100 + op(2, 3) * 10 + autre(1, 1);\n",
+         "562", "un pointeur de fonction (et son typedef)"},
     });
     // une case hors du tableau : une erreur, a sa ligne
     {
@@ -175,6 +195,8 @@ void classes() {
         {Cpp, "STRING", "std::string s = \"Pompe\";\ns += \" 12\";\nstd::string n = s.substr(6, 2);\nR = n + \"/\" + std::to_string(s.length()) + (s.empty() ? \"!\" : \"\");\n",
          "12/8", "std::string : +=, substr, length, empty"},
         {Cpp, "DINT", "int f(int a) { return a; }\nint f(int a, int b) { return a * b; }\nR = f(3) + f(4, 5);\n", "23", "une surcharge (par le nombre des parametres)"},
+        {Cpp, "DINT", "int t[3] = {1, 2, 3};\nfor (int& x : t) x *= 10;\nstd::vector<int> v = {4, 5};\nfor (auto& y : v) y += 1;\nR = t[0] + t[2] + v[0] + v[1];\n", "51",
+         "for (int& x : t) : x est la case (ecrite)"},
         {C, "DINT", "#include <stdlib.h>\nint *t = (int*)malloc(4 * sizeof(int));\nfor (int i = 0; i < 4; i++) t[i] = i + 1;\nR = t[3] * 10 + t[0];\nfree(t);\n",
          "41", "C : malloc, free"},
     });
@@ -401,14 +423,71 @@ void debogueur() {
     }
 }
 
+// ---- le pas a pas a travers un appel virtuel : l'aiguillage se traverse, Entrer s'arrete dans la methode ----
+void debogueurVirtuel() {
+    std::printf("-- le debogueur : Entrer dans un appel virtuel (l'aiguillage traverse), les membres selon le type reel\n");
+    const char* code =
+        "class Forme {\n"                                   // 1
+        "public:\n"                                         // 2
+        "    virtual int cotes() const { return 0; }\n"     // 3
+        "    int id = 1;\n"                                 // 4
+        "};\n"                                              // 5
+        "class Carre : public Forme {\n"                    // 6
+        "public:\n"                                         // 7
+        "    int cotes() const override {\n"                // 8
+        "        return 4 + cote * 0;\n"                    // 9
+        "    }\n"                                           // 10
+        "    int cote = 3;\n"                               // 11
+        "};\n"                                              // 12
+        "Forme* f = new Carre();\n"                         // 13
+        "R = f->cotes();\n"                                 // 14
+        "delete f;\n";                                      // 15
+    DebugBench b(Cpp, code);
+    b.rt.setBreakpoints({point(1, b.sc, 14)});
+    (void)b.rt.callScript("Essai", 0.2);
+    check(b.rt.paused() && b.rt.debugHit() && b.rt.debugHit()->line == 14, "en pause ligne 14 (f->cotes())");
+    if (b.rt.debugHit()) {
+        const auto* f = local(b.rt.debugHit()->stack.back().locals, "f");
+        const auto* target = f && !f->children.empty() ? &f->children.front() : nullptr;
+        check(f && f->type == "Forme*" && target && target->name == "*" && local(target->children, "cote") && local(target->children, "id")
+                  && !local(target->children, "cvt_"),
+              "f : Forme*, sous *f le Carre (son type reel) : id et cote, sans cvt_ : " + localsText(b.rt.debugHit()->stack.back().locals));
+    }
+    check(b.rt.debugStep(DebugStep::Into) && b.rt.paused() && b.rt.debugHit() && b.rt.debugHit()->line == 9,
+          "Entrer : dans Carre::cotes, ligne 9 (l'aiguillage traverse) : " + (b.rt.debugHit() ? stackText(*b.rt.debugHit()) : std::string("?")));
+    if (b.rt.debugHit()) check(b.rt.debugHit()->stack.back().label.rfind("Carre::cotes", 0) == 0, "la pile : Carre::cotes : " + stackText(*b.rt.debugHit()));
+    (void)b.rt.debugContinue();
+    sim::Value r;
+    check(!b.rt.paused() && b.rt.environment().read("R", r) && r.asInteger() == 4, "R = 4");
+}
+
+
+// ---- des programmes entiers : un fichier C (globales, static), la composition, les destructeurs virtuels ----
+void programmes() {
+    cases("des programmes entiers (fichier C, composition, destructeurs virtuels, membres static)", {
+        {C, "DINT", "/* un fichier C : des globales, main */\n#include <stdio.h>\nstruct Reglage { int seuil; float gain; };\nstruct Reglage reglage = { .seuil = 40, .gain = 1.5f };\nstatic int appels = 0;\nint compte(void) {\n    static int n = 0;\n    n++;\n    return n;\n}\nint main(void) {\n    appels++;\n    int c = compte();\n    R = reglage.seuil * 100 + appels * 10 + c;\n    printf(\"seuil %d gain %f\\n\", reglage.seuil, reglage.gain);\n    return 0;\n}\n", "4033", "un fichier C : struct globale designee, static du script et d'une fonction (3 appels)"},
+        {Cpp, "DINT", "#include <iostream>\nclass Moteur {\npublic:\n    Moteur() : vitesse(0) {}\n    void regle(int v) { vitesse = v; }\n    int vitesse;\n};\nclass Ligne {\npublic:\n    Ligne(int n) : numero(n) {}\n    Moteur moteurs[2];\n    Moteur principal;\n    int numero;\n    int total() const { return moteurs[0].vitesse + moteurs[1].vitesse + principal.vitesse + numero; }\n};\nLigne l(5);\nint main() {\n    l.moteurs[1].regle(10);\n    l.principal.regle(100);\n    std::cout << \"total \" << l.total() << std::endl;\n    R = l.total();\n    return 0;\n}\n", "115", "la composition : des membres objets (un tableau d'objets), leurs constructeurs"},
+        {C, "DINT", "struct P { int x; };\nvoid change(struct P p) { p.x = 99; }\nvoid change2(struct P *p) { p->x = 7; }\nchar nom[20];\nint main(void) {\n    struct P a = {1};\n    change(a);\n    int r1 = a.x;\n    change2(&a);\n    strcpy(nom, \"Cuve\");\n    strcat(nom, \"_A\");\n    R = r1 * 10 + a.x + (int)strlen(nom) * 100;\n    return 0;\n}\n", "617", "une struct par valeur (copiee), par pointeur ; strcpy, strcat, strlen"},
+        {Cpp, "DINT", "class Animal {\npublic:\n    virtual int pattes() const = 0;\n    virtual ~Animal() {}\n    int total() const { return pattes() * 10; }\n};\nclass Chien : public Animal {\npublic:\n    int pattes() const override { return 4; }\n    ~Chien() override { R = R + 1000; }\n};\nclass Oiseau : public Animal {\npublic:\n    int pattes() const override { return 2; }\n};\nint main() {\n    Animal* a = new Chien();\n    Animal* b = new Oiseau();\n    R = a->total() + b->total();\n    delete a;\n    delete b;\n    return 0;\n}\n", "1060", "classe abstraite, destructeur virtuel appele par delete (celui de la derivee, puis le parent)"},
+        {Cpp, "DINT", "struct Point { int x; int y; };\nstd::vector<Point> pts;\npts.push_back(Point{1, 2});\npts.push_back(Point{3, 4});\nint s = 0;\nfor (const Point& p : pts) s += p.x * 10 + p.y;\nint mode = 1;\nswitch (mode) {\n  case 0: s += 1000;\n  case 1: s += 100; break;\n  default: s += 5;\n}\nauto f = [](const Point& p) { return p.x + p.y; };\nR = s + f(pts[1]);\n", "153", "Point{1, 2}, std::vector de structures, un case qui continue, une lambda a parametre const&"},
+        {Cpp, "DINT", "class Capteur {\npublic:\n    explicit Capteur(double offset) : offset_(offset) {}\n    double lire(double brut) const {\n        auto corrige = [](double v, double o) { return v + o; };\n        return corrige(brut, offset_);\n    }\n    static int compte;\n    static int suivant() { return ++compte; }\nprivate:\n    double offset_;\n};\nint Capteur::compte = 10;\nint main() {\n    Capteur c(1.5);\n    int n = Capteur::suivant();\n    R = (int)(c.lire(2.0) * 10) + n * 100;\n    return 0;\n}\n", "1135", "un membre static (Capteur::compte), une methode static, une lambda dans une methode"},
+    });
+    Project p;
+    addVar(p, "R", "DINT", "0");
+    const Run r = run(p, Cpp, "#include <iostream>\nclass Moteur {\npublic:\n    Moteur() : vitesse(0) {}\n    void regle(int v) { vitesse = v; }\n    int vitesse;\n};\nclass Ligne {\npublic:\n    Ligne(int n) : numero(n) {}\n    Moteur moteurs[2];\n    Moteur principal;\n    int numero;\n    int total() const { return moteurs[0].vitesse + moteurs[1].vitesse + principal.vitesse + numero; }\n};\nLigne l(5);\nint main() {\n    l.moteurs[1].regle(10);\n    l.principal.regle(100);\n    std::cout << \"total \" << l.total() << std::endl;\n    R = l.total();\n    return 0;\n}\n", "R", 1, "total 115");
+    check(r.journal && r.error.empty(), "std::cout << ... << std::endl : au journal (total 115) : " + obs(r));
+}
+
 void all() {
     structures();
     controle();
     pointeurs();
     classes();
     refusEncore();
+    programmes();
     compiler();
     debogueur();
+    debogueurVirtuel();
 }
 
 } // namespace c1501

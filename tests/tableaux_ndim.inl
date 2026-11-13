@@ -416,6 +416,36 @@ void lesGrandsTableauxIHM() {
     }
 }
 
+// Le script de la capture (fonctions-D1) : Cube et Grand declares au modele, IHM_LOG les dit a la Console.
+void leScriptDeLaCapture() {
+    std::printf("-- 1.50.1 : le script de la capture (Cube a trois dimensions, Grand de 10 000 000 de cases)\n");
+    Project p;
+    Declaration cube;
+    cube.id = p.allocate();
+    cube.kind = DeclKind::Variable;
+    cube.name = "Cube";
+    cube.type = k3D;
+    Declaration grand = cube;
+    grand.id = p.allocate();
+    grand.name = "Grand";
+    grand.type = "ARRAY[0..999, 0..9999] OF BOOL";
+    Script sc;
+    sc.name = "Essai";
+    sc.body = "Cube[1][2][3] := TRUE;\nGrand[999, 9999] := Cube[1, 2, 3];\n"
+              "IHM_LOG(INFO, 'Cube[1, 2, 3] = {Cube[1, 2, 3]} ; une ligne : {Cube[1, 2].Length} cases ; une couche : {Cube[1].Length} ; "
+              "Grand : {Grand.Length} cases, Grand[999, 9999] = {Grand[999][9999]}');\n";
+    sc.decls = {cube, grand};
+    const TypeKnown known = [](std::string_view) { return false; };
+    check(errorsOf(checkScript(sc, known)).empty(), "Compiler : sans faute (" + errorsOf(checkScript(sc, known)) + ")");
+    Sim s(p, sc.body, sc.decls);
+    std::string said;
+    for (const auto& e : s.rt.journal())
+        if (e.message.find("Grand :") != std::string::npos) said = e.message;
+    check(s.error.empty() && said.find("Cube[1, 2, 3] = TRUE") != std::string::npos && said.find("une ligne : 16 cases") != std::string::npos
+              && said.find("une couche : 128") != std::string::npos && said.find("Grand : 10000000 cases, Grand[999, 9999] = TRUE") != std::string::npos,
+          "la Console : " + said + " " + s.error);
+}
+
 // Les memes essais, chaque tableau range serre (packFrom = 1) : le bloc et ses vues font comme des cases ordinaires.
 void toutSerre() {
     std::printf("-- 1.50.1 : les memes essais, tous les tableaux ranges serres\n");

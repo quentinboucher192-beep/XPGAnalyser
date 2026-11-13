@@ -113,7 +113,7 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 ## 8. Scripts et fonctions
 
 - **Scripts généraux** (au démarrage, cycliques, sur changement, appelés) et **scripts de vue** ; **fonctions IHM** ; branche **Natives** (fonctions et types natifs utilisables dans les scripts, en lecture seule, générée par `outils/natives/generer.py` depuis `outils/natives/catalogue.py`).
-- **Langage** : le **ST** est analysé et exécuté par l'interpréteur de l'application (dialecte IHM : `VAR`/`VAR_TEMP`, JSON, expressions régulières, `MAP`, `FOR EACH`, `SET OF`, `RING[N] OF`, `CALLBACK`, `LAMBDA`, `TEMPLATE`, gestion d'erreurs `LEVER`/`RELEVER`, `WAIT_UNTIL`…). Les scripts écrits en **C ou C++ ne sont ni compilés ni exécutés** : seule une vérification de forme (accolades, parenthèses, chaînes) est faite, et c'est signalé (`src/hmi/HmiScript.hpp`, `src/hmi/HmiCheck.hpp`).
+- **Langage** : le **ST** est analysé et exécuté par l'interpréteur de l'application (dialecte IHM : `VAR`/`VAR_TEMP`, JSON, expressions régulières, `MAP`, `FOR EACH`, `SET OF`, `RING[N] OF`, `CALLBACK`, `LAMBDA`, `TEMPLATE`, gestion d'erreurs `LEVER`/`RELEVER`, `WAIT_UNTIL`…). Les scripts écrits en **C ou C++ sont compilés (F7) pour le moteur des scripts** : traduits ligne pour ligne dans le ST de l'IHM, puis exécutés par le même interpréteur (1.50.0) ; 1.50.1 : struct, enum, typedef, sizeof, l'arithmétique des pointeurs dans un tableau, les classes (héritage simple, méthodes virtuelles), new/delete sur un tas géré, les lambdas, std::vector/std::array/std::string, et le **débogueur** (points d'arrêt sur les lignes C, pas à pas, variables sous leur nom C). Restent refusés, dits à leur ligne : goto, templates, exceptions, héritage multiple, surcharge des opérateurs (`src/hmi/HmiScriptC.hpp`).
 - **Erreurs à leur place**, aide à la saisie, champs à expression.
 - **Tests unitaires d'une fonction** : des cas rejoués sur un banc (`src/hmi/HmiFunctionTests.hpp`, format 29).
 - **Débogueur des scripts IHM** : points d'arrêt, pas à pas, pile, variables locales (`src/hmi/HmiRuntimeDebug.*`).
@@ -243,7 +243,7 @@ Le code le précise : cette fonction aide à comprendre un événement ; elle n'
 ## 20. Limitations
 
 - Communication : **Modbus TCP** seulement (plus la surveillance « joignable » d'un appareil Ethernet). Modbus RTU, S7, EtherNet/IP, OPC UA ne sont pas pilotés (le scanner IP ne fait que reconnaître leurs ports).
-- Scripts **C/C++** : vérifiés en forme seulement, jamais exécutés.
+- Scripts **C/C++** : traduits pour le moteur des scripts (un sous-ensemble du C et du C++, pas un compilateur natif) ; goto, templates, exceptions, héritage multiple et surcharge des opérateurs restent refusés.
 - Courriel **sans TLS** (relais local) ; serveur web **HTTP**.
 - Bases de données externes par chaîne de connexion : non connectées.
 - Vidéo MP4/WMV/MOV : Windows seulement (Media Foundation).

@@ -365,6 +365,7 @@ int main() {
     leMoteurND();
     lesGrandsTableaux();
     lesGrandsTableauxIHM();
+    leScriptDeLaCapture();
     toutSerre();
     std::printf("%d controles, %d echecs\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

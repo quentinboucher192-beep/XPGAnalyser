@@ -12,6 +12,7 @@
 //  SCRC_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
 #include "../src/hmi/HmiBuildState.hpp"
+#include "../src/hmi/HmiCheck.hpp"
 #include "../src/hmi/HmiModel.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
 #include "../src/hmi/HmiScript.hpp"
@@ -396,6 +397,8 @@ int runFile(const char* path) {
     View v = makeView(pr, "Vue_Essai");
     pr.views.push_back(v);
     pr.config.startView = pr.views.back().id;
+    for (const auto& is : compile(pr))
+        if (is.severity != Issue::Severity::Info) std::printf("compile : %s ligne %d : %s\n", is.category.c_str(), is.line, is.message.c_str());
     Runtime rt;
     rt.bind(&pr, nullptr);
     rt.start(0.0);

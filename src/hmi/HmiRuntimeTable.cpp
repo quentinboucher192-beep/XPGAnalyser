@@ -821,8 +821,8 @@ void Runtime::tableFire(const View& v, const Object& o, Trigger t, const table::
             td->bounds = {{1, static_cast<std::int64_t>(r.cells.size())}};
             td->element = sim::scalarType(sim::Type::String);
             auto arr = sim::makeObj(td);
-            for (std::size_t k = 0; k < r.cells.size() && k < arr->items.size(); ++k)
-                if (arr->items[k]) arr->items[k]->value = sim::Value::text(r.cells[k].text);
+            for (std::size_t k = 0; k < r.cells.size() && k < sim::cellCount(*arr); ++k)            // 1.50.1 : serre ou non
+                sim::setCellValue(*arr, k, sim::Value::text(r.cells[k].text));
             sc->setObject("Valeurs", arr);
         }
         if (t == Trigger::CellEdit) {

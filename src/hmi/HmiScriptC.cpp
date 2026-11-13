@@ -2057,6 +2057,8 @@ private:
         }
         r.endLine = next().line;                               // }
         completeRecord(name);
+        if (cur_ != &script_ && (!bodies.empty() || records_[name].needsInit))
+            fail(name + " : une classe \xC3\xA0 m\xC3\xA9thodes (ou \xC3\xA0 valeurs par d\xC3\xA9" "faut) se d\xC3\xA9" "finit au niveau du script, pas dans une fonction", line);
         // Les methodes definies dans la classe : traduites maintenant (elles voient tous les membres).
         const std::size_t after = i_;
         for (const std::size_t k : bodies) {
@@ -2408,7 +2410,7 @@ private:
                 if (!accept(",")) break;
             }
             expect("}", "\xC3\xA0 la fin de la liste");
-            if (!any) return "[]";
+            if (!any) return {};                                 // {} : tout a zero (le depart de la variable)
             std::string l = "[";
             for (std::size_t q = 0; q < lits.size(); ++q) l += (q ? ", " : "") + lits[q];
             return l + "]";
@@ -2493,6 +2495,10 @@ private:
 
     // Une valeur rangee dans une place de type t : un tableau passe a un pointeur (t -> &t[0]), une fonction a un rappel.
     X valueFor(const CTP& t, X v, int line) {
+        if (t && t->k == CT::K::Func && v.st.rfind("ADR(", 0) == 0 && !v.varC.empty()) {   // &f d'une fonction IHM : la fonction
+            v.st = v.varC;
+            v.ty = t;
+        }
         if (isPtr(t) && isArr(v.ty) && v.lvalue) {
             v.st = "CPTR_AT(" + v.st + ", 0)";
             v.ty = pointerCT(v.ty->elem);
@@ -3336,6 +3342,23 @@ private:
                 expect(")", "apr\xC3\xA8s la collection du for");
                 CTP et = ty.type;
                 if (ty.isAuto) et = coll.ty && (coll.ty->k == CT::K::Array || coll.ty->k == CT::K::Vector) && coll.ty->elem ? coll.ty->elem : nullptr;
+                // for (T& x : t) : x EST la case (une ecriture la change) - une boucle sur les indices
+                if (byRef && !ty.isConst && coll.lvalue && coll.ty && (coll.ty->k == CT::K::Array || coll.ty->k == CT::K::Vector)) {
+                    const std::string i = temp("DINT", line, "i");
+                    const std::string last = coll.ty->k == CT::K::Array ? std::to_string(coll.ty->n - 1) : "VECTOR_SIZE(" + coll.st + ") - 1";
+                    Var v;
+                    v.st = coll.st + "[" + i + "]";
+                    v.type = et ? et : coll.ty->elem;
+                    v.c = nm;
+                    cur_->scopes.back()[nm] = v;
+                    emit(line, "FOR " + i + " := 0 TO " + last + " DO");
+                    loops_.push_back({});
+                    body();
+                    loops_.pop_back();
+                    emit(peekPrevLine(), "END_FOR;");
+                    cur_->scopes.pop_back();
+                    return;
+                }
                 const std::string st = declare(nm, et ? et : tUnknown(), line, true);
                 noteVar(st, nm, et);
                 (void)byRef;
@@ -4674,6 +4697,25 @@ private:
             return out;
         }
         if (punct("(")) return namedCall(name, line);
+        // Point{1, 2} : un objet temporaire (C++), ses membres ou son constructeur
+        if (punct("{") && isCpp() && records_.count(name) && !findVar(name)) {
+            const CTP t = recordType(name);
+            const std::string tmp = temp(t->st, line, "o");
+            if (hasConstructors(name)) {
+                addPre(construct(t, tmp, constructorArgs(), line), line);
+            } else {
+                std::vector<Cell> cells;
+                bool constant = true;
+                (void)initBraces(t, tmp, cells, constant, line);
+                std::string text = construct(t, tmp, {}, line);
+                for (const auto& c : cells) text += (text.empty() ? "" : " ") + c.path + " := " + c.st + ";";
+                if (!text.empty()) addPre(text, line);
+            }
+            out.st = tmp;
+            out.ty = t;
+            out.lvalue = true;
+            return out;
+        }
         // T_MODE::Auto, Mode::Marche (enum class), Pompe::compte (un membre static)
         if (const auto sep = name.rfind("::"); sep != std::string::npos) {
             const std::string scope = name.substr(0, sep), item = name.substr(sep + 2);
@@ -5393,7 +5435,6 @@ std::string cMessage(const Translation& t, std::string_view message) {
     for (const auto& [st, c] : t.debug->functions)
         if (!c.empty() && c.find(' ') == std::string::npos) replaceWord(out, st, c);
     replaceWord(out, "this_c", "this");
-    replaceWord(out, "CPTR_ADD", "p +");
     return out;
 }
 
@@ -5506,7 +5547,26 @@ void showValue(const DebugInfo& d, sim::LineProbe::Local& l, const std::string& 
     if (l.children.empty()) return;
     const bool cells = !l.children.empty() && !l.children.front().name.empty() && l.children.front().name[0] == '[';
     if (cells || (l.children.size() == 1 && l.children.front().name == "*")) {
-        for (auto& c : l.children) showValue(d, c, recordC, enumName, depth + 1);
+        // le type C d'une case (int[4] -> int ; int[2][3] -> int[3]) ou de la cible (int* -> int)
+        std::string inner;
+        const std::string& t = l.type;
+        if (cells) {
+            if (const auto b = t.find('['); b != std::string::npos) {
+                const auto e = t.find(']', b);
+                if (e != std::string::npos) inner = t.substr(0, b) + t.substr(e + 1);
+            } else if (t.rfind("std::array<", 0) == 0 || t.rfind("std::vector<", 0) == 0) {
+                const auto lt = t.find('<');
+                const auto comma = t.rfind(',');
+                inner = t.substr(lt + 1, (t.back() == '>' && t.rfind("std::vector<", 0) == 0 ? t.size() - 1 : comma) - lt - 1);
+            }
+        } else if (!t.empty() && t.back() == '*') {
+            inner = t.substr(0, t.size() - 1);
+            if (inner.rfind("const ", 0) == 0) inner = inner.substr(6);
+        }
+        for (auto& c : l.children) {
+            if (!inner.empty()) c.type = inner;
+            showValue(d, c, recordC, enumName, depth + 1);
+        }
         return;
     }
     // une structure : son type reel (cvt_), ses membres par leur nom C, sans ceux des autres classes de sa hierarchie
@@ -5537,6 +5597,14 @@ void showValue(const DebugInfo& d, sim::LineProbe::Local& l, const std::string& 
     }
     l.children = std::move(kept);
     if (!actual.empty() && actual != recordC && !recordC.empty()) l.type = actual + " (" + l.type + ")";
+    // la valeur en une ligne : les membres montres, sous leur nom C ({x: 7, y: 8})
+    if (r) {
+        std::string v = "{";
+        for (std::size_t k = 0; k < l.children.size(); ++k) v += (k ? ", " : "") + l.children[k].name + ": " + l.children[k].value;
+        v += "}";
+        if (v.size() > 160) v = v.substr(0, 157) + "...}";
+        l.value = v;
+    }
 }
 } // namespace
 

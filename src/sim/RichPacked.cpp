@@ -19,17 +19,13 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
-#include <cstdlib>
 #include <tuple>
 
 namespace sim {
 
 namespace {
 
-std::int64_t g_packFrom = [] {   // TEMPORAIRE (essais D1)
-    const char* e = std::getenv("XPG_PACK_FROM");
-    return e && *e ? std::max<std::int64_t>(1, std::atoll(e)) : std::int64_t{65536};
-}();
+std::int64_t g_packFrom = 65536;      // les essais le baissent (setPackFrom) : tout range serre
 
 constexpr std::int64_t kSaturate = std::int64_t{1} << 50;
 

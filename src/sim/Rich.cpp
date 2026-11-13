@@ -569,6 +569,9 @@ std::string display(const Obj& o) {
         case TypeDesc::Kind::Ref:
         case TypeDesc::Kind::Pointer:
             if (!o.bound) return "NULL";
+            // 1.50.1 : un pointeur dans un tableau (le C traduit) : la case visee
+            if (const auto array = o.map.lock(); o.targetName.empty() && array && array->type && array->type->kind == TypeDesc::Kind::Array)
+                return "-> case " + std::to_string(o.intKey) + " sur " + std::to_string(array->items.size());
             return o.targetName.empty() ? (o.target.expired() ? std::string("(disparue)") : std::string("(locale)")) : "-> " + o.targetName;
         case TypeDesc::Kind::Iterator:
             return o.atEnd ? std::string("(fin)") : std::string("(cle ") + (o.textKey.empty() ? std::to_string(o.intKey) : o.textKey) + ")";

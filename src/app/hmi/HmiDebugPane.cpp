@@ -711,6 +711,11 @@ void HmiDebugPane::rebuildCode() {
     const std::string text = code.empty() ? std::string{} : codeText(code.script, code.function);
     if (!(code == codeShown_) || code_->text() != text) {
         codeShown_ = code;
+        // 1.50.1 : un script C ou C++ se montre en C (ses couleurs)
+        const hmi::Script* shownScript = doc_ && code.script != kNoId ? doc_->project.script(code.script) : nullptr;
+        code_->setLanguage(!shownScript || shownScript->lang == hmi::ScriptLang::ST ? ui::Language::StructuredText
+                           : shownScript->lang == hmi::ScriptLang::C                  ? ui::Language::C
+                                                                                     : ui::Language::Cpp);
         code_->setText(text);
         margin_.reset();
     }

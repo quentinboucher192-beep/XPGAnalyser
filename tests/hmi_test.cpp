@@ -29770,8 +29770,8 @@ void scriptsC1220() {
     e = clean(ScriptLang::C, "int n = compter([](int x) { return x > 0; });\n");
     check(e.find("une lambda est du C++") != std::string::npos, "C : une lambda est du C++ (" + e + ")");
     e = clean(ScriptLang::C, "int a[6] = { [4] = 29, [2] = 15 };\nbool (*garder)(float) = &Est_Valide;\n");
-    check(e.find("initialiseur d\xC3\xA9sign\xC3\xA9") != std::string::npos,
-          "C : un initialiseur designe ([4] = 29) : hors du sous-ensemble execute (1.50.0), dit (" + e + ")");
+    // 1.50.1 : les initialiseurs designes et les pointeurs de fonction sont pris (scripts_c_1501.inl).
+    check(e.empty(), "C : un initialiseur designe ([4] = 29), un pointeur de fonction : pris (1.50.1) (" + e + ")");
     // Le projet : une fonction, un type rappel, une structure, des variables.
     Project p;
     HmiFunction f;

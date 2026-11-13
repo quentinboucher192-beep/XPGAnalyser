@@ -3773,6 +3773,10 @@ private:
                     l.children = std::move(inner.children);
                 }
                 break;
+            case TypeDesc::Kind::Pointer:            // 1.50.1 : ce que vise un pointeur (un objet du moteur) : *p
+                if (obj->bound && obj->targetName.empty())
+                    if (auto target = obj->target.lock(); target && !cFreedObj(*target)) add("*", target);
+                break;
             default:
                 break;
         }
@@ -4398,7 +4402,14 @@ private:
     }
     bool storeItem(Obj& into, const RV& v, std::string* why) { return itemFits(into, v, why) && store(into, v, why); }
 
-    bool fromSequence(Obj& into, const Obj& from, std::string* why) {
+    bool fromSequence(Obj& into, const Obj& fromIn, std::string* why) {
+        // 1.50.1 : un tableau range serre donne ses cases (les memes objets) - une liste qui recoit un grand tableau.
+        Obj spread;
+        if (fromIn.packed && fromIn.items.empty()) {
+            spread.type = fromIn.type;
+            for (std::size_t k = 0, n = cellCount(fromIn); k < n; ++k) spread.items.push_back(cellAt(fromIn, k));
+        }
+        const Obj& from = spread.type ? spread : fromIn;
         const auto& t = *into.type;
         const auto& ft = *from.type;
         const auto fail = [&](std::string w) {
@@ -7993,7 +8004,13 @@ private:
                 item = *m;
             }
             if (outType->kind == TypeDesc::Kind::List) result->items.push_back(item);
-            else if (k < result->items.size()) result->items[k] = item;
+            else if (result->packed && result->items.empty()) {                // 1.50.1 : un grand tableau range serre
+                if (k < cellCount(*result) && item && item->type && item->type->kind == TypeDesc::Kind::Scalar) setCellValue(*result, k, item->value);
+                else if (const ObjRef cell = k < cellCount(*result) && item ? cellAt(*result, k) : nullptr) {
+                    std::string w;
+                    if (!assignObj(*cell, *item, &w)) return err(dialectError(u + " : " + w).error());
+                }
+            } else if (k < result->items.size()) result->items[k] = item;
         }
         return done(RV{{}, result});
     }

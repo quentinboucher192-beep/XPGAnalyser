@@ -50021,7 +50021,6 @@ void cycleVue1270() {
 #include "hmi_editor_methodes1501.inl"   // 1.50.1 : Essayer une methode, ses surcharges, la signature d'une virtuelle, le gris
 
 int main(int argc, char** argv) {
-    if (const char* only = std::getenv("HMI_TEST_M1501"); only && *only == '1') { methodes1501(); std::printf("%d controles, %d echec(s)\n", checks, failures); return failures == 0 ? 0 : 1; }   // TEMP-1501
     // 1.50.0 : HMI_TEST_ETI=1 - Etirer (le moteur, le menu, la barre, l'apercu, la fenetre), seul.
     if (const char* only = std::getenv("HMI_TEST_ETI"); only && *only == '1') {
         etirer1500();

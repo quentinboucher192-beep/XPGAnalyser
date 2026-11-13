@@ -12,6 +12,7 @@
 #include "../ui/Widget.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 
 namespace app::scriptchat {

@@ -6,6 +6,7 @@
 
 #include "HmiAskDialog.hpp"
 #include "../../hmi/HmiScript.hpp"
+#include "../../hmi/HmiScriptC.hpp"     // 1.50.1 : le debogueur des scripts C et C++
 #include "../../menu/MenuManager.hpp"
 #include "../../sim/Interpreter.hpp"
 #include "../../ui/Commands.hpp"
@@ -77,10 +78,26 @@ std::vector<std::string> conditionNames(std::string_view c) {
     return out;
 }
 
-// Le projet de la seance (pour refuser un script C, nommer un code).
+// Le projet de la seance (pour nommer un code).
 const hmi::Project* projectOf(const HmiDebugSession& s) {
     if (s.project()) return s.project();
     return s.runtime() ? s.runtime()->project() : nullptr;
+}
+
+// 1.50.1 : le script C ou C++ de ce code (nul : du ST, une fonction).
+const hmi::Script* cScriptOf(HmiDebugTarget code) {
+    const hmi::Project* p = projectOf(HmiDebugSession::instance());
+    if (!p || code.script == hmi::kNoId) return nullptr;
+    const hmi::Script* sc = p->script(code.script);
+    return sc && sc->lang != hmi::ScriptLang::ST ? sc : nullptr;
+}
+
+// 1.50.1 : une condition telle que le moteur la lira : du ST, ou, dans un script C ou C++, le C traduit. Vide : elle ne se
+// traduit pas (`why`).
+std::string conditionAsSt(HmiDebugTarget code, const std::string& c, std::string* why) {
+    if (const hmi::Script* sc = cScriptOf(code))
+        return hmi::cscript::expressionAt(sc->body, sc->lang, hmi::cscript::entryNamesOf(*sc), 0, c, why, true);
+    return c;
 }
 
 } // namespace
@@ -121,11 +138,7 @@ std::uint32_t HmiDebugSession::add(HmiDebugTarget code, std::uint32_t line, std:
         if (why) *why = "Choisis d'abord un script ou une fonction (un \xC3\xA9v\xC3\xA9nement vide n'a pas encore de code).";
         return 0;
     }
-    if (const hmi::Project* p = projectOf(*this); p && code.script != hmi::kNoId)
-        if (const hmi::Script* sc = p->script(code.script); sc && sc->lang != hmi::ScriptLang::ST) {
-            if (why) *why = std::string(hmi::scriptLangKey(sc->lang)) + " : ex\xC3\xA9" "cut\xC3\xA9 sans le d\xC3\xA9" "bogueur (C/C++) - pas de point d'arr\xC3\xAAt ici.";
-            return 0;
-        }
+    // 1.50.1 : un script C ou C++ se debogue comme un script ST (ses lignes sont celles du texte C).
     if (const auto id = at(code, line)) return id;
     hmi::DebugBreakpoint b;
     b.id = nextId_++;
@@ -330,7 +343,10 @@ bool HmiDebugSession::pausedAt(HmiDebugTarget& code, std::uint32_t& line, bool* 
 std::string conditionPreview(HmiDebugTarget code, const std::string& condition) {
     const std::string c = trimmed(condition);
     if (c.empty()) return "Sans condition : il s'arr\xC3\xAAtera \xC3\xA0 chaque passage.";
-    if (!sim::parseExpression(c, hmi::dialectOptions()))
+    std::string cwhy;
+    const std::string stc = conditionAsSt(code, c, &cwhy);           // 1.50.1 : du C, traduit
+    if (stc.empty()) return "Elle ne se lit pas : " + cwhy + ".";
+    if (!sim::parseExpression(stc, hmi::dialectOptions()))
         return "Elle ne se lit pas : v\xC3\xA9rifie les parenth\xC3\xA8ses, les op\xC3\xA9rateurs (AND, OR, =, <>).";
     hmi::Runtime* rt = HmiDebugSession::instance().runtime();
     if (!rt || !rt->running()) return "La simulation ne tourne pas : elle sera essay\xC3\xA9" "e \xC3\xA0 chaque passage.";
@@ -387,20 +403,26 @@ void askBreakpointCondition(HmiDebugTarget code, std::uint32_t line, const std::
     spec.id = "dialog.hmiBreakCondition";
     spec.title = "Condition du point d'arr\xC3\xAAt " + std::to_string(s.rankOf(id)) + (name.empty() ? std::string{} : " : " + name)
                  + ", ligne " + std::to_string(line);
-    spec.text = "Il ne s'arr\xC3\xAAte que si elle est vraie. Du ST, dans la port\xC3\xA9" "e du code : ses locales (VAR, param\xC3\xA8tres), "
-                "les variables IHM. Vide : \xC3\xA0 chaque passage.";
+    const bool inC = cScriptOf(code) != nullptr;                     // 1.50.1 : la condition d'un script C ou C++ s'ecrit en C
+    spec.text = inC ? std::string("Il ne s'arr\xC3\xAAte que si elle est vraie. Du C, dans la port\xC3\xA9" "e de la ligne : ses variables locales, "
+                                  "ses param\xC3\xA8tres, les variables IHM (i == 3 && niveau > 5.0). Vide : \xC3\xA0 chaque passage.")
+                    : std::string("Il ne s'arr\xC3\xAAte que si elle est vraie. Du ST, dans la port\xC3\xA9" "e du code : ses locales (VAR, param\xC3\xA8tres), "
+                                  "les variables IHM. Vide : \xC3\xA0 chaque passage.");
     if (!lineText.empty()) spec.text += "\nLa ligne : " + trimmed(lineText);
     if (bp && !bp->condition.empty()) spec.text += "\n" + conditionPreview(code, bp->condition);
     HmiAskDialog::Option o;
     o.label = "Condition";
     o.hasField = true;
     o.field = bp ? bp->condition : std::string{};
-    o.placeholder = "P < 5.0 OR Tours MOD 100 = 0";
+    o.placeholder = inC ? "i == 3 || tours % 100 == 0" : "P < 5.0 OR Tours MOD 100 = 0";
     o.monospace = true;
-    o.check = [](const std::string& t) -> std::string {
+    o.check = [code](const std::string& t) -> std::string {
         const std::string c = trimmed(t);
         if (c.empty()) return {};
-        auto parsed = sim::parseExpression(c, hmi::dialectOptions());
+        std::string cwhy;
+        const std::string stc = conditionAsSt(code, c, &cwhy);       // 1.50.1 : du C, traduit
+        if (stc.empty()) return "Elle ne se lit pas (" + cwhy + ").";
+        auto parsed = sim::parseExpression(stc, hmi::dialectOptions());
         return parsed ? std::string{} : "Elle ne se lit pas (" + hmi::frenchSimMessage(parsed.error().message()) + ").";
     };
     spec.options.push_back(std::move(o));

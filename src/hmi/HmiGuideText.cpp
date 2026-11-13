@@ -19295,15 +19295,36 @@ const std::vector<Topic>& topics() {
              {K::Paragraph, "Le **ST**, le **C** et le **C++** s'ex\xC3\xA9" "cutent en simulation (1.50.0). "
                          "Un script C ou C++ est compil\xC3\xA9 (F7) pour le moteur des scripts : traduit ligne "
                          "pour ligne dans le ST de l'IHM, il lit et \xC3\xA9" "crit les m\xC3\xAAmes variables, appelle "
-                         "les m\xC3\xAAmes fonctions, et une faute est dite \xC3\xA0 sa ligne. C'est un "
-                         "**sous-ensemble** : les types de base (int, float, double, bool, char, const char*, "
-                         "std::string), les types IHM, les tableaux t[N][M] ; if, switch (un break par case), "
-                         "while, do, for (et for (T x : t) en C++) ; les fonctions du script (par valeur, "
-                         "pointeur T* p, r\xC3\xA9" "f\xC3\xA9rence T& r) ; sqrt, pow, min, max, printf (au "
-                         "journal). Sans les instructions au niveau du script, main() (ou la fonction du nom de "
-                         "l'\xC3\xA9v\xC3\xA9nement, OnCycle()) est appel\xC3\xA9" "e. Un pointeur T* p = &x est un POINTER "
-                         "TO du ST (*p, p->m, NULL). Pas d'arithm\xC3\xA9tique des pointeurs, ni malloc, "
-                         "classes, templates, lambdas, exceptions, std::vector : la faute le dit.", {}},
+                         "les m\xC3\xAAmes fonctions, et une faute est dite \xC3\xA0 sa ligne. Ce n'est pas un compilateur "
+                         "natif : un **sous-ensemble** du C et du C++, ex\xC3\xA9" "cut\xC3\xA9 par le m\xC3\xAAme moteur que le ST, sous "
+                         "Linux comme sous Windows. Sans les instructions au niveau du script, main() (ou la "
+                         "fonction du nom de l'\xC3\xA9v\xC3\xA9nement, OnCycle()) est appel\xC3\xA9" "e.", {}},
+             {K::Bullet, "**Les types** : int, float, double, bool, char, les intN_t, un texte (const char*, "
+                         "char s[N], std::string), les types IHM, les tableaux t[N][M] ; **struct** (imbriqu\xC3\xA9" "es, "
+                         "avec des tableaux ; . et ->), **enum** et enum class, **typedef** et using, **const** et "
+                         "constexpr, **sizeof** (la taille du C, align\xC3\xA9" "e) ; les listes { } et les initialiseurs "
+                         "d\xC3\xA9sign\xC3\xA9s ({ .x = 1 }, { [4] = 29 }) ; #define, les macros \xC3\xA0 param\xC3\xA8tres, #if / #ifdef.", {}, "1.50.1"},
+             {K::Bullet, "**Le contr\xC3\xB4le** : if, switch (un case qui continue dans le suivant, default n'importe "
+                         "o\xC3\xB9, break au milieu), while, do, for, for (T x : t) ; les op\xC3\xA9rateurs du C, x++ et une "
+                         "affectation au milieu d'une expression (t[i++] = x, if ((n = lire()) > 0)).", {}, "1.50.1"},
+             {K::Bullet, "**Les pointeurs** : T* p = &x, *p, p->m, NULL, et leur **arithm\xC3\xA9tique dans un "
+                         "tableau** (p + i, p++, p[i], *(p + i), p - q, p < q) ; une case hors du tableau est une "
+                         "erreur \xC3\xA0 sa ligne. Un pointeur qui ne vise pas un tableau (p = &x) ne s'avance pas.", {}, "1.50.1"},
+             {K::Bullet, "**Le C++** : les classes (membres, m\xC3\xA9thodes, constructeurs et leur liste "
+                         "d'initialisation, this, public / private / protected), l'h\xC3\xA9ritage simple et les m\xC3\xA9thodes "
+                         "virtuelles ; **new et delete** (un objet, un tableau new T[n]) sur un tas g\xC3\xA9r\xC3\xA9 : delete "
+                         "deux fois, un objet employ\xC3\xA9 apr\xC3\xA8s delete sont des erreurs claires, \xC3\xA0 leur ligne (en C : "
+                         "malloc, calloc, free) ; les lambdas (sans capture, ou [=]) ; std::array, std::vector, "
+                         "std::string, std::function, std::cout (au journal).", {}, "1.50.1"},
+             {K::Bullet, "**Reste refus\xC3\xA9, dit \xC3\xA0 sa ligne** : goto, les templates, les exceptions (try, catch, "
+                         "throw), l'h\xC3\xA9ritage multiple, la surcharge des op\xC3\xA9rateurs, une lambda qui capture par "
+                         "r\xC3\xA9" "f\xC3\xA9rence ([&]), union, realloc, un objet local dont la classe a un destructeur (new et "
+                         "delete le permettent).", {}, "1.50.1"},
+             {K::Bullet, "**Le d\xC3\xA9" "bogueur** marche sur le C et le C++ comme sur le ST : un point d'arr\xC3\xAAt dans la "
+                         "marge d'une ligne C, F10 (Suivant), F11 (Entrer), Maj+F11 (Sortir), la ligne en cours "
+                         "dans le texte C, la pile avec les noms des fonctions C (Pompe::demarrer), les variables "
+                         "sous leur nom C (les structures et leurs membres, les tableaux, *p sous un pointeur, this). "
+                         "Une condition de point d'arr\xC3\xAAt et un espion s'\xC3\xA9" "crivent en C (i == 3 && p != NULL).", {}, "1.50.1"},
              {K::Heading, "C et C++ : la v\xC3\xA9rification et l'en-t\xC3\xAAte du projet", {}, "1.12.20"},
              {K::Bullet, "**La v\xC3\xA9rification** lit aussi les chevrons d'un template "
                          "(`std::function<BOOL(REAL) f;` : \xC2\xAB il manque le > qui ferme "

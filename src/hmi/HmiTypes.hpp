@@ -225,7 +225,8 @@ bool structLiteral(std::string_view text, std::vector<std::pair<std::string, std
 // un indice [*] ("[*].Retour" : le membre Retour de chaque case ; "[*]" : les cases entieres) et dont
 // l'adresse a ses calculs entre parentheses - "%MW(1000 + 10 * i)", "%MW(551 + 6 * i).0",
 // "%MW(551 + i / 16).(i MOD 16)" : chaque case calcule la sienne avec ses indices (i : le premier
-// indice des [*], j : le deuxieme - [1,2] donne i = 1, j = 2) ; + - * / MOD, parentheses, entiers.
+// indice des [*], j : le deuxieme - [1,2] donne i = 1, j = 2 ; 1.50.1 : k, l le troisieme, le quatrieme) ; + - * / MOD,
+// parentheses, entiers.
 // Sur un membre simple, la formule donne son adresse ; sur un membre compose (une case entiere), son
 // depart : ses membres suivent. Le plus precis gagne : une adresse tapee sur EXTRACTEURS[4].Retour passe
 // avant la formule ; une case ajoutee au tableau la suit.

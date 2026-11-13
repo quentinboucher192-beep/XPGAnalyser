@@ -522,17 +522,21 @@ void changedWhilePaused() {
     check(errors(b.rt).empty(), "sans erreur" + errors(b.rt));
 }
 
-// ---- un script C : non execute en simulation ----
+// ---- un script C : 1.50.1, debogue comme un script ST (ses lignes sont celles du texte C) ----
 void cScript() {
-    std::printf("-- un script C ou C++ : pas de point d'arret (non execute en simulation)\n");
+    std::printf("-- un script C ou C++ : un point d'arret a sa ligne C (1.50.1 : le debogueur des scripts C)\n");
     Bench b;
-    const Id c = script(b.p, "En_C", "x = 1;\n", false, ScriptLang::C);
+    const Id c = script(b.p, "En_C", "int x = 1;\nR = x + 1;\n", false, ScriptLang::C);
     b.go();
-    b.rt.setBreakpoints({at(1, c, kNoId, 1)});
-    // 1.50.0 : le C et le C++ s'executent (traduits pour le moteur), sans le debogueur.
-    check(b.rt.breakpoints()[0].note.find("sans le d\xC3\xA9" "bogueur (C/C++)") != std::string::npos,
-          "la note : " + b.rt.breakpoints()[0].note);
-    check(Runtime::breakableLines(b.p, c, kNoId).empty(), "aucune ligne a poser");
+    b.rt.setBreakpoints({at(1, c, kNoId, 2)});
+    check(b.rt.breakpoints()[0].note.empty() && b.rt.breakpoints()[0].effectiveLine == 2, "le point de la ligne C 2 est compris : " + b.rt.breakpoints()[0].note);
+    check(Runtime::breakableLines(b.p, c, kNoId) == std::vector<std::uint32_t>{1, 2}, "les lignes ou un point se pose : 1 2");
+    (void)b.rt.callScript("En_C", 0.2);
+    check(b.rt.paused() && b.rt.debugHit() && b.rt.debugHit()->line == 2, "en pause a la ligne 2 du script C");
+    std::string v, why;
+    check(b.rt.debugEvaluate("x == 1", v, &why) && v == "TRUE", "un espion en C (x == 1) : " + v + why);
+    (void)b.rt.debugContinue();
+    check(!b.rt.paused() && value(b.rt, "R") == 2.0, "Continuer : R = 2");
 }
 
 // ---- sans point arme, rien ne change ----
