@@ -114,17 +114,89 @@ parties 2 et 3 / ajoute un système de recherche pour chercher le PC plus effica
 
 ## 2. Les essais
 
-@@ESSAIS@@
+- **Linux : 200 suites sur 200 réussies (199 au premier passage ; adminguidemandes réussie à la relance, voir plus bas)** (`ctest`, sur la version livrée, passé par paquets de 12 programmes d'essai faute de place sur
+  le disque ; journal `essais-1.51.0.txt`). Celles de cette version :
+  - **le pointeur vers un objet** (`pointeurs`, 217 contrôles, dont la partie `pointeurs_objets151`) : ton cas exact
+    (aucune faute à la saisie, à F7, à Générer ni dans le volet ; à l'exécution `ObjPtr^.Visible := FALSE` cache
+    `Carte_1`), `Object`, `REF_TO Object`, le nom court, l'objet d'un popup, une instance de symbole, `Get()`, `ADR`,
+    `NULL`, `Hide` / `MoveBy`, un pointeur passé à une fonction, `Get(1)` refusé, les « chemin incomplet » qui doivent
+    rester, la valeur `0` retirée au changement de type pour 10 types, l'aide à la saisie, la colonne du cycle (cachée
+    ou montrée selon l'évènement, sa largeur, glisser) ;
+  - **les types IHM d'un symbole** (`hmieditor`, 11 563 contrôles en tout, dont la partie `symtypes151`) : créer,
+    l'arbre, Ctrl+Z, un paramètre et une fonction du symbole avec un type du projet du même nom, une instance dans une
+    vue à l'exécution, l'emploi qualifié depuis un script général, Compiler et l'en-tête C, renommer le type et le
+    symbole, supprimer un type employé, dupliquer, exporter / importer (aussi sous un autre nom), la corbeille,
+    enregistrer et relire, un fichier sans `symbole=` ; `hmi` (7 022), `hmitypes`, `hmicheckexpr`, `hmibuild`,
+    `generiques`, `scriptsc`, `objets`, `bibliotheques` ;
+  - **le LADDER** (`ladder`, 168 vérifications, nouveau) : les allers-retours octet pour octet, chaque geste de
+    l'éditeur et son Ctrl+Z, la simulation (séries, parallèles, S / R, fronts, TON, comparaison, opération, un bloc
+    ADD_INT, une bobine indexée, l'état en direct), renommer, les références croisées, le projet d'essai ;
+  - **le SFC** (`graphxml`, 180 vérifications, dont 130 nouvelles) : allers-retours octet pour octet, la topologie, le
+    dessin, le texte, renommer, chaque geste de l'éditeur avec Ctrl+Z / Ctrl+Y, enregistrer / rouvrir / exporter en
+    XPG, la simulation (séquence, priorité de la branche OU, ET, une évolution par cycle, délai, tmin / tmax, N S R L D
+    P1 P0, une action ST, des transitions ST et LD, le forçage) ; `simulation` (le LD qui tourne maintenant) ;
+  - **devenir admin par le seul code** (`admininvitation`, 61 contrôles ; `adminguiadmins`, 174, dont la recherche du
+    PC sur 300 et 1 000 PC fictifs, le clavier, la souris, 200 recherches en moins de 1,5 s, la fenêtre en une étape, et
+    l'état « code d'invitation à taper » ; `adminguicompte`, 79 : trois admins invités signés d'une liste, trois lignes
+    au journal ; `adminguishell`, `adminguiedition` : « Demandes d'admin » n'apparaît plus nulle part) ; **le service**
+    (`npm test`, 259 sur 259) : un bon code fait l'admin ; un code employé, expiré (49 h) ou inconnu est refusé ; une
+    ancienne demande 1.50 avec un code est signée ; sans code, 410 ; les routes retirées, 410.
+  - **Un échec unique, non reproduit** : dans la suite complète, `adminguidemandes` (la page « Commandes et demandes »,
+    les demandes **de licence**) a échoué une fois sur un contrôle : après la suppression d'une demande refusée, le
+    service la listait encore. Relancé huit fois (seul quatre fois, trois copies en même temps, et son paquet entier
+    comme dans la suite) : il passe à chaque fois. Je n'en ai pas trouvé la cause ; l'essai dit maintenant la réponse
+    du service s'il retombe.
+- **Sous Wine** : les trois programmes construits ; les Studios installés en silencieux par-dessus la 1.50.1 ; l'Admin+
+  par-dessus la 1.50.1 ; **XPG Admin** installé en silencieux avec un code fictif. Les pages de l'Admin+ (`151_9_…`)
+  et de XPG Admin (`151_8_…`) à 100 %. **Le Studio livré, installé**, sur des projets fictifs créés pour l'essai :
+  le pointeur (`151_P1` OnOpen choisi : pas de colonne du cycle ; `151_P2` OnCycle : la colonne « EXÉCUTION » ;
+  `151_P3` ton script `ObjPtr := Vue_Accueil.Carte_1;` compilé sans faute ; `151_P4` la simulation : `Carte_1` cachée
+  par le pointeur, la Console le dit ; `151_P5` `Get()` dans l'aide à la saisie), les types d'un symbole (`151_R1` le
+  sous-onglet Types IHM du symbole et sa partie dans l'arbre ; `151_R2` « Choisir un type » et la puce « Types du
+  symbole » ; `151_R3` le paramètre `Etat : T_Etat` ; `151_R4` la variable du projet `Pompe1 : S_Pompe.T_Etat` ;
+  `151_R5` une instance du symbole dans une vue). **API Studio livré**, sur un projet Control Expert fictif : le LADDER
+  (`151_L1` le schéma ; `151_L2` un bloc choisi ; `151_L3` le texte ; `151_L4` la palette et l'aide à la saisie ;
+  `151_L5` la liste des types de blocs ; `151_L6` une modification ; `151_L7` Ctrl+Z ; `151_L8` la simulation, le
+  courant en vert ; `151_L9` la tempo écoulée ; `151_L10` le défaut thermique), le SFC (`151_S1` le grafcet et ses
+  branches ; `151_S2` les propriétés d'une étape ; `151_S3` une transition en LD dans le volet Code ; `151_S4` le
+  texte ; `151_S5` une nouvelle section SFC ; `151_S6` une branche OU, un saut, des actions et une condition ST ;
+  `151_S7` la condition ST ; `151_S8` Ctrl+Z ; `151_S9` la simulation ; `151_S10` la branche ET ; `151_S11` une étape
+  désactivée à la main). Lancés avec une adresse locale où rien ne répond : **ton service n'a pas été appelé**.
+  **Devenir admin, de bout en bout** (`151_A…`), avec les programmes Windows de cette version, le service de ce dépôt
+  lancé **sur ce poste** (127.0.0.1) et la **clé d'essai** de l'éditeur (jamais la tienne), 40 PC et clients fictifs :
+  `151_A1` « Ajouter un admin » en une étape, « nord » → « 3 sur 40 PC », le PC le plus récent en tête ; `151_A2`
+  « Invitation envoyée » (le code masqué) ; `151_A3` Administrateurs sans « Demandes d'admin » ; `151_A4` XPG Admin au
+  premier lancement avec le code : « Tu es admin : ajout en cours » ; `151_A5` l'Admin+ l'a signée seul (« 2 actifs ») ;
+  `151_A5b` le journal : « a ajouté l'admin Nina Essai (code d'invitation, invité par …) », la chaîne vérifiée ;
+  `151_A6` XPG Admin relancé : admin, ses 4 droits sur 13 ; `151_A7` le même code sur un autre PC : « Refusé : Ce code
+  d'invitation a déjà servi », le champ pour le retaper. Aucun code en clair dans les journaux.
+  L'écran virtuel de Wine s'est arrêté pendant la chaîne (après l'installation de XPG Admin) : relancé, puis toutes les
+  captures refaites.
 
 ## 3. Installer
 
-@@EMPREINTES@@
+**Les Studios** : lance `API-IHM-Studio-Setup-1.51.0.exe` (dans le zip) par-dessus la 1.50.1. Tes projets, tes
+réglages et ta clé d'API restent.
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `API-IHM-Studio-Setup-1.51.0.exe` | `3F1162B8C7F4D891CFD7CCCCD12B8CAC896EF8CD96D02CE58C1389DB61BB3303` | 65 511 640 octets |
+| `API-Studio-1.51.0-portable.zip` | `1FBDA55C6B43ECFB1326FA0006D96E67CE27425E79672574E4525534E42DE980` | 250 fichiers |
+| `IHM-Studio-1.51.0-portable.zip` | `539A24368762501E08E67F7B271FF03E3D94AED92012250914C0183F4EF66629` | 251 fichiers |
+
+**L'Admin (pour toi seul, envoyé à part)** : lance `XPG-License-Admin-Setup-1.51.0-EDITEUR.exe` par-dessus la 1.50.1 ;
+le dossier de ta clé n'est pas touché. Ne le donne à personne : pour un nouvel admin, Administrateurs › Ajouter un
+admin… lui envoie l'installateur publié dans Versions (sans ta clé).
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `XPG-License-Admin-Setup-1.51.0-EDITEUR.exe` | `94CAD14AA4C3DBD9DA86DE2B6829767CD4CB22CB329ED33C955DD076CDACDCE5` | 8 830 001 octets |
 
 **XPG Admin** (pour tes admins, à publier dans Versions) : `XPG-Admin-Setup-1.51.0.exe` (dans le zip).
 
 | Fichier | SHA-256 | Taille |
 |---|---|---|
-@@XPGADMIN@@
+| `XPG-Admin-Setup-1.51.0.exe` | `0FD91E00D33F95CAA8B1E3C441DD7C471D4B0435DB1D4035475807A3BF8EE875` | 8 115 678 octets |
 
 ## 4. Limites
 
