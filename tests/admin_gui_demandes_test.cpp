@@ -799,7 +799,13 @@ int main(int argc, char** argv) {
             op->refresh();
             check(rowOf(*table, 2, "Client d'essai Eta") < 0, "la rangee est partie");
             const Reply l = call(url, "GET", "/admin/demandes", {}, editorKey);
-            check(l.status == 200 && !has(l.body, "\"numero\":" + std::to_string(pcG.number) + ","), "partie du service aussi");
+            {   // 1.51.0 : le detail si l'essai retombe (une fois en echec dans la suite complete, jamais seul)
+                const std::string needle = "\"numero\":" + std::to_string(pcG.number) + ",";
+                const auto at = l.body.find(needle);
+                check(l.status == 200 && at == std::string::npos,
+                      "partie du service aussi (HTTP " + std::to_string(l.status) + ", " + lastText(rig) +
+                          (at == std::string::npos ? std::string() : ", encore : " + l.body.substr(at > 200 ? at - 200 : 0, 400)) + ")");
+            }
             check(click(*op, "commandes.relever") && rig.last() && rig.last()->ok, "Relever de nouveau");
             fx.ws->reload();
             op->refresh();
