@@ -183,7 +183,7 @@ struct RowPaths {
 //  := 5 ecrit Cuves[2].Consigne ; Element^ se lit pareil). Case saisie : Ancienne et Nouvelle. Clic sur un
 //  en-tete : Colonne et Titre.
 struct Param {
-    std::string name, type, pass, what;   // pass : « copie » ou « rÃ©" "fÃ©rence »
+    std::string name, type, pass, what;   // pass : "copie" ou "reference"
 };
 [[nodiscard]] std::vector<Param> receivedParams(const Project&, const Object& table, Trigger);
 inline constexpr std::string_view kParamNames[] = {"Ligne", "Index", "Cle", "Membre", "Element", "Colonne", "Valeur", "Valeurs",

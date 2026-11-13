@@ -6340,7 +6340,7 @@ private:
             if (!b) return core::Err<core::Error>(b.error());
             bindings = std::move(*b);
         } else if (typeArgs && !typeArgs->empty()) {
-            return dialectError(f.name + " n'est pas gÃ©nÃ©rique (TEMPLATE <T>) : sans <" + typeArgs->front() + ">");
+            return dialectError(f.name + " n'est pas g\xC3\xA9n\xC3\xA9rique (TEMPLATE <T>) : sans <" + typeArgs->front() + ">");
         }
         BindingsScope typed(typeBindings_, std::move(bindings));
         if (depth_ >= limits_.maxCallDepth) {

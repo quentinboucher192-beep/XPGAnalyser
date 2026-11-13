@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.50.1", "13/11/2026", "\xC3\xA0 venir"},
+    {"1.51.0", "13/11/2026", "\xC3\xA0 venir"},
+    {"1.50.1", "13/11/2026", "livr\xC3\xA9" "e le 13/11 \xC3\xA0 14 h 25"},
     {"1.50.0", "12/11/2026", "livr\xC3\xA9" "e le 12/11 \xC3\xA0 19 h 15"},
     {"1.49.0", "12/11/2026", "livr\xC3\xA9" "e le 12/11 \xC3\xA0 15 h 00"},
     {"1.48.1", "11/11/2026", "livr\xC3\xA9" "e le 11/11 \xC3\xA0 14 h 40"},
@@ -196,6 +197,81 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.51.0 : pointeur vers un objet (Get), colonne du cycle, types IHM des symboles, LADDER, SFC, devenir admin par le seul code d'invitation
+        note("1.51.0", "Scripts", Kind::New,
+         "Un pointeur vers un objet d'une vue : ObjPtr := Vue_Accueil.Carte_1; (sans propri\xC3\xA9t\xC3\xA9) est accept\xC3\xA9 dans une variable de "
+         "type Object, REF_TO Object ou POINTER TO Object, \xC3\xA0 la saisie, \xC3\xA0 F7, \xC3\xA0 G\xC3\xA9n\xC3\xA9rer et \xC3\xA0 l'ex\xC3\xA9" "cution ; dans la vue du "
+         "script, le nom court suffit (Carte_1), et cela vaut aussi pour l'objet d'un popup et une instance de symbole. Par le "
+         "pointeur : ObjPtr^.Visible := FALSE, ObjPtr^.X, Hide(ObjPtr^), MoveBy(ObjPtr^, \xE2\x80\xA6), une comparaison avec NULL ou un "
+         "autre pointeur, un passage \xC3\xA0 une fonction. Chaque objet a aussi Get(), qui renvoie ce pointeur (Vue.Objet.Get(), "
+         "Carte_1.Get(), p^.Get()), comme ADR(Vue.Objet) ; l'aide \xC3\xA0 la saisie le propose et le guide F1 a une section \xC2\xAB Un "
+         "pointeur vers un objet \xC2\xBB. L\xC3\xA0 o\xC3\xB9 une valeur est attendue (BOOL, nombre, texte, IF), \xC2\xAB chemin incomplet "
+         "(Vue.Objet.Propri\xC3\xA9t\xC3\xA9) \xC2\xBB reste signal\xC3\xA9.",
+         "scripts", ""),
+        note("1.51.0", "Corrig\xC3\xA9", Kind::Fixed,
+         "Une variable d\xC3\xA9" "clar\xC3\xA9" "e dans l'onglet Variables d'un script restait signal\xC3\xA9" "e \xC2\xAB n'existe pas \xC2\xBB dans la barre sous "
+         "l'\xC3\xA9" "diteur tant que le curseur ne bougeait pas : la barre suit maintenant chaque v\xC3\xA9rification. Une variable pass\xC3\xA9" "e "
+         "d'INT \xC3\xA0 un pointeur, une r\xC3\xA9" "f\xC3\xA9rence, un objet ou un callback gardait sa valeur initiale 0 (\xC2\xAB un DINT ne va pas dans un "
+         "Object \xC2\xBB \xC3\xA0 l'ex\xC3\xA9" "cution) : cette valeur est retir\xC3\xA9" "e au changement de type, et une variable d'un ancien projet qui l'a "
+         "encore est marqu\xC3\xA9" "e en rouge.",
+         "scripts", ""),
+        note("1.51.0", "Vues", Kind::Changed,
+         "Les scripts d'une vue : la colonne \xC2\xAB EX\xC3\x89" "CUTION \xC2\xBB (les \xC3\xA9tapes du cycle) ne s'affiche plus que quand un script OnCycle "
+         "est choisi ; pour OnOpen, OnClose ou sans choix, l'\xC3\xA9" "diteur prend sa place. Glisser \xC2\xAB + Script de cycle \xC2\xBB l'ouvre le "
+         "temps de d\xC3\xA9poser.",
+         "scripts", ""),
+        note("1.51.0", "Symboles", Kind::New,
+         "Un symbole peut porter ses propres types IHM : un sous-onglet \xC2\xAB Types IHM \xC2\xBB dans l'\xC3\xA9" "diteur du symbole (structure, "
+         "\xC3\xA9num\xC3\xA9ration, callback, interface ; cr\xC3\xA9" "er, renommer, dupliquer, supprimer, un Ctrl+Z par geste) et une partie \xC2\xAB Types "
+         "IHM \xC2\xBB sous le symbole dans l'arbre. Dans le symbole (param\xC3\xA8tres, fonctions, scripts, formules, ses autres types), un "
+         "type s'\xC3\xA9" "crit par son nom court (T_Etat, T_Mode#Marche) et l'emporte sur un type du projet du m\xC3\xAAme nom ; ailleurs, il "
+         "s'\xC3\xA9" "crit Symbole.T_Etat (Compiler propose ce nom \xC3\xA0 la place du nom court). \xC2\xAB Choisir un type \xC2\xBB ouvert depuis le symbole "
+         "montre ses types en premier. Renommer le symbole suit partout ; dupliquer, exporter / importer, copier entre fen\xC3\xAAtres, "
+         "la corbeille et l'enregistrement emportent ses types. Un type encore employ\xC3\xA9 ne se supprime pas : l'onglet Emplois "
+         "s'ouvre sur ses emplois.",
+         "symboles", ""),
+        note("1.51.0", "Programme", Kind::New,
+         "Le LADDER (LD) dans API Studio : une section LD d'un projet Control Expert s'ouvre sur son sch\xC3\xA9ma (rails, contacts, "
+         "bobines, blocs avec leurs broches, comparaisons, op\xC3\xA9rations, sauts, commentaires ; \xC2\xAB Sch\xC3\xA9ma \xC2\xBB / \xC2\xAB Texte \xC2\xBB dans la "
+         "barre de la section). Elle se modifie au clavier ou \xC3\xA0 la souris : palette (contacts ouverts, ferm\xC3\xA9s, fronts ; bobines "
+         "normales, inverses, S, R, fronts), bloc avec la liste des types et l'instance d\xC3\xA9" "clar\xC3\xA9" "e d'un coup, fil, lien vertical, "
+         "branche en parall\xC3\xA8le (OU), inverser, d\xC3\xA9placer, nouvelle ligne ; le nom d'une variable se tape avec l'aide \xC3\xA0 la saisie. "
+         "Chaque geste se d\xC3\xA9" "fait d'un Ctrl+Z. Le fichier relu puis r\xC3\xA9\xC3\xA9" "crit est identique octet pour octet tant qu'une ligne "
+         "n'est pas modifi\xC3\xA9" "e ; une ligne modifi\xC3\xA9" "e suit les conventions de Control Expert. Une nouvelle section LD est un sch\xC3\xA9ma "
+         "vide. R\xC3\xA9" "f\xC3\xA9rences crois\xC3\xA9" "es, \xC2\xAB Aller \xC3\xA0 \xC2\xBB, renommer et statistiques voient le ladder.",
+         "api-ordre", ""),
+        note("1.51.0", "Simulation", Kind::New,
+         "Le LADDER dans le simulateur : les sections LD tournent dans l'ordre de la t\xC3\xA2" "che comme dans Control Expert (ligne par "
+         "ligne, colonne par colonne ; s\xC3\xA9ries, parall\xC3\xA8les, S / R, fronts avec leur m\xC3\xA9moire). Blocs : TON, TOF, CTU, R_TRIG, SR, "
+         "les instances de DFB, les fonctions (ADD_INT, GT, SEL, LIMIT\xE2\x80\xA6), les comparaisons et op\xC3\xA9rations ; sauts et RETURN. Sur "
+         "le sch\xC3\xA9ma, les fils et les \xC3\xA9l\xC3\xA9ments sous tension sont en vert et les valeurs s'affichent \xC3\xA0 c\xC3\xB4t\xC3\xA9 des contacts, des "
+         "bobines et des broches ; 1, 0 ou L (ou un double-clic) force une variable.",
+         "simulation", ""),
+        note("1.51.0", "Programme", Kind::New,
+         "Le SFC (GRAFCET de Control Expert) dans API Studio : une section SFC s'ouvre sur son grafcet dessin\xC3\xA9 \xC3\xA0 sa place dans "
+         "la grille (\xC3\xA9tapes, initiales, macro-\xC3\xA9tapes, transitions avec leur condition, branches OU et ET, sauts, liens, actions "
+         "avec leur qualificatif et leur dur\xC3\xA9" "e, commentaires ; zoom, Ctrl+F, export PNG). Il se modifie : ajouter une \xC3\xA9tape et "
+         "sa transition sous la s\xC3\xA9lection (le reste descend), une branche OU ou ET, un saut, la condition (variable, NOT "
+         "variable, expression ST), les actions, les propri\xC3\xA9t\xC3\xA9s d'une \xC3\xA9tape (nom suivi partout, initiale, dur\xC3\xA9" "es min / max, "
+         "d\xC3\xA9lai), supprimer, d\xC3\xA9placer ; les sections ST des transitions et des actions se modifient dans le volet Code. Chaque "
+         "geste se d\xC3\xA9" "fait d'un Ctrl+Z ; \xC2\xAB Nouvelle section \xE2\x80\xBA SFC \xC2\xBB cr\xC3\xA9" "e un grafcet avec une \xC3\xA9tape initiale. Le fichier reste "
+         "identique octet pour octet hors des \xC3\xA9l\xC3\xA9ments modifi\xC3\xA9s.",
+         "grafcet", ""),
+        note("1.51.0", "Simulation", Kind::New,
+         "Le SFC dans le simulateur, comme Control Expert (un jeton) : \xC3\xA9tapes initiales au premier cycle, une \xC3\xA9volution par "
+         "cycle, la branche OU la plus \xC3\xA0 gauche si plusieurs transitions sont vraies, les branches ET ensemble ; Etape.x, "
+         "Etape.t, Etape.tminErr et Etape.tmaxErr se lisent en ST et en LD ; les qualificatifs N, S, R, L, D, P, P1, P0, DS, SD, "
+         "SL ; les transitions et actions en ST ou en LD. Sur le grafcet : les \xC3\xA9tapes actives avec leur temps, l'\xC3\xA9tat de chaque "
+         "transition, les actions en cours, les d\xC3\xA9" "fauts de supervision ; \xC2\xAB Initialiser \xC2\xBB et \xC2\xAB Activer \xC2\xBB / \xC2\xAB D\xC3\xA9sactiver \xC2\xBB une "
+         "\xC3\xA9tape \xC3\xA0 la main.",
+         "simulation", ""),
+        note("1.51.0", "Projet", Kind::Changed,
+         "Devenir admin : plus de demande ni de code \xC3\xA0 6 chiffres. Tu saisis ton code d'invitation (INV-XXXX-XXXX, 48 h, une "
+         "seule fois) dans l'installateur \xC2\xAB XPG Admin \xC2\xBB ; au premier lancement, l'Admin l'emploie et tu es admin, avec les "
+         "droits choisis par l'\xC3\xA9" "diteur (\xC2\xAB Tu es admin : ajout en cours \xC2\xBB le temps que l'\xC3\xA9" "diteur le reconnaisse, en g\xC3\xA9n\xC3\xA9ral "
+         "quelques secondes). Un code faux, expir\xC3\xA9 ou d\xC3\xA9j\xC3\xA0 employ\xC3\xA9 est refus\xC3\xA9 avec un message clair et se retape sur la page "
+         "Administrateurs. Dans le Studio, les \xC3\xA9tapes \xC2\xAB Installer XPG Admin \xC2\xBB se terminent par \xC2\xAB tu es admin \xC2\xBB.",
+         "licence", ""),
         // 1.50.1 : les methodes (Essayer, surcharges), Etirer (marges de la vue), Dupliquer, le chat de l Assistant IA, les tableaux a N dimensions, les scripts C/C++ au debogueur, l installateur a 125/150 %
         note("1.50.1", "Types IHM", Kind::New,
          "Les m\xC3\xA9thodes : \xC2\xAB Essayer \xC2\xBB (barre des m\xC3\xA9thodes) demande les arguments et les valeurs de SELF avant l'appel, lance la "

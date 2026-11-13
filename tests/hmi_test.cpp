@@ -11974,11 +11974,11 @@ void valeursLot14() {
     const auto wide = planBlocks(spread, 120, 1968, Communication{}.gap);
     check(Communication{}.gap == 100 && Equipment{}.gap == 100 && narrow.size() == 3 && wide.size() == 2
               && wide.front().start == 100 && wide.front().count == 51,
-          "1.12.26 : regrouper Ã  moins de 100 mots par dÃ©" "faut - 100 et 150 d'une seule requÃªte, 240 Ã  part (120 mots au plus) : "
+          "1.12.26 : regrouper \xC3\xA0 moins de 100 mots par d\xC3\xA9" "faut - 100 et 150 d'une seule requ\xC3\xAAte, 240 \xC3\xA0 part (120 mots au plus) : "
               + std::to_string(narrow.size()) + " -> " + std::to_string(wide.size()));
     const auto barred = planBlocks(spread, 120, 1968, 100, {Hole{Area::Holding, 120, 121}});
     check(barred.size() == 2 && barred.front().start == 100 && barred.front().count == 1 && barred.back().start == 150 && barred.back().count == 91,
-          "un trou refusÃ© (le mot 120) : 100 seul, 150 Ã  240 ensemble");
+          "un trou refus\xC3\xA9 (le mot 120) : 100 seul, 150 \xC3\xA0 240 ensemble");
 }
 
 // 1.12.26 : une memoire qui refuse le mot 50 et les lectures de plus de 10 mots - la liaison l'apprend.
@@ -24366,7 +24366,7 @@ void lotA1125() {
         s.rt.press(plus, s.t);
         s.rt.release(plus, s.t + 0.05, true);
         near(s.rt.variable("Total") ? s.rt.variable("Total")->asReal() : -1.0, 1234567.8,
-             "D4 : IncrÃ©menter du pas =Grand ajoute 1234567.8 (avant : 1234570, le pas lu Ã  6 chiffres)", 1e-6);
+             "D4 : Incr\xC3\xA9menter du pas =Grand ajoute 1234567.8 (avant : 1234570, le pas lu \xC3\xA0 6 chiffres)", 1e-6);
         LiveView live;
         live.bind(*s.rt.composedView(s.rt.currentView()));
         const View shownView = live.evaluate(s.rt.environment(), nullptr, nullptr, 0.2);

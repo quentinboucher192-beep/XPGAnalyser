@@ -2856,7 +2856,7 @@ void SimulationPane::askForce(std::vector<std::string> paths) {
         auto check = [this, targets = paths](const std::string& typed) -> std::string {
             auto* r = runtime();
             if (!r) return {};
-            if (trim(typed).empty()) return "Une valeur : vide, rien ne serait forcÃ©.";
+            if (trim(typed).empty()) return "Une valeur : vide, rien ne serait forc\xC3\xA9.";
             for (const auto& path : targets) {
                 sim::Value cur, v;
                 std::string why;
