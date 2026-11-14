@@ -71,11 +71,61 @@ actif pdt une durée choisissable par l'admin+ lorsqu'il l'envoie ».
 
 ## 2. Les essais
 
-@@ESSAIS@@
+- **Linux : 200 suites, 0 échec** (`ctest`, sur la version livrée, passé par paquets de 12 programmes d'essai faute de
+  place sur le disque ; journal `essais-1.52.0.txt`). Celles de cette version :
+  - **ce que voit XPG Admin** (`adminguiedition`, 115 contrôles) : le menu exact pour un PC pas encore admin, un ajout en
+    attente et un admin ; le refus des 6 pages cachées ; la pastille de la clé, celle du service et les boutons du
+    tableau de bord qui mènent à Mon compte / Ce PC ; la carte du code d'invitation et le code retapé après un refus (le
+    code jamais dans un message) ; « Ton ajout » et Vérifier ; Ce PC sans rien qui gère le service ; avec une dérogation :
+    le menu de l'Admin+, les 6 pages ouvertes, les gestes réservés gris avec leur raison ; la fin pendant qu'il est sur
+    Versions (retour à Mon compte) ; une dérogation révoquée ; celle d'un autre admin n'ouvre rien ; l'Admin+ inchangé,
+    avec et sans sa clé. `adminguiadmins` (174), `adminguicompte` (122).
+  - **la dérogation** (`adminderogation`, 101 contrôles : le code calculé, toujours le même pour une dérogation, 8
+    chiffres ; les appels au service ; le journal n'a jamais ni le code ni son empreinte) ; `adminguicompte` (la fenêtre
+    de l'Admin+ et « Autre durée », le code montré, chez XPG Admin l'avis, la fenêtre, la pastille, la carte, un code
+    faux puis le bon, le compte à rebours, la révocation) ; `adminguiservice` (40). **Le service** (`npm test`, 268 sur
+    268, dont 9 nouveaux) : le document signé, l'empreinte du code jamais rendue (vérifié sur chaque réponse), le bon
+    code, un faux, le 5e, après 1 h, une dérogation révoquée, un autre admin, les durées hors bornes, l'ancien format
+    toujours accepté, les lignes du journal, le Journal et les Versions ouverts seulement pendant la dérogation.
+- **Sous Wine** : les trois programmes construits ; les Studios installés en silencieux par-dessus la 1.51.0 ; l'Admin+
+  par-dessus la 1.51.0 (mise à jour, désinstallation, réinstallation) ; XPG Admin en silencieux avec un code fictif ; le
+  Studio livré lancé (une adresse locale où rien ne répond : **ton service n'a pas été appelé**). Les pages des
+  installateurs (`152_9_…` l'Admin+, `152_8_…` XPG Admin).
+  **La dérogation de bout en bout** (`152_D…`), avec les programmes Windows de cette version, le service de ce dépôt
+  lancé **sur ce poste** (127.0.0.1), la **clé d'essai** de l'éditeur (jamais la tienne) et Léa Essai (fictive) :
+  `152_D1` XPG Admin, la gestion seulement ; `152_D2` « Autre durée » : 2 h 30 ; `152_D3` le code (masqué sur la
+  capture) ; `152_D4` chez Léa, la fenêtre du code ouverte seule, la pastille, l'avis ; `152_D5` la pastille et la carte
+  de Mon compte ; `152_D6` un code faux : « il te reste 4 essais » ; `152_D7` le bon code : tout le menu, « Dérogation :
+  2 h 29 » ; `152_D7b` Administrateurs sous dérogation (Ajouter un admin grisé) ; `152_D8` ton Admin+ : « Léa Essai a
+  tapé le code » ; `152_D9` le journal : accordée, code faux (essai 1 sur 5), activée, utilisée, la chaîne vérifiée ;
+  `152_D10` révoquée : retour à la gestion. **XPG Admin sans dérogation** (`152_V…`, un PC neuf fictif) : `152_V1` Mon
+  compte et la carte du code d'invitation ; `152_V2` Ce PC ; `152_V3` le refus de `--page service`. Aucun code en clair
+  dans les journaux.
 
 ## 3. Installer
 
-@@INSTALLER@@
+**Les Studios** : lance `API-IHM-Studio-Setup-1.52.0.exe` (dans le zip) par-dessus la 1.51.0. Tes projets, tes
+réglages et ta clé d'API restent.
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `API-IHM-Studio-Setup-1.52.0.exe` | `8CE641414B404F38E44E6E418D6743473E07326254961053790AF78204DD8783` | 65 515 496 octets |
+| `API-Studio-1.52.0-portable.zip` | `D77A0CD1253418FDA0D1FFC6FDDA7C9C1B60F9BFB14BFB4B7B5171225FFBC96C` | 250 fichiers |
+| `IHM-Studio-1.52.0-portable.zip` | `0CACD6425B9876CFFD41C6EE4715838AC8B7F5BA29D11F8B6B5ADC5469201475` | 251 fichiers |
+
+**L'Admin+ (pour toi seul, envoyé à part)** : lance `XPG-License-Admin-Setup-1.52.0-EDITEUR.exe` par-dessus la 1.51.0 ;
+le dossier de ta clé n'est pas touché. Ne le donne à personne : pour un nouvel admin, Administrateurs › Ajouter un
+admin… lui envoie l'installateur publié dans Versions (sans ta clé).
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `XPG-License-Admin-Setup-1.52.0-EDITEUR.exe` | `2BE671EDAD3551E5CC9AFF233931250D103A0882E1EB8B920822D43E3516FE1C` | 8 899 515 octets |
+
+**XPG Admin** (pour tes admins, à publier dans Versions) : `XPG-Admin-Setup-1.52.0.exe` (dans le zip).
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `XPG-Admin-Setup-1.52.0.exe` | `28C769990D247C6BB65AF28DB806D53847C48FBA56EE8EA0D36DA9E318B18715` | 8 180 859 octets |
 
 ## 4. Limites
 

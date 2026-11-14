@@ -17,8 +17,8 @@ const lea = nouvelleCle(); // licence_creer, demandes
 const marc = nouvelleCle(); // offres (puis retire)
 const anne = nouvelleCle(); // annonces, licence_prolonger, licence_revoquer, poste_retirer
 const intrus = nouvelleCle();
-const zoe = nouvelleCle(); // 1.52.0 : inscrite par son code d'invitation, puis dans la liste (<< demandes >>)
-const yan = nouvelleCle(); // 1.52.0 : un code refuse ; un Admin d'avant sans code (410)
+const zoe = nouvelleCle(); // 1.51.0 : inscrite par son code d'invitation, puis dans la liste (<< demandes >>)
+const yan = nouvelleCle(); // 1.51.0 : un code refuse ; un Admin d'avant sans code (410)
 const EMIS = now(); // les documents ecrits deux fois (manifestes, messages) : le meme texte
 const posteDe = () => hasard(16); // l'identifiant d'une machine (systemMachineId)
 const machines = new Map([lea, marc, anne].map((k) => [k.hex, posteDe()]));
@@ -280,8 +280,8 @@ describe("un admin retire (§ 3, § 6)", () => {
     });
 });
 
-describe("devenir admin : l'inscription par code d'invitation, sans demande (1.52.0, § 4)", () => {
-    const corps = (nom, invitation) => ({ invitation, nom, courriel: nom.toLowerCase() + "@exemple.invalid", pc: "PC-" + nom.toUpperCase(), poste: hasard(16), logiciel: "XPG-Admin 1.52.0" });
+describe("devenir admin : l'inscription par code d'invitation, sans demande (1.51.0, § 4)", () => {
+    const corps = (nom, invitation) => ({ invitation, nom, courriel: nom.toLowerCase() + "@exemple.invalid", pc: "PC-" + nom.toUpperCase(), poste: hasard(16), logiciel: "XPG-Admin 1.51.0" });
     const inviter = async (nom) => {
         const r = await appel(svc, "POST", "/admin/admins/invitation", { cle: editeur, corps: { nom, courriel: nom.toLowerCase() + "@exemple.invalid", profil: "Admin LV1" } });
         assert.equal(r.statut, 201, r.texte);
