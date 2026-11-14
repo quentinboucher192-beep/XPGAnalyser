@@ -782,7 +782,7 @@ int main(int argc, char** argv) {
         check(ws.serviceConfigure(svc.url()).ok, "l'adresse du service");
         license_admin::online::ServiceState st;
         const gui::OpResult v = ws.serviceVerify(&st);
-        check(v.ok && st.version == "1.51.0", "le service local est en 1.51.0 (" + v.text() + ")");
+        check(v.ok && st.version == "1.52.0", "le service local est en 1.52.0 (" + v.text() + ")");
         ws.adoptServiceState(st);
         ws.reload();
         HostRig lrig(fx);

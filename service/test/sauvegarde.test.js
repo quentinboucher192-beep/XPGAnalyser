@@ -96,7 +96,7 @@ describe("le service A, bien rempli", () => {
         ok(await appel(A, "POST", "/admin/archive", { cle: editeur, corps: { base: 3, fichiers: { "profils-admins.json": '{"profils":[]}' } } }));
     });
 
-    it("les admins, un admin inscrit (1.51.0), le trousseau, le journal, une demande scellee pour deux cles", async () => {
+    it("les admins, un admin inscrit (1.52.0), le trousseau, le journal, une demande scellee pour deux cles", async () => {
         const ok = (r, s = 200) => assert.equal(r.statut, s, r.texte);
         const liste = JSON.stringify({
             format: 1,
@@ -105,10 +105,10 @@ describe("le service A, bien rempli", () => {
             admins: [{ id: lea.id, cle: lea.hex, nom: "Léa", pc: "PC-LEA", poste: hasard(16), depuis: now(), profil: "Admin LV1", droits: ["demandes", "licence_creer"], retire: 0, gardes: [] }],
         });
         ok(await appel(A, "PUT", "/admin/admins", { cle: editeur, corps: { admins: bloc("admins", liste, editeur) } }));
-        // 1.51.0 : un admin inscrit par son code d'invitation (pas encore signe par l'Admin+)
+        // 1.52.0 : un admin inscrit par son code d'invitation (pas encore signe par l'Admin+)
         const invYan = await appel(A, "POST", "/admin/admins/invitation", { cle: editeur, corps: { nom: "Yan", courriel: "yan@exemple.invalid", profil: "Admin LV1" } });
         ok(invYan, 201);
-        ok(await appel(A, "POST", "/v1/admins/inscription", { cle: nouvelleCle(), corps: { invitation: invYan.json.code, pc: "PC-YAN", poste: hasard(16), logiciel: "1.51.0" } }), 201);
+        ok(await appel(A, "POST", "/v1/admins/inscription", { cle: nouvelleCle(), corps: { invitation: invYan.json.code, pc: "PC-YAN", poste: hasard(16), logiciel: "1.52.0" } }), 201);
         ok(await appel(A, "PUT", "/admin/trousseau", { cle: editeur, corps: { cle: lea.hex, scelle: "c2NlbGzDqQ==" } }));
         const texte = JSON.stringify({ quand: now(), action: "connexion", objet: "", resume: "s'est connectée", detail: {}, nonce: hasard(16) });
         ok(await appel(A, "POST", "/admin/journal", { cle: lea, corps: { entree: texte, signature: lea.signer(Buffer.from("XPG-JOURNAL-1\n" + texte)).toString("hex") } }), 201);
@@ -142,7 +142,7 @@ describe("la sauvegarde (GET /admin/sauvegarde, admin+)", () => {
         assert.equal(r.statut, 200, r.texte);
         assert.deepEqual(Object.keys(r.json), ["schema", "service_version", "tables", "heure"]);
         assert.equal(r.json.schema, 5); // 1.46.0 : la boutique ; 1.47.0 : les statistiques
-        assert.equal(r.json.service_version, "1.51.0");
+        assert.equal(r.json.service_version, "1.52.0");
         sommaire = r.json;
         const n = Object.fromEntries(r.json.tables.map((t) => [t.nom, t.lignes]));
         for (const t of ["nonces", "debits", "morceaux"]) assert.equal(n[t], undefined, t + " n'est pas sauvegardee");
