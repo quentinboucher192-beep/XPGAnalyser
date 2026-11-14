@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.51.0", "13/11/2026", "\xC3\xA0 venir"},
+    {"1.52.0", "14/11/2026", "\xC3\xA0 venir"},
+    {"1.51.0", "13/11/2026", "livr\xC3\xA9" "e le 13/11 \xC3\xA0 19 h 15"},
     {"1.50.1", "13/11/2026", "livr\xC3\xA9" "e le 13/11 \xC3\xA0 14 h 25"},
     {"1.50.0", "12/11/2026", "livr\xC3\xA9" "e le 12/11 \xC3\xA0 19 h 15"},
     {"1.49.0", "12/11/2026", "livr\xC3\xA9" "e le 12/11 \xC3\xA0 15 h 00"},
@@ -197,6 +198,23 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.52.0 : XPG Admin : la gestion seulement hors derogation ; la derogation donne tout, activee par le code vu chez l'editeur, duree au choix
+        note("1.52.0", "Projet", Kind::Changed,
+         "XPG Admin (l'Admin des admins) ne montre plus que la gestion : Tableau de bord, Statistiques, Licences, Clients, "
+         "Activations, Offres, Options, Fonctionnalit\xC3\xA9s, Licences flottantes, Boutique, Commandes et demandes, Mon compte, "
+         "R\xC3\xA9vocations et Historique. Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9, Service en ligne, Administrateurs, le Journal des admins, les "
+         "Droits et les Versions ne s'ouvrent qu'avec une d\xC3\xA9rogation de l'\xC3\xA9" "diteur ; un lien vers l'une d'elles le dit. Ton code "
+         "d'invitation et l'\xC3\xA9tat de ton ajout sont dans Mon compte ; l'adresse du service, l'archive et le mail, dans Mon compte "
+         "\xE2\x80\xBA Ce PC.",
+         "licence", ""),
+        note("1.52.0", "Projet", Kind::New,
+         "La d\xC3\xA9rogation : l'\xC3\xA9" "diteur te l'envoie pour la dur\xC3\xA9" "e qu'il choisit (de 10 min \xC3\xA0 72 h). XPG Admin te pr\xC3\xA9vient (un avis, "
+         "la pastille \xC2\xAB D\xC3\xA9rogation re\xC3\xA7ue : taper le code \xC2\xBB, la fen\xC3\xAAtre du code qui s'ouvre seule, la carte de Mon compte) ; tu "
+         "tapes le code de 8 chiffres que l'\xC3\xA9" "diteur voit sur son PC et te donne de vive voix (valable 1 h, 5 essais). Elle "
+         "commence \xC3\xA0 ce moment : tu vois tout, comme l'\xC3\xA9" "diteur, le temps qui reste dans la barre du haut ; ce qui doit \xC3\xAAtre "
+         "sign\xC3\xA9 par la cl\xC3\xA9 de l'\xC3\xA9" "diteur reste \xC3\xA0 lui (les boutons le disent). \xC3\x80 la fin, ou si elle est r\xC3\xA9voqu\xC3\xA9" "e, XPG Admin "
+         "revient de lui-m\xC3\xAAme \xC3\xA0 la gestion.",
+         "licence", ""),
         // 1.51.0 : pointeur vers un objet (Get), colonne du cycle, types IHM des symboles, LADDER, SFC, devenir admin par le seul code d'invitation
         note("1.51.0", "Scripts", Kind::New,
          "Un pointeur vers un objet d'une vue : ObjPtr := Vue_Accueil.Carte_1; (sans propri\xC3\xA9t\xC3\xA9) est accept\xC3\xA9 dans une variable de "
