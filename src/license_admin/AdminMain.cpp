@@ -210,6 +210,9 @@ std::string usage() {
            "                                                 (et LISEZ-MOI.txt) : les fichiers PUBLICS des Studios (cl\xC3\xA9 d'essai refus\xC3\xA9" "e)\n"
            "\n1.44.0 : plusieurs admins, les fichiers, les versions, la sauvegarde compl\xC3\xA8te (une ligne de r\xC3\xA9sultat chacune) :\n"
            "  admin-etat                                     le r\xC3\xB4le de ce poste (rel\xC3\xA8ve la liste des admins, le journal)\n"
+           "  admin-inviter --nom N [--courriel C] [--profil P] --code-fichier F\n"
+           "                                                 l'admin+ (1.52.0) : une invitation par codes ; le code (48 h, une fois)\n"
+           "                                                 \xC3\xA9" "crit dans F seulement, jamais affich\xC3\xA9\n"
            "  admins-inscrits                                l'admin+ : signe d'office les admins inscrits par leur code d'invitation\n"
            "                                                 (1.51.0 : plus de demande d'admin ; l'Admin le fait seul toutes les 15 s)\n"
            "  admin-retirer --cle HEX [--revoquer]           l'admin+ : retire un admin (--revoquer : ses licences en vigueur aussi)\n"
@@ -644,6 +647,22 @@ int runWorkspaceCommand(const Args& a, const std::string& folder) {
         return oneLine(ws.activateDerogation({}, a.one("--code")));
     }
     if (a.command == "admins-inscrits") return oneLine(ws.admitInvitedAdmins());   // 1.51.0
+    if (a.command == "admin-inviter") {   // 1.52.0 : l'invitation par codes, comme << Ajouter un admin... >> ; le code dans un fichier
+        if (!need("--nom") || !need("--code-fichier")) return 2;
+        std::string code;
+        const auto r = ws.inviteAdmin(a.one("--nom"), a.one("--courriel"), a.one("--profil").empty() ? std::string(licensing::admins::kAllRightsProfile) : a.one("--profil"), code);
+        if (!r.ok) return oneLine(r);
+        std::string why;
+        // le code : jamais affiche ; seulement dans ce fichier (lisible par son seul proprietaire), a remettre a l'invite
+        if (!crypto::replaceFile(a.one("--code-fichier"), code + "\n", true, &why)) {
+            code.assign(code.size(), '0');
+            complain("admin-inviter : le code n'a pas pu \xC3\xAAtre \xC3\xA9" "crit (" + why + ")");
+            return 1;
+        }
+        code.assign(code.size(), '0');
+        say(r.message + "\nLe code d'invitation est dans " + a.one("--code-fichier") + " (jamais affich\xC3\xA9) : remets-le \xC3\xA0 l'invit\xC3\xA9.\n");
+        return 0;
+    }
     if (a.command == "admin-etat") {
         std::string state;
         gui::AdminRefresh x;
@@ -1805,7 +1824,7 @@ int run(const std::vector<std::string>& argv) {
         return showResult(online::studioKit(folder, key.get(), a.one("--sortie"), licensing::systemNow()));
     }
     // ---- 1.44.0 : les admins, les fichiers, les versions, la sauvegarde (le Workspace de l'application) ----
-    static const std::vector<std::string> kWorkspaceCommands = {"admins-inscrits", "admin-etat",                              "admin-retirer",
+    static const std::vector<std::string> kWorkspaceCommands = {"admins-inscrits", "admin-inviter", "admin-etat",                              "admin-retirer",
                                                                 "admin-droits",   "profil-enregistrer", "journal-relever",     "fichier-envoyer",
                                                                 "version-publier", "sauvegarde-configurer", "sauvegarder", "restaurer",
                                                                 // 1.46.0 : la boutique et les commandes

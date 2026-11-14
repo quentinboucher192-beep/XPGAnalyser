@@ -120,9 +120,10 @@ void derogationGui152(Fixture& wf, Fixture& lsf, const std::string& leaHex) {
     {
         check(D::watchNow(lea), "le regard des 15 s (XPG Admin de Lea)");
         const auto& toasts = lea.shell->toasts();
-        check(!toasts.empty() && toasts.back().derogation &&
-                  toasts.back().title == "L'admin+ t'a envoy\xC3\xA9 une d\xC3\xA9rogation (2 h 30) : tape le code qu'il voit sur son PC.",
-              "l'alerte : << L'admin+ t'a envoye une derogation (2 h 30) : tape le code qu'il voit sur son PC. >>");
+        check(!toasts.empty() && toasts.back().derogation && toasts.back().title == "L'admin+ t'a envoy\xC3\xA9 une d\xC3\xA9rogation (2 h 30)" &&
+                  toasts.back().line.rfind("Tape le code qu'il voit sur son PC", 0) == 0 &&
+                  D::lastFlash(lea) == "L'admin+ t'a envoy\xC3\xA9 une d\xC3\xA9rogation (2 h 30) : tape le code qu'il voit sur son PC.",
+              "l'alerte et l'avis : << L'admin+ t'a envoye une derogation (2 h 30) : tape le code qu'il voit sur son PC. >>");
         menu::IMenu* top = D::topDialog(lea);
         check(top && top->id() == "dialog.derogation.code", "le dialogue du code s'ouvre seul");
         bool pending = false;
@@ -171,6 +172,8 @@ void derogationGui152(Fixture& wf, Fixture& lsf, const std::string& leaHex) {
             check(lea.shell->pageAllowed("securite") && lea.shell->pageAllowed("service") && lea.shell->pageAllowed("admins"), "le menu suit aussitot : tout, comme l'admin+");
             check(click(root, "derogation.code.activer") && !D::topDialog(lea), "Fermer");
         }
+        (void)lea.paint();
+        check(lea.shell->toasts().empty() || !lea.shell->toasts().back().derogation, "activee : l'alerte de la derogation recue s'en va");
         bool pending = true;
         const std::string chip = lea.shell->derogationChipText(&pending);
         check(!pending && chip.rfind("D\xC3\xA9rogation : 2 h ", 0) == 0, "la pastille : << Derogation : 2 h .. >> (" + chip + ")");

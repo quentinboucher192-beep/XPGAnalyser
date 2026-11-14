@@ -355,7 +355,10 @@ OpResult Workspace::revokeDerogation(Derogation* out) const {
                                    d.adminName + (st == "en_attente" ? std::string(" (son code pas encore tap\xC3\xA9)") : std::string()),
                                core::json::write(det, false), {}, {}, nullptr);
     (void)detail::flushJournalWith(folder_, *c);
-    OpResult res = OpResult::done("D\xC3\xA9rogation de " + d.adminName + " r\xC3\xA9voqu\xC3\xA9" "e" + (st == "en_attente" ? std::string(" : son code ne sert plus.") : std::string(" : l'admin+ seul g\xC3\xA8re de nouveau le service.")));
+    OpResult res = OpResult::done("D\xC3\xA9rogation de " + d.adminName + " r\xC3\xA9voqu\xC3\xA9" "e" +
+                                  (st == "en_attente"   ? std::string(" : son code ne sert plus.")
+                                   : d.everything() ? std::string(" : son XPG Admin repasse \xC3\xA0 la gestion.")
+                                                    : std::string(" : l'admin+ seul g\xC3\xA8re de nouveau le service.")));
     res.details.push_back(d.everything() ? "Son XPG Admin repasse \xC3\xA0 la gestion seule au prochain regard (15 s au plus) ; le service refuse d\xC3\xA9j\xC3\xA0 ce qu'elle ouvrait."
                                          : "Son Admin repasse en lecture seule au prochain regard (15 s au plus) ; le service refuse d\xC3\xA9j\xC3\xA0 ses gestes.");
     return res;

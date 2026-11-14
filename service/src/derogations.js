@@ -79,6 +79,14 @@ function texteCourt(v, max) {
     return typeof v === "string" && !/[\u0000-\u001f\u007f]/.test(v) && Array.from(v).length <= max;
 }
 
+// << 30 min >>, << 4 h >>, << 2 h 30 >> (une duree en clair, pour le journal).
+function dureeTexte(s) {
+    if (s < 3600) return Math.round(s / 60) + " min";
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return m ? h + " h " + String(m).padStart(2, "0") : h + " h";
+}
+
 function entierPositif(v) {
     return typeof v === "number" && Number.isInteger(v) && v >= 0;
 }
@@ -364,7 +372,7 @@ export const RoutesDerogations = {
         d.fin = ctx.now + d.duree;
         d.activee = ctx.now;
         this.ecrireConfig(CONFIG_DEROGATION, JSON.stringify(d));
-        await this.journalService(ctx.now, "derogation_activee", d.id, d.nom + " a tapé le code : sa dérogation court jusqu'à la fin (" + Math.round(d.duree / 60) + " min)", {
+        await this.journalService(ctx.now, "derogation_activee", d.id, d.nom + " a tapé le code : sa dérogation court " + dureeTexte(d.duree), {
             derogation: d.id,
             admin: d.admin,
             nom: d.nom,

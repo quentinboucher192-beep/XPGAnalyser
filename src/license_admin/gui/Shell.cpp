@@ -846,6 +846,8 @@ protected:
         if (list.empty()) return;
         const Rect b = bounds();
         const auto& t = list.back();
+        // 1.52.0 : une derogation recue - << Voir >> ouvre le dialogue du code
+        see_->setTooltip(t.derogation ? std::string("Taper le code de la d\xC3\xA9rogation.") : std::string("Le journal des admins, cette ligne d\xC3\xA9pli\xC3\xA9" "e."));
         ctx.r.fillRoundedRect({b.x, b.y + 3.f, b.w, b.h + 2.f}, Color::rgb(0x000000).withAlpha(50), 14.f);
         ctx.r.fillRoundedRect(b, Color::rgb(0x111827), 14.f);
         const Color tone = t.level >= 3 ? Color::rgb(0xEF4444) : Color::rgb(0xF59E0B);
@@ -1460,13 +1462,13 @@ bool Shell::autoWatch() {
                          if (manageAfter != manageBefore || was.id != d.id || was.state != d.state) {
                              if (mine && d.pendingAt(now) && derogationNoticed_ != d.id) {
                                  derogationNoticed_ = d.id;
-                                 const std::string text = "L'admin+ t'a envoy\xC3\xA9 une d\xC3\xA9rogation (" + durationText(d.duration) +
-                                                          ") : tape le code qu'il voit sur son PC.";
+                                 const std::string sent = "L'admin+ t'a envoy\xC3\xA9 une d\xC3\xA9rogation (" + durationText(d.duration) + ")";
+                                 const std::string text = sent + " : tape le code qu'il voit sur son PC.";
                                  Toast t;
                                  t.derogation = true;
                                  t.level = static_cast<int>(licensing::admins::Level::High);
-                                 t.title = text;
-                                 t.line = "Valable jusqu'\xC3\xA0 " + clockText(d.localTime(d.validUntil, now), now) + " \xC2\xB7 Voir : taper le code";
+                                 t.title = sent;   // l'alerte : deux lignes (la phrase entiere : le bandeau)
+                                 t.line = "Tape le code qu'il voit sur son PC \xC2\xB7 valable jusqu'\xC3\xA0 " + clockText(d.localTime(d.validUntil, now), now);
                                  t.shownAt = steadyNow();
                                  toasts_.push_back(std::move(t));
                                  flash(text, Tone::Warning);
@@ -1475,11 +1477,17 @@ bool Shell::autoWatch() {
                              } else if (mine && was.id == d.id && was.state == "en_attente" && d.state == "annulee") {
                                  flash("Ta d\xC3\xA9rogation est " + derogationText(d, now) + " : demande \xC3\xA0 l'admin+ une nouvelle d\xC3\xA9rogation.", Tone::Warning);
                              } else if (ws_->role() == Role::Admin && manageAfter && !manageBefore) {
-                                 flash(d.everything() ? "D\xC3\xA9rogation active : tu vois tout comme l'admin+ (" + derogationText(d, now) + ")."
+                                 flash(d.everything() ? "D\xC3\xA9rogation active : tu vois tout comme l'admin+ \xE2\x80\x94 " + derogationText(d, now) + "."
                                                       : "D\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB accord\xC3\xA9" "e par l'admin+ : " + derogationText(d, now) +
                                                             (license_admin::classique() ? " (Mon compte)." : " (Service en ligne)."),   // XPG Admin : Mon compte
                                        Tone::Warning);
                              } else if (ws_->role() == Role::Admin && manageBefore && !manageAfter) {
+                                 // XPG Admin : une page qu'elle ouvrait est montree - retour a Mon compte d'abord (classicGate n'a
+                                 // alors plus rien a dire : cet avis est le bon, revoquee ou finie)
+                                 if (license_admin::classique() && !pageAllowed(current_)) {
+                                     current_ = "compte";
+                                     showCurrent();
+                                 }
                                  const std::string how = d.state == "revoquee" ? "r\xC3\xA9voqu\xC3\xA9" "e par l'admin+" : "termin\xC3\xA9" "e";
                                  flash(d.everything() ? "Ta d\xC3\xA9rogation est " + how + " : XPG Admin repasse \xC3\xA0 la gestion."
                                                       : "Ta d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB est " + how + " : le service repasse en lecture seule.",
@@ -1789,8 +1797,14 @@ void Shell::openDerogationCode() {
 }
 
 void Shell::derogationTick() {
-    if (!wantCodeDialog_) return;
     const Derogation& d = ws_->derogation();
+    // l'alerte d'une derogation recue s'en va des qu'elle n'attend plus de code (activee, revoquee, annulee)
+    if (!toasts_.empty() && std::any_of(toasts_.begin(), toasts_.end(), [](const Toast& x) { return x.derogation; }) &&
+        !(ws_->role() == Role::Admin && d.forKey(ws_->adminKey().keyHex) && d.pendingAt(ws_->now()))) {
+        std::erase_if(toasts_, [](const Toast& x) { return x.derogation; });
+        if (view_) static_cast<ShellView*>(view_)->update();
+    }
+    if (!wantCodeDialog_) return;
     if (ws_->role() != Role::Admin || !d.forKey(ws_->adminKey().keyHex) || !d.pendingAt(ws_->now())) {
         wantCodeDialog_ = false;   // activee, revoquee, annulee entre-temps : plus rien a taper
         return;

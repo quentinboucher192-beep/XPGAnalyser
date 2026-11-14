@@ -47,6 +47,13 @@ using namespace kit;
 constexpr FontId kF12{12}, kF13{13}, kF14{14};
 constexpr int kOther = 5;   // << Autre duree >> (l'index du bouton radio)
 
+// La phrase d'un refus (OpResult::fail : << Refuse : ... >>) : une majuscule, sans le << Refuse : >>.
+std::string sentenceOf(std::string s) {
+    if (s.rfind("Refus\xC3\xA9 : ", 0) == 0) s = s.substr(10);
+    if (!s.empty() && s[0] >= 'a' && s[0] <= 'z') s[0] = static_cast<char>(s[0] - 'a' + 'A');
+    return s;
+}
+
 class DerogationDialog;
 
 class DerogationBody final : public ui::Widget {
@@ -320,7 +327,7 @@ void DerogationBody::revoke() {
 }
 
 void DerogationBody::onLayout() {
-    frame_.place(*this, 700.f, 680.f);
+    frame_.place(*this, 700.f, code_.empty() ? 620.f : 560.f);
     const auto& p = frame_.panel;
     const float x = p.x + 24.f, w = p.w - 48.f;
     textTop_ = p.y + 92.f;
@@ -340,7 +347,7 @@ void DerogationBody::onLayout() {
     y += 44.f;
     float hx = x + 120.f;
     for (auto* r : radio_) {
-        const float rww = std::max(70.f, r->sizeHint().preferred.w + 10.f);
+        const float rww = std::max(64.f, r->sizeHint().preferred.w + 28.f);
         if (hx + rww > x + w) {
             hx = x + 120.f;
             y += 32.f;
@@ -568,8 +575,7 @@ void CodeBody::activate() {
                                                             if (!out->id.empty()) ws().adoptDerogation(*out);   // le menu suit aussitot
                                                             field_->setText({});   // le code tape ne reste pas (avant la phrase : vider le champ l'efface)
                                                             if (!r.ok) {
-                                                                error_ = r.message;
-                                                                if (!error_.empty()) error_[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(error_[0])));
+                                                                error_ = sentenceOf(r.message);
                                                             } else {
                                                                 success_ = r.message;
                                                             }
@@ -585,7 +591,7 @@ void CodeBody::activate() {
 }
 
 void CodeBody::onLayout() {
-    frame_.place(*this, 600.f, 420.f);
+    frame_.place(*this, 600.f, 380.f);
     const auto& p = frame_.panel;
     const float x = p.x + 24.f;
     textTop_ = p.y + 92.f;
@@ -711,8 +717,7 @@ void DerogationCard::activate() {
                                                             if (!out->id.empty()) ws().adoptDerogation(*out);
                                                             code_->setText({});   // le code tape ne reste pas
                                                             ok_ = r.ok;
-                                                            said_ = r.message;
-                                                            if (!said_.empty()) said_[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(said_[0])));
+                                                            said_ = sentenceOf(r.message);
                                                             refresh();
                                                         });
     if (!started) {
