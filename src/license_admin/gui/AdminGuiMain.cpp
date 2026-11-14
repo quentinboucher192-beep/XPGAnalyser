@@ -40,6 +40,7 @@
 #include "Shell.hpp"
 
 #include "../../core/SystemOpen.hpp"
+#include "../../core/SingleInstance.hpp"   // 1.52.0 : attirer l'attention (une derogation recue)
 #include "../../menu/MenuManager.hpp"
 #include "../../platform/Renderer.hpp"
 #include "../../ui/Theme.hpp"
@@ -511,6 +512,10 @@ int main(int argc, char** argv) {
         menu::MenuManager menus{menu::MenuFactory{}};
         auto owned = std::make_unique<gui::Shell>(o.folder);
         gui::Shell* shell = owned.get();
+        // 1.52.0 : une derogation recue (XPG Admin) - le bouton de la barre des taches clignote (Windows ; ailleurs : rien)
+        shell->setAttention([window] {
+            core::instance::attention(SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr), true);
+        });
         if (!o.page.empty()) shell->navigate(o.page);
         menus.PushMenu(std::move(owned));
         menus.applyPending();

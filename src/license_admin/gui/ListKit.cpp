@@ -5,6 +5,7 @@
 #include "ListKit.hpp"
 
 #include "AdminsKit.hpp"
+#include "ClassicView.hpp"   // 1.52.0 : XPG Admin sans derogation (pas de lien vers Administrateurs)
 
 #include "../../deploy/Crypto.hpp"
 #include "../../ui/widgets/FilterMemory.hpp"
@@ -156,7 +157,8 @@ ui::UnfoldCard::Person person(const ShellHost& host, const std::string& key, con
     if (host.workspace) color = adminColor(host.workspace(), key);
     p.color = kit::avatarColor(refTheme(), color);
     p.muted = color < 0;
-    if (!key.empty() && host.navigate) {
+    // 1.52.0 : XPG Admin sans derogation n'a pas Administrateurs - la personne se lit, sans lien
+    if (!key.empty() && host.navigate && !(host.workspace && classic::managementOnly(host.workspace()))) {
         const ShellHost h = host;
         p.open = [h, key] {
             requestPageFocus("admins", "admin:" + key);

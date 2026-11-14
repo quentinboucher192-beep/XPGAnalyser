@@ -21,6 +21,7 @@
 //  droits d'un admin, eux, sont dans la liste signee publiee sur le service.
 // =============================================================================
 #include "AdminsKit.hpp"
+#include "ClassicView.hpp"   // 1.52.0 : XPG Admin sous derogation (lire, jamais signer)
 #include "Page.hpp"
 
 #include "../../ui/widgets/DataViews.hpp"
@@ -506,6 +507,8 @@ private:
         publish_->setEnabled(plus && adminDirty_ && ready && !busy);
         publish_->setTooltip(!ready ? std::string("Il faut le service des licences : la nouvelle liste des admins y est publi\xC3\xA9" "e.")
                                     : std::string("La cl\xC3\xA9 de l'\xC3\xA9" "diteur signe la liste des admins avec ses droits, puis la publie."));
+        if (!plus)   // 1.52.0 : XPG Admin sous derogation - les droits et les profils se lisent ; la cle de l'editeur les signe
+            for (ui::Button* b : {newProfile_, duplicate_, rename_, delete_, save_, copyTo_, recopy_, publish_}) b->setTooltip(classic::kEditorKeyOnly);
         if (panel_->visible()) {
             std::size_t n = 0;
             std::string one;

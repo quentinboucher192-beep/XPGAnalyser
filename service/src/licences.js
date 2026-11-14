@@ -246,13 +246,13 @@ const ROUTES = {
     "PUT /admin/trousseau": { f: "deposerTrousseau", signe: "plus" },
     "GET /admin/trousseau": { f: "lireTrousseau", signe: "admin" },
     "POST /admin/journal": { f: "ecrireJournal", signe: "admin" },
-    "GET /admin/journal": { f: "lireJournal", signe: "plus" },
+    "GET /admin/journal": { f: "lireJournal", signe: "plus", derogation: "tout" }, // 1.52.0 : lu aussi sous une derogation << tout >>
     "POST /admin/fichiers": { f: "deposerManifeste", signe: "plus" },
     "PUT /admin/fichiers/morceau": { f: "deposerMorceau", signe: "plus" },
     "POST /admin/fichiers/jeton": { f: "tirerJetonFichier", signe: "plus" },
     "PUT /admin/messages": { f: "deposerMessage", signe: "plus" },
     "PUT /admin/versions": { f: "deposerVersion", signe: "plus" },
-    "GET /admin/versions": { f: "listerVersions", signe: "plus" },
+    "GET /admin/versions": { f: "listerVersions", signe: "plus", derogation: "tout" }, // 1.52.0 : lu aussi sous une derogation << tout >>
     "GET /admin/sauvegarde": { f: "sauvegarde", signe: "plus", restauration: true },
     "POST /admin/restauration/debut": { f: "debutRestauration", signe: "plus", restauration: true },
     "POST /admin/restauration/lot": { f: "lotRestauration", signe: "plus", restauration: true },
@@ -289,6 +289,7 @@ const ROUTES = {
     "POST /admin/derogation/revoquer": { f: "revoquerDerogation", signe: "plus" },
     "GET /admin/derogation": { f: "lireDerogation", signe: "admin" },
     "POST /admin/derogation/utiliser": { f: "utiliserDerogation", signe: "admin" },
+    "POST /admin/derogation/activer": { f: "activerDerogation", signe: "admin" }, // 1.52.0 : le code que l'admin+ voit sur son PC
 };
 const CHEMINS = new Set(Object.keys(ROUTES).map((r) => r.slice(r.indexOf(" ") + 1)));
 
@@ -726,7 +727,9 @@ export class Licences extends DurableObject {
                 // 1.47.0 : le lieu, << actif maintenant >>, les heures des admins (rien pendant une restauration)
                 if (!this.enRestauration) await this.noterAppelStats(ctx);
                 // 1.47.0 : une route de l'admin+ ouverte par une derogation : le journal le dit (derogations.js)
-                if (ctx.appelant.derogation) await this.noterUsageDerogation(ctx, ctx.appelant.derogation, "route " + methode + " " + url.pathname);
+                // 1.52.0 : une lecture (GET), une ligne la premiere fois seulement (le regard des 15 s n'en ecrit pas 200)
+                if (ctx.appelant.derogation)
+                    await this.noterUsageDerogation(ctx, ctx.appelant.derogation, "route " + methode + " " + url.pathname, "", methode === "GET");
             }
             reponse = await this[route.f](ctx);
         } catch (e) {
@@ -869,7 +872,8 @@ export class Licences extends DurableObject {
     // admin de la liste, non retire - role << admin >>, ses droits), "plus" (la cle de l'editeur seulement).
     // Rend {cle, octets, nonce, poste, role ("pc", "admin+", "admin"), droits, admin (sa ligne de la liste)}.
     // 1.47.0 : `derogation` - une route << plus >> qui s'ouvre aussi a l'admin qui a une derogation << Gerer le service >>
-    // en cours (derogations.js) ; son usage est ecrit au journal.
+    // en cours (derogations.js) ; son usage est ecrit au journal. 1.52.0 : `derogation` "tout" - seulement une derogation
+    // de format 2 (droit << tout >> : les lectures du journal et des versions).
     async verifierAppel(ctx, signe, derogation) {
         const h = ctx.request.headers;
         const cle = h.get("X-XPG-Cle");
@@ -917,9 +921,20 @@ export class Licences extends DurableObject {
             appelant.droits = JSON.parse(admin.droits);
             appelant.admin = admin;
             if (signe === "plus") {
-                const d = derogation ? this.derogationDe(cle, ctx.now) : null;
+                let d = derogation ? this.derogationDe(cle, ctx.now) : null;
+                if (d && derogation === "tout" && d.droit !== "tout") d = null; // 1.52.0 : une derogation << Gerer le service >> (format 1) ne l'ouvre pas
                 if (!d) {
                     // (le code reste << droit >>, comme avant la 1.47.0 ; la phrase dit la derogation)
+                    if (derogation === "tout") {
+                        // 1.52.0 : une lecture que seule une derogation << tout >> ouvre
+                        const g = this.derogationGardee();
+                        const sienne = g && g.admin === cle && g.droit === "tout";
+                        throw new Erreur(
+                            403,
+                            "droit",
+                            sienne ? this.refusDerogation(cle, ctx.now).message : "Cette action est réservée à l'admin+ (la clé de l'éditeur), ou à l'admin qui a une dérogation en cours.",
+                        );
+                    }
                     if (derogation) throw new Erreur(403, "droit", this.refusDerogation(cle, ctx.now).message);
                     throw new Erreur(403, "droit", "Cette action est réservée à l'admin+ (la clé de l'éditeur).");
                 }

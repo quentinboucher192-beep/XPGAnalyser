@@ -56,6 +56,8 @@ public:
     [[nodiscard]] static const std::vector<NavEntry>& subPages();
     [[nodiscard]] static std::string parentOf(const std::string& pageId);   // "" : une entree du menu
     // 1.44.0 : les pages de l'admin+ seul (le journal des admins, les droits) : un autre role ne les voit pas dans le menu.
+    // 1.52.0 : XPG Admin (pageAllowed) - sans derogation, la gestion seulement (ni Parametres de securite, ni Service en
+    // ligne, ni Administrateurs, ni ces trois) ; une derogation de l'admin+ qui court : le menu de l'admin+, tout entier.
     [[nodiscard]] static bool plusOnly(const std::string& pageId);
     [[nodiscard]] bool pageAllowed(const std::string& pageId) const;
 
@@ -67,10 +69,21 @@ public:
         std::string   line;        // << a l'instant - PORTABLE-HUGO - Brasserie du Nord >>
         int           level{0};    // licensing::admins::Level
         double        shownAt{0};  // steady, secondes
+        bool          derogation{false};   // 1.52.0 : une derogation recue (XPG Admin) - << Voir >> ouvre le dialogue du code
     };
     [[nodiscard]] const std::vector<Toast>& toasts() const noexcept { return toasts_; }
     void dismissToasts();
-    void openToast();   // << Voir >> : le journal, la ligne depliee
+    void openToast();   // << Voir >> : le journal, la ligne depliee (1.52.0 : une derogation recue - le dialogue du code)
+    // 1.52.0 (docs/ADMINS.md, par. 11) : LA DEROGATION PAR CODE - XPG Admin : le regard voit une derogation EN ATTENTE pour
+    // sa cle (une nouvelle) -> l'alerte (<< L'admin+ t'a envoye une derogation (4 h) : tape le code qu'il voit sur son PC. >>),
+    // le dialogue du code s'ouvre seul une fois (sous un autre dialogue : apres), le bouton de la barre des taches clignote
+    // (Windows), la pastille ambre << Derogation recue : taper le code >> en haut ; activee : << Derogation : 3 h 52 >>.
+    // L'Admin+ : le regard la voit activee -> << Lea Essai a tape le code : sa derogation court jusqu'a 19:42. >>.
+    void openDerogationCode();
+    // Le texte de la pastille (vide : pas de pastille) ; `pending` : en attente du code (ambre).
+    [[nodiscard]] std::string derogationChipText(bool* pending = nullptr) const;
+    // La fenetre du programme (AdminGuiMain) : attirer l'attention (le bouton de la barre des taches clignote ; ailleurs rien).
+    void setAttention(std::function<void()> f) { attention_ = std::move(f); }
     // Les alertes pas encore vues (le nombre du menu, << Journal des admins >>) ; le journal ouvert les remet a zero.
     [[nodiscard]] int unseenAlerts() const noexcept { return unseenAlerts_; }
     // Les essais : faire comme le regard quand il a releve de nouvelles lignes (les alertes -> les toasts).
@@ -245,6 +258,14 @@ private:
     double                     nextDelivery_{-1};        // la prochaine reprise d'une livraison (steady)
     std::vector<int>           seenPaid_;                // les commandes payees deja annoncees
     bool                       autoBackup();
+    // 1.52.0 : XPG Admin - la derogation de l'admin+ ouvre tout ; elle finit : retour a la gestion (Shell.cpp, ClassicView.hpp)
+    void                       classicGate();
+    bool                       derogationOpen_{false};
+    // 1.52.0 (agent D) : la derogation recue (XPG Admin) - deja dite (son identifiant), le dialogue du code a ouvrir
+    void                       derogationTick();
+    std::string                derogationNoticed_;
+    bool                       wantCodeDialog_{false};
+    std::function<void()>      attention_;
     // DERNIER : detruit le premier (le fil du travail lent se termine avant que le Workspace s'en aille).
     Background                 bg_;
 };

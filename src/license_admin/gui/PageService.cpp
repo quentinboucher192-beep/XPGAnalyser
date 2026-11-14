@@ -636,14 +636,15 @@ OpResult syncResult(const archive::SyncReport& s, int mode) {
 // =============================================================================================================
 class ServicePage final : public Page {
 public:
-    explicit ServicePage(ShellHost host);
+    // 1.52.0 : `pc` - Mon compte > Ce PC (XPG Admin sans derogation ; PageServicePc.inl) : ses widgets se nomment << poste.* >>.
+    explicit ServicePage(ShellHost host, bool pc = false);
     ~ServicePage() override {
         links_.clear();   // plus de rappel vers le Workspace pendant que la fenetre se defait
         wipe(recovery_);
         clearSecret(code_);
         clearSecret(mailPassword_);
     }
-    [[nodiscard]] std::string title() const override { return "Service en ligne"; }
+    [[nodiscard]] std::string title() const override { return pc_ ? "Ce PC : le service, l'archive, le mail" : "Service en ligne"; }
     void refresh() override;
 
 protected:
@@ -720,6 +721,11 @@ private:
     // Un geste de gestion : l'admin+ tout de suite ; un admin, apres l'accord du service (sa derogation court).
     void managed(const std::string& action, const std::string& detail, std::function<void()> then);
     void tickDerogation();
+    // 1.52.0 : Mon compte > Ce PC (PageServicePc.inl) - l'identifiant d'un widget (<< service.x >>, << poste.x >>), les cartes.
+    [[nodiscard]] std::string wid(const char* suffix) const { return std::string(pc_ ? "poste." : "service.") + suffix; }
+    void pcBlocks(Blocks& bl);
+    [[nodiscard]] static const char* pcSubtitle();
+    bool pc_{false};
 
     ui::ScrollablePanel*            scroll_{nullptr};
     FlowBody*                       body_{nullptr};
@@ -802,59 +808,59 @@ private:
     std::shared_ptr<bool>    alive_{std::make_shared<bool>(true)};
 };
 
-ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
-    auto scroll = std::make_unique<ui::ScrollablePanel>("service.defilement");
+ServicePage::ServicePage(ShellHost host, bool pc) : Page(pc ? "poste" : "service", std::move(host)), pc_(pc) {
+    auto scroll = std::make_unique<ui::ScrollablePanel>(wid("defilement"));
     scroll->setScrollPolicy(false, true);
-    auto body = std::make_unique<FlowBody>("service.corps");
+    auto body = std::make_unique<FlowBody>(wid("corps"));
     body_ = body.get();
     scroll->setContent(std::move(body));
     scroll_ = &static_cast<ui::ScrollablePanel&>(addChild(std::move(scroll)));
 
-    url_ = body_->make<ui::InputText>("service.adresse");
+    url_ = body_->make<ui::InputText>(wid("adresse"));
     url_->setPlaceholder("https://xpg-licences.ton-compte.workers.dev");
     url_->setMaxLength(220);
-    saveUrl_ = body_->make<ui::Button>("Enregistrer l'adresse", "service.adresse.enregistrer");
+    saveUrl_ = body_->make<ui::Button>("Enregistrer l'adresse", wid("adresse.enregistrer"));
     saveUrl_->setStyle(ui::Button::Style::Primary);
-    verify_ = body_->make<ui::Button>("V\xC3\xA9rifier", "service.verifier");
+    verify_ = body_->make<ui::Button>("V\xC3\xA9rifier", wid("verifier"));
     verify_->setIcon(ui::Icon::Search);
-    certify_ = body_->make<ui::Button>("Certifier la cl\xC3\xA9 du service\xE2\x80\xA6", "service.certifier");
+    certify_ = body_->make<ui::Button>("Certifier la cl\xC3\xA9 du service\xE2\x80\xA6", wid("certifier"));
     certify_->setIcon(ui::Icon::Lock);
 
-    firstPc_ = body_->make<ui::RadioButton>("Premier poste : cr\xC3\xA9" "er la cl\xC3\xA9 de synchro", mode_, 0, "service.archive.premier");
-    otherPc_ = body_->make<ui::RadioButton>("Un autre poste : j'ai le code de secours", mode_, 1, "service.archive.secours");
+    firstPc_ = body_->make<ui::RadioButton>("Premier poste : cr\xC3\xA9" "er la cl\xC3\xA9 de synchro", mode_, 0, wid("archive.premier"));
+    otherPc_ = body_->make<ui::RadioButton>("Un autre poste : j'ai le code de secours", mode_, 1, wid("archive.secours"));
     mode_->setValue(0);
-    code_ = body_->make<ui::InputText>("service.archive.code");
+    code_ = body_->make<ui::InputText>(wid("archive.code"));
     code_->setMasked(true);
     code_->setPlaceholder("XPGS1-\xE2\x80\xA6");
     code_->setMaxLength(200);
-    showTyped_ = body_->make<ui::Button>("Montrer", "service.archive.code.montrer");
-    replace_ = body_->make<ui::Checkbox>("remplacer la cl\xC3\xA9 de synchro de ce poste", "service.archive.remplacer");
-    keyButton_ = body_->make<ui::Button>("Cr\xC3\xA9" "er la cl\xC3\xA9 de synchro", "service.archive.cle");
+    showTyped_ = body_->make<ui::Button>("Montrer", wid("archive.code.montrer"));
+    replace_ = body_->make<ui::Checkbox>("remplacer la cl\xC3\xA9 de synchro de ce poste", wid("archive.remplacer"));
+    keyButton_ = body_->make<ui::Button>("Cr\xC3\xA9" "er la cl\xC3\xA9 de synchro", wid("archive.cle"));
     keyButton_->setStyle(ui::Button::Style::Primary);
-    sync_ = body_->make<ui::Button>("Synchroniser l'archive", "service.archive.synchroniser");
+    sync_ = body_->make<ui::Button>("Synchroniser l'archive", wid("archive.synchroniser"));
     sync_->setStyle(ui::Button::Style::Primary);
     sync_->setIcon(ui::Icon::Refresh);
-    receive_ = body_->make<ui::Button>("Recevoir seulement", "service.archive.recevoir");
-    dry_ = body_->make<ui::Button>("V\xC3\xA9rifier (sans rien changer)", "service.archive.verifier");
-    showCode_ = body_->make<ui::Button>("Afficher le code de secours\xE2\x80\xA6", "service.archive.code.afficher");
+    receive_ = body_->make<ui::Button>("Recevoir seulement", wid("archive.recevoir"));
+    dry_ = body_->make<ui::Button>("V\xC3\xA9rifier (sans rien changer)", wid("archive.verifier"));
+    showCode_ = body_->make<ui::Button>("Afficher le code de secours\xE2\x80\xA6", wid("archive.code.afficher"));
     showCode_->setIcon(ui::Icon::Lock);
 
-    copy_ = body_->make<ui::Button>("Copier", "service.code.copier");
+    copy_ = body_->make<ui::Button>("Copier", wid("code.copier"));
     copy_->setIcon(ui::Icon::Copy);
-    noted_ = body_->make<ui::Checkbox>("Je l'ai not\xC3\xA9 hors de ce PC", "service.code.note");
-    continue_ = body_->make<ui::Button>("Continuer", "service.code.continuer");
+    noted_ = body_->make<ui::Checkbox>("Je l'ai not\xC3\xA9 hors de ce PC", wid("code.note"));
+    continue_ = body_->make<ui::Button>("Continuer", wid("code.continuer"));
     continue_->setStyle(ui::Button::Style::Primary);
-    hide_ = body_->make<ui::Button>("Masquer le code", "service.code.masquer");
+    hide_ = body_->make<ui::Button>("Masquer le code", wid("code.masquer"));
 
-    list_ = body_->make<ui::Button>("Relever les licences en ligne", "service.licences.relever");
+    list_ = body_->make<ui::Button>("Relever les licences en ligne", wid("licences.relever"));
     list_->setIcon(ui::Icon::Refresh);
-    stats_ = body_->make<ui::Button>("Les compteurs du service", "service.stats");
+    stats_ = body_->make<ui::Button>("Les compteurs du service", wid("stats"));
     stats_->setIcon(ui::Icon::Chart);
-    publicKey_ = body_->make<ui::Button>("\xC3\x89" "crire cle-publique.txt\xE2\x80\xA6", "service.cle-publique");
+    publicKey_ = body_->make<ui::Button>("\xC3\x89" "crire cle-publique.txt\xE2\x80\xA6", wid("cle-publique"));
     publicKey_->setIcon(ui::Icon::Export);
     // 1.45.0 : deployer le service depuis l'Admin (le kit installe avec lui ; sans fenetre de console)
     {
-        const char* const ids[] = {"service.deployer", "service.deployer.bandeau", "service.deployer.etapes"};
+        const std::string ids[] = {wid("deployer"), wid("deployer.bandeau"), wid("deployer.etapes")};
         ui::Button** const slots[] = {&deploy_, &deployBanner_, &deploySteps_};
         for (int i = 0; i < 3; ++i) {
             ui::Button* b = body_->make<ui::Button>("D\xC3\xA9ployer le service", ids[i]);
@@ -867,77 +873,77 @@ ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
         for (ui::Button* b : {deploy_, deployBanner_, deploySteps_}) links_ += b->clicked->connect([this] { openDeploy(); });
     }
     // 1.47.0 : la connexion signee au service ; la derogation << Gerer le service >> (l'admin+)
-    useConnection_ = body_->make<ui::Button>("Utiliser une connexion\xE2\x80\xA6", "service.connexion.utiliser");
+    useConnection_ = body_->make<ui::Button>("Utiliser une connexion\xE2\x80\xA6", wid("connexion.utiliser"));
     useConnection_->setIcon(ui::Icon::Import);
     useConnection_->setTooltip("Un fichier connexion-service.xpgsvc re\xC3\xA7u de l'admin+ : le certificat de son service, sign\xC3\xA9 par sa cl\xC3\xA9 (un fichier modifi\xC3\xA9 est refus\xC3\xA9)");
-    exportConnection_ = body_->make<ui::Button>("Exporter la connexion\xE2\x80\xA6", "service.connexion.exporter");
+    exportConnection_ = body_->make<ui::Button>("Exporter la connexion\xE2\x80\xA6", wid("connexion.exporter"));
     exportConnection_->setIcon(ui::Icon::Export);
     exportConnection_->setTooltip("Le certificat de ton service (sign\xC3\xA9 par ta cl\xC3\xA9, rien de secret) : \xC3\xA0 poser \xC3\xA0 c\xC3\xB4t\xC3\xA9 de l'installateur de l'Admin");
-    grantDerogation_ = body_->make<ui::Button>("Accorder une d\xC3\xA9rogation\xE2\x80\xA6", "service.derogation.accorder");
+    grantDerogation_ = body_->make<ui::Button>("Accorder une d\xC3\xA9rogation\xE2\x80\xA6", wid("derogation.accorder"));
     grantDerogation_->setIcon(ui::Icon::Lock);
-    revokeDerogation_ = body_->make<ui::Button>("R\xC3\xA9voquer maintenant", "service.derogation.revoquer");
+    revokeDerogation_ = body_->make<ui::Button>("R\xC3\xA9voquer maintenant", wid("derogation.revoquer"));
     revokeDerogation_->setStyle(ui::Button::Style::Danger);
     links_ += useConnection_->clicked->connect([this] { useConnection(); });
     links_ += exportConnection_->clicked->connect([this] { exportConnection(); });
     links_ += grantDerogation_->clicked->connect([this] { openDerogation(); });
     links_ += revokeDerogation_->clicked->connect([this] { revokeDerogation(); });
     // 1.49.0 : repartir de zero (l'admin+ ; la fenetre : ResetDialog.cpp)
-    startOver_ = body_->make<ui::Button>("Repartir de z\xC3\xA9ro\xE2\x80\xA6", "service.repartir");
+    startOver_ = body_->make<ui::Button>("Repartir de z\xC3\xA9ro\xE2\x80\xA6", wid("repartir"));
     startOver_->setStyle(ui::Button::Style::Danger);
     links_ += startOver_->clicked->connect([this] { openStartOver(); });
 
     // 1.37.0 : le mail au client
-    mailGmail_ = body_->make<ui::Button>("Gmail", "service.mail.gmail");
+    mailGmail_ = body_->make<ui::Button>("Gmail", wid("mail.gmail"));
     mailGmail_->setTooltip("Remplit le serveur de Gmail : smtp.gmail.com, port 587, STARTTLS");
-    mailHost_ = body_->make<ui::InputText>("service.mail.hote");
+    mailHost_ = body_->make<ui::InputText>(wid("mail.hote"));
     mailHost_->setPlaceholder("smtp.gmail.com");
     mailHost_->setMaxLength(253);
-    mailPort_ = body_->make<ui::InputText>("service.mail.port");
+    mailPort_ = body_->make<ui::InputText>(wid("mail.port"));
     mailPort_->setPlaceholder("587");
     mailPort_->setMaxLength(5);
     mailPort_->setValidator([](std::string_view t) { return std::all_of(t.begin(), t.end(), [](char ch) { return ch >= '0' && ch <= '9'; }); });
-    mailSecurity_ = body_->make<ui::DropDown>("service.mail.securite");
+    mailSecurity_ = body_->make<ui::DropDown>(wid("mail.securite"));
     mailSecurity_->setItems({{"STARTTLS (port 587)", "starttls"}, {"TLS d\xC3\xA8s la connexion (port 465)", "tls"}});
     mailSecurity_->setSelectedIndex(0);
-    mailFrom_ = body_->make<ui::InputText>("service.mail.expediteur");
+    mailFrom_ = body_->make<ui::InputText>(wid("mail.expediteur"));
     mailFrom_->setPlaceholder("ton-adresse@gmail.com");
     mailFrom_->setMaxLength(254);
-    mailName_ = body_->make<ui::InputText>("service.mail.nom");
+    mailName_ = body_->make<ui::InputText>(wid("mail.nom"));
     mailName_->setPlaceholder("\xC3\x89" "diteur XPG (facultatif : le nom que voit le client)");
     mailName_->setMaxLength(100);
-    mailUser_ = body_->make<ui::InputText>("service.mail.identifiant");
+    mailUser_ = body_->make<ui::InputText>(wid("mail.identifiant"));
     mailUser_->setPlaceholder("l'identifiant SMTP (vide : l'adresse d'exp\xC3\xA9" "dition)");
     mailUser_->setMaxLength(254);
-    mailPassword_ = body_->make<ui::InputText>("service.mail.mot-de-passe");
+    mailPassword_ = body_->make<ui::InputText>(wid("mail.mot-de-passe"));
     mailPassword_->setMasked(true);
     mailPassword_->setMaxLength(200);
-    mailShow_ = body_->make<ui::Button>("Montrer", "service.mail.mot-de-passe.montrer");
-    mailSave_ = body_->make<ui::Button>("Enregistrer le mail", "service.mail.enregistrer");
+    mailShow_ = body_->make<ui::Button>("Montrer", wid("mail.mot-de-passe.montrer"));
+    mailSave_ = body_->make<ui::Button>("Enregistrer le mail", wid("mail.enregistrer"));
     mailSave_->setStyle(ui::Button::Style::Primary);
-    mailTest_ = body_->make<ui::Button>("Envoyer un mail d'essai", "service.mail.essai");
+    mailTest_ = body_->make<ui::Button>("Envoyer un mail d'essai", wid("mail.essai"));
     mailTest_->setIcon(ui::Icon::Mail);
     mailTest_->setTooltip("Un mail d'essai \xC3\xA0 ta propre adresse d'exp\xC3\xA9" "dition : il dit tout de suite si le r\xC3\xA9glage et le mot de passe marchent");
-    mailForget_ = body_->make<ui::Button>("Oublier le r\xC3\xA9glage", "service.mail.oublier");
+    mailForget_ = body_->make<ui::Button>("Oublier le r\xC3\xA9glage", wid("mail.oublier"));
     // 1.38.0 : Outlook, Hotmail, Microsoft 365 - la connexion Microsoft (un code a taper dans le navigateur, jamais de mot de passe).
-    mailAuth_ = body_->make<ui::DropDown>("service.mail.connexion");
+    mailAuth_ = body_->make<ui::DropDown>(wid("mail.connexion"));
     mailAuth_->setItems({{"Mot de passe d'application (Gmail, autres)", mail::kAuthPassword},
                          {"Compte Microsoft (Outlook, Hotmail, Microsoft 365)", mail::kAuthMicrosoft}});
     mailAuth_->setSelectedIndex(0);
-    mailOutlook_ = body_->make<ui::Button>("Outlook / Hotmail", "service.mail.outlook");
+    mailOutlook_ = body_->make<ui::Button>("Outlook / Hotmail", wid("mail.outlook"));
     mailOutlook_->setTooltip("Une bo\xC3\xAEte Outlook.com, Hotmail ou Live : smtp-mail.outlook.com, port 587, STARTTLS, connexion Microsoft");
-    mailM365_ = body_->make<ui::Button>("Microsoft 365", "service.mail.m365");
+    mailM365_ = body_->make<ui::Button>("Microsoft 365", wid("mail.m365"));
     mailM365_->setTooltip("Une bo\xC3\xAEte professionnelle Microsoft 365 : smtp.office365.com, port 587, STARTTLS, connexion Microsoft");
-    mailClientId_ = body_->make<ui::InputText>("service.mail.id-application");
+    mailClientId_ = body_->make<ui::InputText>(wid("mail.id-application"));
     mailClientId_->setPlaceholder("00000000-0000-0000-0000-000000000000");
     mailClientId_->setTooltip("L'ID d'application (client) de ton inscription sur le portail Microsoft Entra");
     mailClientId_->setMaxLength(36);
-    mailConnect_ = body_->make<ui::Button>("Se connecter \xC3\xA0 Microsoft\xE2\x80\xA6", "service.mail.microsoft.connecter");
+    mailConnect_ = body_->make<ui::Button>("Se connecter \xC3\xA0 Microsoft\xE2\x80\xA6", wid("mail.microsoft.connecter"));
     mailConnect_->setStyle(ui::Button::Style::Primary);
     mailConnect_->setTooltip("Demande un code \xC3\xA0 Microsoft : tu le tapes dans ton navigateur (microsoft.com/devicelogin), tu te connectes \xC3\xA0 ta bo\xC3\xAEte, "
                              "et l'outil garde la connexion chiffr\xC3\xA9" "e sur ce poste - jamais ton mot de passe");
-    mailCancel_ = body_->make<ui::Button>("Annuler la connexion", "service.mail.microsoft.annuler");
-    mailCopyCode_ = body_->make<ui::Button>("Copier le code", "service.mail.microsoft.copier");
-    mailDisconnect_ = body_->make<ui::Button>("Se d\xC3\xA9" "connecter de Microsoft", "service.mail.microsoft.oublier");
+    mailCancel_ = body_->make<ui::Button>("Annuler la connexion", wid("mail.microsoft.annuler"));
+    mailCopyCode_ = body_->make<ui::Button>("Copier le code", wid("mail.microsoft.copier"));
+    mailDisconnect_ = body_->make<ui::Button>("Se d\xC3\xA9" "connecter de Microsoft", wid("mail.microsoft.oublier"));
     links_ += mailAuth_->selectionChanged->connect([this](int) {
         // Compte Microsoft sans serveur : la boite Outlook / Hotmail toute faite (le cas le plus courant).
         if (mailAuth_->selectedIndex() == 1 && mailHost_->text().empty()) {
@@ -991,9 +997,9 @@ ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
     links_ += saveUrl_->clicked->connect([this] { saveUrl(); });
     // 1.44.0 : les adresses de secours
     for (int i = 0; i < 3; ++i) {
-        fbShown_[i] = body_->make<ui::InputText>("service.secours." + std::to_string(i + 1));
+        fbShown_[i] = body_->make<ui::InputText>(wid("secours.") + std::to_string(i + 1));
         fbShown_[i]->setReadOnly(true);
-        fbRemove_[i] = body_->make<ui::Button>("Retirer", "service.secours.retirer." + std::to_string(i + 1));
+        fbRemove_[i] = body_->make<ui::Button>("Retirer", wid("secours.retirer.") + std::to_string(i + 1));
         links_ += fbRemove_[i]->clicked->connect([this, i] {
             if (static_cast<std::size_t>(i) < fbDraft_.size()) fbDraft_.erase(fbDraft_.begin() + i);
             fbDirty_ = true;
@@ -1001,12 +1007,12 @@ ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
             syncEnabled();
         });
     }
-    fbNew_ = body_->make<ui::InputText>("service.secours.nouvelle");
+    fbNew_ = body_->make<ui::InputText>(wid("secours.nouvelle"));
     fbNew_->setPlaceholder("https://xpg-licences-secours.ton-compte.workers.dev");
     fbNew_->setMaxLength(220);
-    fbAdd_ = body_->make<ui::Button>("Ajouter\xE2\x80\xA6", "service.secours.ajouter");
+    fbAdd_ = body_->make<ui::Button>("Ajouter\xE2\x80\xA6", wid("secours.ajouter"));
     fbAdd_->setIcon(ui::Icon::Plus);
-    fbSave_ = body_->make<ui::Button>("Enregistrer (signer le registre)", "service.secours.enregistrer");
+    fbSave_ = body_->make<ui::Button>("Enregistrer (signer le registre)", wid("secours.enregistrer"));
     fbSave_->setStyle(ui::Button::Style::Primary);
     links_ += fbAdd_->clicked->connect([this] {
         std::string u = trimmed(fbNew_->text());
@@ -1122,7 +1128,7 @@ void ServicePage::syncEnabled() {
     useConnection_->setEnabled(!b && (urlFree || !s.configured));
     exportConnection_->setEnabled(!b && !connexion::exportText(ws().folder()).empty());
     grantDerogation_->setEnabled(!b && plus && ws().adminList() && !ws().adminList()->admins.empty());
-    revokeDerogation_->setEnabled(!b && plus && ws().derogation().activeAt(ws().now()));
+    revokeDerogation_->setEnabled(!b && plus && (ws().derogation().activeAt(ws().now()) || ws().derogation().pendingAt(ws().now())));   // 1.52.0 : en attente aussi
     startOver_->setEnabled(!b && ws().role() == Role::Plus && !license_admin::classique());   // 1.49.0 (la fenetre dit le reste)
     // 1.44.0 : les adresses de secours - l'admin+ ou le droit << offres >> (le registre est signe) ; 1.47.0 : et gerer le service.
     const bool mayFallback = ws().can("offres") && manage;
@@ -1194,6 +1200,11 @@ void ServicePage::rebuild() {
     Blocks bl;
     if (busy()) bl.text((running_.empty() ? std::string("Un travail est en cours") : running_) + "\xE2\x80\xA6 Le r\xC3\xA9seau peut prendre quelques secondes ; les boutons "
                         "reviennent quand il a fini.", ui::Tone::Info);
+    if (pc_) {   // 1.52.0 : Mon compte > Ce PC (PageServicePc.inl)
+        pcBlocks(bl);
+        body_->setBlocks(std::move(bl.items));
+        return;
+    }
 
     if (!recovery_.empty()) {
         bl.card("Code de secours de la cl\xC3\xA9 de synchro", ui::Tone::Warning);
@@ -1956,7 +1967,7 @@ void ServicePage::manageBlocks(Blocks& bl) {
     const auto& d = ws().derogation();
     const Seconds now = ws().now();
     if (ws().mayManageService()) {
-        bl.card("Ta d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB", ui::Tone::Warning);
+        bl.card(d.everything() ? "Ta d\xC3\xA9rogation (tout, comme l'admin+)" : "Ta d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB", ui::Tone::Warning);   // 1.52.0
         bl.pair("D\xC3\xA9rogation", derogationText(d, now) + ", accord\xC3\xA9" "e par l'admin+", ui::Tone::Warning);
         bl.text("Tu peux g\xC3\xA9rer le service comme l'admin+ : D\xC3\xA9ployer le service, son adresse, ses adresses de secours. "
                 "Chaque geste est d'abord demand\xC3\xA9 au service (il tient la d\xC3\xA9rogation \xC3\xA0 son heure), \xC3\xA9" "crit au journal, et l'admin+ est pr\xC3\xA9venu. "
@@ -1969,7 +1980,8 @@ void ServicePage::manageBlocks(Blocks& bl) {
     }
     bl.card("L'admin+ seul g\xC3\xA8re le service (d\xC3\xA9rogation possible)", ui::Tone::Info);
     bl.text("Tu vois l'\xC3\xA9tat du service en lecture seule. Le mettre en ligne ou \xC3\xA0 jour, changer son adresse ou ses adresses de secours, "
-            "le relev\xC3\xA9 du jour : l'admin+, ou toi pendant une d\xC3\xA9rogation courte qu'il t'accorde (1 h, 4 h, 24 h ; 72 h au plus).");
+            "le relev\xC3\xA9 du jour : l'admin+, ou toi pendant une d\xC3\xA9rogation courte qu'il t'accorde (de 10 min \xC3\xA0 72 h au plus ; elle commence quand "
+            "tu tapes le code qu'il te donne).");
     if (d.exists() && d.forKey(ws().adminKey().keyHex)) bl.pair("Ta derni\xC3\xA8re d\xC3\xA9rogation", derogationText(d, now), ui::Tone::Muted);
     bl.end();
 }
@@ -2022,23 +2034,32 @@ void ServicePage::connectionBlocks(Blocks& bl) {
     bl.end();
 }
 
-// L'admin+ : la derogation en place (qui, jusqu'a quand), Accorder..., Revoquer maintenant.
+// L'admin+ : la derogation en place (qui, jusqu'a quand), Accorder..., Revoquer maintenant. 1.52.0 (agent D) : << tout >>,
+// activee par un code - en attente, le code (retire de la cle de l'editeur, jamais garde) et son heure limite.
 void ServicePage::derogationBlocks(Blocks& bl) {
     if (ws().role() != Role::Plus) return;
     const auto& d = ws().derogation();
     const Seconds now = ws().now();
-    const bool active = d.activeAt(now);
-    bl.card("La d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB", active ? ui::Tone::Warning : ui::Tone::None);
-    bl.text("Toi seul g\xC3\xA8res le service. Pour un temps court (1 h, 4 h, 24 h ; 72 h au plus, jamais permanente), tu peux le confier \xC3\xA0 UN admin : "
-            "le mettre en ligne ou \xC3\xA0 jour, son adresse, ses adresses de secours, le relev\xC3\xA9 du jour. Jamais certifier, Brancher Stripe, la sauvegarde ni la restauration. "
-            "Le service la tient \xC3\xA0 son heure ; chaque usage est \xC3\xA9" "crit au journal et tu es pr\xC3\xA9venu.");
-    if (d.exists())
+    const bool active = d.activeAt(now), pending = d.pendingAt(now);
+    bl.card("La d\xC3\xA9rogation : tout, comme toi", active || pending ? ui::Tone::Warning : ui::Tone::None);
+    bl.text("Toi seul as tout. Pour un temps court (de 10 min \xC3\xA0 72 h, jamais permanente), tu peux donner \xC3\xA0 UN admin de voir tout comme toi : les "
+            "param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9, les services, les administrateurs, le journal, les versions ; il g\xC3\xA8re le service. Jamais ce qui demande ta cl\xC3\xA9 "
+            "(les admins, les invitations, publier une version, certifier, la sauvegarde, la restauration), ni Brancher Stripe. Elle commence quand il tape le code "
+            "que tu lui donnes ; le service la tient \xC3\xA0 son heure ; chaque usage est \xC3\xA9" "crit au journal et tu es pr\xC3\xA9venu.");
+    if (pending) {
+        const std::string code = ws().derogationCode(d.id);
+        bl.pair("En attente du code", (code.empty() ? std::string("?") : formatDerogationCode(code)) + " (valable jusqu'\xC3\xA0 " +
+                                          clockText(d.localTime(d.validUntil, now), now) + ") \xE2\x80\x94 " + d.adminName + ", " + durationText(d.duration),
+                ui::Tone::Warning);
+        bl.note("Donne-lui ce code de vive voix (au t\xC3\xA9l\xC3\xA9phone) : il le tape dans XPG Admin. 5 codes faux l'annulent ; R\xC3\xA9voquer l'arr\xC3\xAAte.",
+                ui::Tone::Warning);
+    } else if (d.exists())
         bl.pair(active ? "En cours" : "La derni\xC3\xA8re", d.adminName + " \xE2\x80\x94 " + derogationText(d, now) +
                                                              (d.uses ? " \xC2\xB7 utilis\xC3\xA9" "e " + std::to_string(d.uses) + " fois" : std::string()),
                 active ? ui::Tone::Warning : ui::Tone::Muted);
     else
         bl.pair("En cours", d.known ? std::string("aucune") : std::string("aucune connue (le regard du service la relit toutes les 15 s)"), ui::Tone::Muted);
-    if (active) bl.row({grantDerogation_, revokeDerogation_});
+    if (active || pending) bl.row({grantDerogation_, revokeDerogation_});
     else bl.row({grantDerogation_});
     bl.note("L'admin se connecte \xC3\xA0 Cloudflare avec SON compte (invite-le comme membre du tien) : jamais un jeton partag\xC3\xA9.");
     bl.end();
@@ -2145,8 +2166,9 @@ void ServicePage::onLayout() {
     tickDerogation();   // 1.47.0 : avant de poser le corps (la page relue a la bonne heure)
     const auto r = bounds();
     const ui::Fonts f{};
-    subtitle_ = wrapText("Ton service des licences (un Worker Cloudflare \xC3\xA0 ton nom) : il active les licences en ligne par un code, tient les licences "
-                         "flottantes, re\xC3\xA7oit les demandes des clients et garde l'archive, chiffr\xC3\xA9" "e, pour tes autres PC Admin.",
+    subtitle_ = wrapText(pc_ ? std::string(pcSubtitle())   // 1.52.0 : Mon compte > Ce PC
+                             : std::string("Ton service des licences (un Worker Cloudflare \xC3\xA0 ton nom) : il active les licences en ligne par un code, tient les licences "
+                                           "flottantes, re\xC3\xA7oit les demandes des clients et garde l'archive, chiffr\xC3\xA9" "e, pour tes autres PC Admin."),
                          f.ui, std::max(200.f, r.w - kMarginLeft - kMarginRight));
     headerH_ = 16.f + ui::lineHeight(f.title) + 6.f + static_cast<float>(subtitle_.size()) * (ui::lineHeight(f.ui) + 2.f) + 10.f;
     scroll_->setBounds({r.x, r.y + headerH_, r.w, std::max(0.f, r.h - headerH_)});
@@ -2174,8 +2196,11 @@ void ServicePage::onPaint(const ui::PaintContext& ctx) {
     r.fillRect({b.x, b.y + headerH_ - 1.f, b.w, 1.f}, th.color.border);
 }
 
+#include "PageServicePc.inl"   // 1.52.0 : Mon compte > Ce PC (XPG Admin sans derogation)
+
 } // namespace
 
 PagePtr makeServicePage(ShellHost host) { return std::make_unique<ServicePage>(std::move(host)); }
+PagePtr makePcPage(ShellHost host) { return std::make_unique<ServicePage>(std::move(host), true); }   // 1.52.0
 
 } // namespace license_admin::gui

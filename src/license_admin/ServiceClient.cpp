@@ -758,6 +758,14 @@ void readAdminWatch(const Value& reply, AdminWatch& out) {
             out.derogationEnd = d->integer("fin");
             out.derogationRevoked = d->integer("revoquee");
             out.derogationUses = d->integer("usages");
+            // 1.52.0 : le format 2 (un service d'avant : format 1, rien de plus)
+            out.derogationFormat = d->integer("format", 1);
+            out.derogationRight = clean(d->str("droit"), 20);
+            out.derogationDuration = d->integer("duree");
+            out.derogationValidUntil = d->integer("valable");
+            out.derogationTriesLeft = d->integer("essais_restants");
+            out.derogationCancelled = d->integer("annulee");
+            out.derogationReason = clean(d->str("raison"), 20);
         }
     }
     out.rights.clear();

@@ -19,6 +19,7 @@
 //      le kit qu'il porte) : un bandeau, avec << Deployer le service >>.
 //  Des demandes (.xpgreq) glissees sur la page ouvrent l'assistant avec elles.
 // =============================================================================
+#include "ClassicView.hpp"   // 1.52.0 : XPG Admin, Mon compte et Ce PC
 #include "Page.hpp"
 #include "StatsKit.hpp"   // 1.47.0 : la rangee de courbes et la petite carte du globe
 
@@ -364,7 +365,7 @@ public:
         sync_->setTooltip("La page Service en ligne : l'archive, la cl\xC3\xA9 du service et son certificat.");
         links_ += newLicence_->clicked->connect([this] { openWizard({}); });
         links_ += noteRequests_->clicked->connect([this] { askRequests(); });
-        links_ += sync_->clicked->connect([this] { host_.navigate("service"); });
+        links_ += sync_->clicked->connect([this] { host_.navigate(classic::servicePage(ws())); });   // 1.52.0 : XPG Admin, Ce PC
 
         // 1.49.0 : les deux seuls gestes de l'Admin+ sans la cle de l'editeur (docs/ADMINS.md, par. 12)
         createKey_ = addButton("Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur\xE2\x80\xA6", "tableau.creer-cle", ui::Button::Style::Primary, ui::Icon::Lock);
@@ -379,9 +380,10 @@ public:
         becomeAdmin_->setTooltip("L'admin+ t'a invit\xC3\xA9 : tape ton code d'invitation ; ta cl\xC3\xA9 na\xC3\xAEt sur ce PC et tu es admin.");
         myFingerprint_ = addButton("O\xC3\xB9 en est mon ajout", "tableau.voir-empreinte", ui::Button::Style::Default, ui::Icon::User);
         toService_ = addButton("Recevoir l'archive", "tableau.aller-service", ui::Button::Style::Primary, ui::Icon::Globe);
-        links_ += becomeAdmin_->clicked->connect([this] { host_.navigate("admins"); });
-        links_ += myFingerprint_->clicked->connect([this] { host_.navigate("admins"); });
-        links_ += toService_->clicked->connect([this] { host_.navigate("service"); });
+        // 1.52.0 : XPG Admin - le code d'invitation et l'ajout sont dans Mon compte, l'archive dans Mon compte > Ce PC
+        links_ += becomeAdmin_->clicked->connect([this] { host_.navigate(classic::accountPage()); });
+        links_ += myFingerprint_->clicked->connect([this] { host_.navigate(classic::accountPage()); });
+        links_ += toService_->clicked->connect([this] { host_.navigate(classic::servicePage(ws())); });
         // 1.45.0 : le service en ligne a mettre a jour - le deployer d'ici (le dialogue de Service en ligne).
         deploy_ = addButton("D\xC3\xA9ployer le service", "tableau.deployer", ui::Button::Style::Primary, ui::Icon::ArrowUp);
         deploy_->setTooltip("Lance le kit install\xC3\xA9 avec l'Admin : ton service part \xC3\xA0 jour sur ton compte Cloudflare (la sortie s'affiche en direct).");
@@ -478,7 +480,7 @@ public:
             // de l'editeur (la creer, la restaurer). 1.51.0 : plus de demande - le code d'invitation fait l'admin.
             hintKind_ = 1;
             hint_ = license_admin::classique()
-                        ? std::string("Pas encore de cl\xC3\xA9 d'admin sur ce poste : l'admin+ t'a invit\xC3\xA9 ? Tape ton code d'invitation (Administrateurs) : "
+                        ? std::string("Pas encore de cl\xC3\xA9 d'admin sur ce poste : l'admin+ t'a invit\xC3\xA9 ? Tape ton code d'invitation (Mon compte) : "
                                       "accept\xC3\xA9, tu es admin. Sans cl\xC3\xA9, rien ne se signe.")
                         : std::string("Ce programme est celui de l'admin+. Un admin installe XPG Admin, re\xC3\xA7u avec son invitation. Pour commencer : "
                                       "cr\xC3\xA9" "e la cl\xC3\xA9 de l'\xC3\xA9" "diteur (le premier PC), ou restaure sa sauvegarde. Sans cl\xC3\xA9, rien ne se signe.");
@@ -491,7 +493,7 @@ public:
             hint_ = w.whyNot("licence_creer");
         } else if (!w.hasRegistry()) {
             hintKind_ = role == Role::Admin ? 5 : 2;
-            hint_ = role == Role::Admin ? "Il manque le registre (les offres) : il arrive avec l'archive de l'admin+ (Service en ligne \xE2\x80\xBA Recevoir l'archive)."
+            hint_ = role == Role::Admin ? "Il manque le registre (les offres) : il arrive avec l'archive de l'admin+ (" + classic::serviceName(w) + " \xE2\x80\xBA L'archive en ligne)."
                                         : "Il manque le registre (les \xC3\xA9" "ditions et les fonctionnalit\xC3\xA9s) : signe-le dans \xC3\x89" "ditions avant la premi\xC3\xA8re licence.";
         }
         const bool classic = license_admin::classique();   // 1.49.0
@@ -506,7 +508,9 @@ public:
             const deployer::VersionCheck ver = serviceVersion(w);
             serviceNote_ = ver.outdated ? deployer::outdatedMessage(ver) : std::string();
             deploy_->setVisibility(serviceNote_.empty() ? ui::Visibility::Collapsed : ui::Visibility::Visible);
-            deploy_->setEnabled(!deployer::running());
+            deploy_->setEnabled(!deployer::running() && w.mayManageService());   // 1.52.0 : XPG Admin sans derogation : gris, il dit pourquoi
+            if (!w.mayManageService()) deploy_->setTooltip(w.whyNotService());
+            sync_->setText(classic::managementOnly(w) ? "Ce PC" : "Service en ligne");
         }
         // 1.44.0 : le droit << licence_creer >> (un admin qui ne l'a pas : le bouton dit pourquoi).
         newLicence_->setEnabled(w.can("licence_creer") && w.hasRegistry());

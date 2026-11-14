@@ -125,10 +125,15 @@ const std::vector<ActionType> kActions = {
     {"reinitialisation", "Repartir de z\xC3\xA9ro (r\xC3\xA9initialisation par l'admin+)", "admins", Level::Critical, true, true},   // 1.49.0 : le service l'ecrit
     // 1.47.0 : la derogation << Gerer le service >> (docs/ADMINS.md, par. 11) - accordee, revoquee par l'admin+ ; utilisee
     // et finie : le service les ecrit (signees par sa cle), l'admin+ est prevenu tout de suite d'un usage.
-    {"derogation_accorder", "Accorder une d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB", "admins", Level::Critical, true, false},
+    {"derogation_accorder", "Accorder une d\xC3\xA9rogation", "admins", Level::Critical, true, false},   // 1.52.0 : << tout >> (avant : << Gerer le service >>)
     {"derogation_revoquer", "R\xC3\xA9voquer une d\xC3\xA9rogation", "admins", Level::High, false, false},
-    {"derogation_utilisee", "D\xC3\xA9rogation utilis\xC3\xA9" "e (g\xC3\xA9rer le service)", "admins", Level::Critical, true, true},
+    {"derogation_utilisee", "D\xC3\xA9rogation utilis\xC3\xA9" "e", "admins", Level::Critical, true, true},
     {"derogation_expiree", "D\xC3\xA9rogation termin\xC3\xA9" "e", "admins", Level::Medium, false, true},
+    // 1.52.0 : la derogation << tout >>, activee par un code (le service les ecrit, jamais le code) - activee : l'admin+ est
+    // prevenu tout de suite, comme d'un usage ; un code faux (5 au plus) ; annulee (5 codes faux, ou pas tape a temps).
+    {"derogation_activee", "D\xC3\xA9rogation activ\xC3\xA9" "e (le code tap\xC3\xA9)", "admins", Level::Critical, true, true},
+    {"derogation_code_refuse", "Code de d\xC3\xA9rogation refus\xC3\xA9", "admins", Level::High, false, true},
+    {"derogation_annulee", "D\xC3\xA9rogation annul\xC3\xA9" "e (codes faux, ou pas tap\xC3\xA9 \xC3\xA0 temps)", "admins", Level::High, true, true},
     {"signature_refusee", "Signature refus\xC3\xA9" "e (certificat r\xC3\xA9voqu\xC3\xA9)", "admins", Level::Critical, true, true},
     {"autre_pc", "Connexion depuis un nouveau PC", "admins", Level::High, true, true},
     {"demande_admin", "Demande pour devenir admin (avant la 1.51)", "admins", Level::High, true, true},   // 1.51.0 : plus ecrite (les lignes d'avant)

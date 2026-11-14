@@ -960,10 +960,18 @@ public:
     // Ce que l'application a relu (GET /admin/etat, GET /admin/derogation) ; la coquille l'adopte sur le fil de l'interface.
     void adoptDerogation(const Derogation& d);
     void adoptDerogation(const online::AdminWatch& watch);
-    // LENT. L'admin+ : accorder a un admin de la liste (`hours` : 1, 4, 24 ou 72 ; une nouvelle remplace l'ancienne),
-    // revoquer celle en place. Une ligne au journal (derogation_accorder, derogation_revoquer).
-    [[nodiscard]] OpResult grantDerogation(const std::string& adminKeyHex, int hours, Derogation* out = nullptr) const;
+    // LENT. L'admin+ : accorder a un admin de la liste (une nouvelle remplace l'ancienne), revoquer celle en place (en
+    // attente du code ou en cours). Une ligne au journal (derogation_accorder, derogation_revoquer).
+    // 1.52.0 : le format 2 - << tout >>, `duration` de 10 min a 72 h (secondes), elle commence quand l'admin tape le code
+    // (dans l'heure) ; le code n'est ni dans le resultat ni au journal : derogationCode(id) le retire de la cle.
+    [[nodiscard]] OpResult grantDerogation(const std::string& adminKeyHex, Seconds duration, Derogation* out = nullptr) const;
     [[nodiscard]] OpResult revokeDerogation(Derogation* out = nullptr) const;
+    // 1.52.0 : l'admin+ - le code de la derogation `id` (8 chiffres), retire de la cle de l'editeur de ce poste (rien
+    // n'est garde) ; vide : pas l'admin+. A montrer a l'ecran seulement, jamais dans un journal.
+    [[nodiscard]] std::string derogationCode(const std::string& id) const;
+    // LENT. 1.52.0 : un admin tape le code que l'admin+ voit sur son PC (POST /admin/derogation/activer) ; `id` vide : sa
+    // derogation relue d'abord. Refuse : la phrase du service (<< Code faux : il te reste 4 essais. >>, trop tard, annulee).
+    [[nodiscard]] OpResult activateDerogation(const std::string& id, const std::string& typedCode, Derogation* out = nullptr) const;
     // LENT. Relire (l'admin+ : celle en place ; un admin : la sienne) ; son document verifie (la cle de l'editeur).
     [[nodiscard]] OpResult readDerogation(Derogation& out) const;
     // LENT. Un admin, AVANT un geste qui gere le service (`action` : deployer, connexion_cloudflare, adresse, secours,

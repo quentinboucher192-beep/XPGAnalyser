@@ -36,6 +36,7 @@
 // =============================================================================
 #include "AdminsBoard.hpp"   // 1.47.0 : les pages des admins (planches 01 a 05)
 #include "AdminsKit.hpp"
+#include "ClassicView.hpp"   // 1.52.0 : XPG Admin sous derogation (lire, jamais ajouter)
 #include "ListKit.hpp"
 #include "Page.hpp"
 #include "PcPicker.hpp"   // 1.51.0 : chercher le PC d'un futur admin
@@ -736,7 +737,7 @@ public:
         cardRetire_ = &button(*this, "Retirer\xE2\x80\xA6", "admins.fiche.retirer", ui::Button::Style::Danger, ui::Icon::User);
         // 1.47.0 (agent S) : la derogation << Gerer le service >> a cet admin (DerogationDialog.cpp)
         cardDerog_ = &button(*this, "D\xC3\xA9rogation\xE2\x80\xA6", "admins.fiche.derogation", ui::Button::Style::Default, ui::Icon::Lock);
-        cardDerog_->setTooltip("G\xC3\xA9rer le service : \xC3\xA0 cet admin, pour un temps court (1 h \xC3\xA0 72 h), r\xC3\xA9vocable");
+        cardDerog_->setTooltip("Tout, comme toi : \xC3\xA0 cet admin, pour un temps court (10 min \xC3\xA0 72 h), quand il tape le code que tu lui donnes ; r\xC3\xA9vocable");   // 1.52.0
         for (int i = 0; i < 7; ++i) {
             anchors_[i] = &adopt(*this, std::make_unique<statskit::TabButton>(kAnchorLabels[i], "admins.fiche.ancre." + std::to_string(i), ui::Icon::None));
             links_ += anchors_[i]->clicked->connect([this, i] {
@@ -1360,7 +1361,25 @@ private:
             sub += " \xC2\xB7 vu " + ab::ago(data_->now, f->usage.lastSeen);
             if (!f->usage.city.empty()) sub += " \xC3\xA0 " + f->usage.city + (f->usage.country.empty() ? "" : ", " + f->usage.country);
         }
-        (void)ab::text(r, av.right() + 16.f, cardTop_ + 38.f, sub, kF14, ab::kMuted, cardHeadRight_ - av.right() - 16.f);
+        // 1.52.0 (agent D) : sa derogation - en attente, le code (retire de la cle de l'editeur), sinon ce qu'il en reste
+        const Derogation& dg = ws().derogation();
+        const Seconds dnow = ws().now();
+        std::string dline;
+        if (ws().role() == Role::Plus && p->kind == ab::Person::Kind::Admin && dg.forKey(cardKey_)) {
+            if (dg.pendingAt(dnow)) {
+                const std::string code = ws().derogationCode(dg.id);
+                dline = "D\xC3\xA9rogation en attente du code : " + (code.empty() ? std::string("?") : formatDerogationCode(code)) + " (valable jusqu'\xC3\xA0 " +
+                        clockText(dg.localTime(dg.validUntil, dnow), dnow) + ")";
+            } else if (dg.activeAt(dnow)) {
+                dline = "D\xC3\xA9rogation en cours : " + derogationText(dg, dnow);
+            }
+        }
+        if (dline.empty()) {
+            (void)ab::text(r, av.right() + 16.f, cardTop_ + 38.f, sub, kF14, ab::kMuted, cardHeadRight_ - av.right() - 16.f);
+        } else {
+            (void)ab::text(r, av.right() + 16.f, cardTop_ + 34.f, sub, kF13, ab::kMuted, cardHeadRight_ - av.right() - 16.f);
+            (void)ab::text(r, av.right() + 16.f, cardTop_ + 53.f, dline, gfx::semibold(kF13), ab::kAmber, cardHeadRight_ - av.right() - 16.f);
+        }
     }
 
     // ------------------------------------------------------------------ les donnees
@@ -1564,6 +1583,10 @@ private:
         add_->setEnabled(ready && !busy);
         add_->setTooltip(ready ? std::string("Son nom, son profil, le PC de son Studio : son code d'invitation fait de lui un admin d\xC3\xA8s l'installation de XPG Admin.")
                                : std::string("Il faut d'abord le service des licences (Service en ligne) : le code d'invitation y est v\xC3\xA9rifi\xC3\xA9."));
+        if (ws().role() != Role::Plus) {   // 1.52.0 : XPG Admin sous derogation - la liste se lit ; ajouter, inviter : la cle de l'editeur
+            add_->setEnabled(false);
+            add_->setTooltip(classic::kEditorKeyOnly);
+        }
         reload_->setEnabled(ready && !fetching_);
         const bool configured = ws().service().configured;
         send_->setEnabled(configured && !busy);
@@ -1708,6 +1731,13 @@ private:
         reload_->setBounds({bx - bw, titleY_ + 4.f, bw, 38.f});
         reload_->setVisibility(ui::Visibility::Visible);
         bx -= bw + 10.f;
+        // 1.52.0 : XPG Admin sous derogation - << Ajouter un admin... >> se voit, gris : il dit pourquoi (la cle de l'editeur)
+        if (classic::derogationOpen(ws())) {
+            const float aw = buttonWidth(*add_, 150.f);
+            add_->setBounds({bx - aw, titleY_ + 4.f, aw, 38.f});
+            add_->setVisibility(ui::Visibility::Visible);
+            bx -= aw + 10.f;
+        }
         // 1.47.0 : sa fiche (un admin de la liste, pas retire : ses chiffres)
         const bool mine = ws().role() == Role::Admin && data_->person(ws().adminKey().keyHex);
         if (mine) {

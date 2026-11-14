@@ -262,10 +262,13 @@ std::string usage() {
            "                                                 l'adresse de ce poste ; sans adresse, la cherche (\xC3\xA0 c\xC3\xB4t\xC3\xA9 du programme, le\n"
            "                                                 Studio de ce PC) ; --fichier : celle-ci (un fichier modifi\xC3\xA9 est refus\xC3\xA9)\n"
            "  service-connexion-exporter --sortie F.xpgsvc   le certificat v\xC3\xA9rifi\xC3\xA9 du service (\xC3\xA0 c\xC3\xB4t\xC3\xA9 de l'installateur de l'Admin)\n"
-           "  derogation-accorder --cle HEX --heures 1|4|24|72\n"
-           "                                                 l'admin+ : \xC2\xAB G\xC3\xA9rer le service \xC2\xBB \xC3\xA0 cet admin, pour un temps court\n"
-           "  derogation-revoquer                            l'admin+ : la d\xC3\xA9rogation en cours s'arr\xC3\xAAte tout de suite\n"
-           "  derogation-etat                                la d\xC3\xA9rogation (l'admin+ : celle en place ; un admin : la sienne)\n"
+           "  derogation-accorder --cle HEX (--duree 2h30 | --minutes N | --heures N)\n"
+           "                                                 l'admin+ (1.52.0) : une d\xC3\xA9rogation \xC2\xAB tout \xC2\xBB \xC3\xA0 cet admin, de 10 min \xC3\xA0 72 h ;\n"
+           "                                                 elle commence quand il tape le code, montr\xC3\xA9 ici (\xC3\xA0 donner de vive voix)\n"
+           "  derogation-revoquer                            l'admin+ : la d\xC3\xA9rogation (en attente du code ou en cours) s'arr\xC3\xAAte\n"
+           "  derogation-etat                                la d\xC3\xA9rogation (l'admin+ : celle en place, et son code tant qu'il attend ;\n"
+           "                                                 un admin : la sienne)\n"
+           "  derogation-activer --code 12345678             un admin (1.52.0) : le code que l'admin+ voit sur son PC\n"
            "  admin-lien [--fichier SETUP.exe]               l'admin+ : un lien de 48 h vers l'installateur de l'Admin (celui de la\n"
            "                                                 derni\xC3\xA8re version publi\xC3\xA9" "e, sinon ce fichier) et un vers la connexion au service\n"
            "  --version\n\n"
@@ -373,6 +376,37 @@ int oneLine(const license_admin::gui::OpResult& r) {
     }
     complain(r.message);
     return 1;
+}
+
+// 1.52.0 : une duree de derogation - << 2h30 >>, << 2 h 30 >>, << 4h >>, << 90min >>, << 90m >> ; -1 : illisible ou hors de
+// 10 min a 72 h.
+long long derogationSeconds(const std::string& text) {
+    std::string t;
+    for (const char c : text)
+        if (c != ' ') t += static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c);
+    long long h = 0, m = 0;
+    std::size_t i = 0;
+    const auto number = [&](long long& v) {
+        const std::size_t from = i;
+        while (i < t.size() && t[i] >= '0' && t[i] <= '9' && i - from < 6) v = v * 10 + (t[i++] - '0');
+        return i > from;
+    };
+    long long first = 0;
+    if (!number(first)) return -1;
+    if (i < t.size() && t[i] == 'h') {
+        h = first;
+        ++i;
+        if (i < t.size() && !number(m)) return -1;
+        if (i < t.size() && t[i] == 'm') i = t.size();   // << 2h30m >>, << 2h30min >>
+    } else if (t.compare(i, std::string::npos, "min") == 0 || t.compare(i, std::string::npos, "m") == 0) {
+        m = first;
+        i = t.size();
+    } else {
+        return -1;
+    }
+    if (i != t.size() || m >= 60 * 73) return -1;
+    const long long s = h * 3600 + m * 60;
+    return s >= 600 && s <= 72 * 3600 ? s : -1;
 }
 
 // 1.47.0 : les commandes des statistiques et du globe (le Workspace ; une ligne par chiffre, ou --json : la reponse du
@@ -572,13 +606,42 @@ int runWorkspaceCommand(const Args& a, const std::string& folder) {
         return oneLine(ws.exportConnection(a.one("--sortie")));
     }
     if (a.command == "derogation-accorder") {
-        if (!need("--cle") || !need("--heures")) return 2;
-        return oneLine(ws.grantDerogation(a.one("--cle"), std::atoi(a.one("--heures").c_str())));
+        if (!need("--cle")) return 2;
+        // 1.52.0 : --duree 2h30 (ou 150min, 4h), --minutes N, --heures N ; de 10 min a 72 h
+        long long seconds = -1;
+        if (!a.one("--duree").empty()) seconds = derogationSeconds(a.one("--duree"));
+        else if (!a.one("--minutes").empty()) seconds = derogationSeconds(a.one("--minutes") + "min");
+        else if (!a.one("--heures").empty()) seconds = derogationSeconds(a.one("--heures") + "h");
+        else {
+            complain("derogation-accorder : la dur\xC3\xA9" "e manque (--duree 2h30, --minutes N ou --heures N)");
+            return 2;
+        }
+        if (seconds <= 0) {
+            complain("derogation-accorder : une dur\xC3\xA9" "e illisible (\xC2\xAB 2h30 \xC2\xBB, \xC2\xAB 90min \xC2\xBB, \xC2\xAB 4h \xC2\xBB ; de 10 min \xC3\xA0 72 h)");
+            return 2;
+        }
+        gui::Derogation d;
+        const auto r = ws.grantDerogation(a.one("--cle"), static_cast<gui::Seconds>(seconds), &d);
+        const int rc = oneLine(r);
+        // le code : sur le terminal de l'admin+ seulement (retire de sa cle ; jamais dans un journal)
+        if (r.ok)
+            if (const std::string code = ws.derogationCode(r.output); !code.empty())
+                say("Code \xC3\xA0 donner \xC3\xA0 " + d.adminName + " (de vive voix) : " + gui::formatDerogationCode(code) + " \xE2\x80\x94 il le tape dans XPG Admin.\n");
+        return rc;
     }
     if (a.command == "derogation-revoquer") return oneLine(ws.revokeDerogation());
     if (a.command == "derogation-etat") {
         gui::Derogation d;
-        return oneLine(ws.readDerogation(d));
+        const auto r = ws.readDerogation(d);
+        const int rc = oneLine(r);
+        if (r.ok && d.pendingAt(ws.now()))   // 1.52.0 : l'admin+ revoit le code tant qu'il attend
+            if (const std::string code = ws.derogationCode(d.id); !code.empty())
+                say("Code \xC3\xA0 donner \xC3\xA0 " + d.adminName + " (de vive voix) : " + gui::formatDerogationCode(code) + "\n");
+        return rc;
+    }
+    if (a.command == "derogation-activer") {   // 1.52.0 : un admin tape le code de l'admin+
+        if (!need("--code")) return 2;
+        return oneLine(ws.activateDerogation({}, a.one("--code")));
     }
     if (a.command == "admins-inscrits") return oneLine(ws.admitInvitedAdmins());   // 1.51.0
     if (a.command == "admin-etat") {
@@ -1752,7 +1815,7 @@ int run(const std::vector<std::string>& argv) {
                                                                 "stats-serie", "stats-mises-a-jour", "stats-admins", "stats-releve", "globe", "globe-direct",
                                                                 // 1.47.0 : la connexion au service, la derogation << Gerer le service >>
                                                                 "service-connexion", "service-connexion-exporter", "derogation-accorder", "admin-lien",
-                                                                "derogation-revoquer", "derogation-etat"};
+                                                                "derogation-revoquer", "derogation-etat", "derogation-activer"};
     if (std::find(kWorkspaceCommands.begin(), kWorkspaceCommands.end(), a.command) != kWorkspaceCommands.end())
         return runWorkspaceCommand(a, folder);
     if (a.command.rfind("github-", 0) == 0 || a.command.rfind("passerelle-", 0) == 0) {

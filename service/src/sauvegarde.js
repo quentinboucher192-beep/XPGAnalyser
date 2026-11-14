@@ -23,6 +23,7 @@
 //  3 ou 4 : elles restent vides, les versions vues sont recopiees des logiciels.
 // =============================================================================
 import { TABLES_SAUVEGARDE_BOUTIQUE } from "./boutique.js";
+import { CONFIG_DEROGATION, derogationPourSauvegarde } from "./derogations.js";
 import { TABLES_SAUVEGARDE_STATS } from "./stats.js";
 import { Erreur, depuisBase64, enc, entier, mal, reponseJson, versBase64 } from "./outils.js";
 
@@ -160,6 +161,8 @@ export const RoutesSauvegarde = {
             for (const r of lot) {
                 const l = {};
                 for (const [k, v] of Object.entries(r)) l[k] = versJson(v);
+                // 1.52.0 : la derogation part sans l'empreinte de son code (derogations.js : jamais rendue)
+                if (table === "config" && l.cle === CONFIG_DEROGATION && typeof l.valeur === "string") l.valeur = derogationPourSauvegarde(l.valeur);
                 const t = enc.encode(JSON.stringify(l)).length + 1;
                 if (lignes.length && taille + t > PAGE_MAX) {
                     plein = true;

@@ -111,7 +111,7 @@ export const ACTIONS_JOURNAL = [
 ];
 // 1.47.0 : derogation_utilisee, derogation_expiree (derogations.js)
 // 1.51.0 : << demande_admin >> n'est plus ecrite (plus de demande d'admin) ; elle reste connue pour les lignes d'avant.
-export const ACTIONS_SERVICE = ["signature_refusee", "autre_pc", "demande_admin", "sauvegarde", "restauration", "derogation_utilisee", "derogation_expiree", "reinitialisation"]; // 1.49.0 : reinitialisation (reinitialiser.js)
+export const ACTIONS_SERVICE = ["signature_refusee", "autre_pc", "demande_admin", "sauvegarde", "restauration", "derogation_utilisee", "derogation_expiree", "reinitialisation", "derogation_activee", "derogation_code_refuse", "derogation_annulee"]; // 1.49.0 : reinitialisation (reinitialiser.js) ; 1.52.0 : le code de la derogation (derogations.js)
 
 // Ce que signe la cle qui ecrit une entree du journal : ce prefixe, puis le texte de l'entree.
 export const PREFIXE_JOURNAL = "XPG-JOURNAL-1\n";

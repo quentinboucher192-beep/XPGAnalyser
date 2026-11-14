@@ -5,6 +5,7 @@
 //  Les places reservees par StatsKit.hpp (statskit::makeStatsGlobeView,
 //  statskit::makeDashboardGlobe) et la sous-page << globe >> (makeGlobePage).
 // =============================================================================
+#include "ClassicView.hpp"   // 1.52.0 : XPG Admin sans derogation, Mon compte > Ce PC
 #include "GlobeStats.hpp"
 
 #include "../../ui/Icons.hpp"
@@ -264,7 +265,7 @@ GlobeStatsView::GlobeStatsView(ShellHost host, bool title) : ui::Widget(title ? 
         }));
     });
     links_ += settings_->clicked->connect([this] {
-        if (host_.navigate) host_.navigate("service");
+        if (host_.navigate) host_.navigate(classic::servicePage(host_.workspace()));   // 1.52.0 : XPG Admin sans derogation, Mon compte > Ce PC
     });
     links_ += retry_->clicked->connect([this] { reload(); });
     syncState();

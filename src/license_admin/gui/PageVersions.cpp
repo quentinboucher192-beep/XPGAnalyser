@@ -35,6 +35,7 @@
 //  modifiables) ne change pas.
 // =============================================================================
 #include "AdminsKit.hpp"
+#include "ClassicView.hpp"   // 1.52.0 : XPG Admin sous derogation (lire, jamais publier)
 #include "ListKit.hpp"   // 1.47.0 : la barre de filtres, le clic droit, le depliage
 #include "Page.hpp"
 
@@ -254,7 +255,7 @@ public:
     [[nodiscard]] std::string title() const override { return "Versions"; }
 
     void refresh() override {
-        if (ws().role() == Role::Plus && ws().service().ready() && !fetching_ && (lastFetch_ < 0 || steadySeconds() - lastFetch_ > 60.0)) fetch(false);
+        if (mayRead() && ws().service().ready() && !fetching_ && (lastFetch_ < 0 || steadySeconds() - lastFetch_ > 60.0)) fetch(false);
         update();
     }
 
@@ -529,20 +530,29 @@ private:
         return out;
     }
 
+    // 1.52.0 : lire les versions - l'admin+, ou XPG Admin sous derogation (le service en est l'arbitre) ; publier : l'admin+ seul.
+    [[nodiscard]] bool mayRead() const { return ws().role() == Role::Plus || classic::derogationOpen(ws()); }
+
     void update() {
         const bool plus = ws().role() == Role::Plus;
         const bool ready = ws().service().ready();
         const bool busy = host_.busy && host_.busy();
         open_->setEnabled(plus);
+        if (!plus) open_->setTooltip(classic::kEditorKeyOnly);   // 1.52.0 : XPG Admin sous derogation - lire, jamais publier
         for (ui::Widget* wd : std::initializer_list<ui::Widget*>{pickStudios_, pickAdmin_, pickPlus_, notes_, important_, cancel_, sign_}) show(wd, panel_);
         open_->setText(panel_ ? std::string("Fermer la publication") : std::string("Publier une version\xE2\x80\xA6"));
-        reload_->setEnabled(plus && ready && !fetching_);
+        reload_->setEnabled(mayRead() && ready && !fetching_);
         bool ok = false;
         (void)verdict(ok);
         const std::string v = versionToPublish();
         sign_->setText(v.empty() ? std::string("Signer et publier") : "Signer et publier la " + v);
         sign_->setEnabled(plus && ready && ok && !busy && !publishing_);
-        sign_->setTooltip(!ready ? std::string("Il faut le service des licences (Service en ligne).") : std::string("La cl\xC3\xA9 de l'\xC3\xA9" "diteur signe ; les 2 fichiers partent sur le service."));
+        sign_->setTooltip(!plus    ? std::string(classic::kEditorKeyOnly)   // 1.52.0
+                          : !ready ? std::string("Il faut le service des licences (Service en ligne).") : std::string("La cl\xC3\xA9 de l'\xC3\xA9" "diteur signe ; les 2 fichiers partent sur le service."));
+        for (ui::Button* rb : resendBtns_) {   // 1.52.0 : renvoyer un fichier - la cle de l'editeur signe
+            rb->setEnabled(plus);
+            if (!plus) rb->setTooltip(classic::kEditorKeyOnly);
+        }
         pickStudios_->setEnabled(!publishing_);
         pickAdmin_->setEnabled(!publishing_);
         pickPlus_->setEnabled(!publishing_);
@@ -564,7 +574,7 @@ private:
     }
 
     void fetch(bool loud) {
-        if (fetching_ || ws().role() != Role::Plus || !ws().service().ready()) return;
+        if (fetching_ || !mayRead() || !ws().service().ready()) return;
         fetching_ = true;
         lastFetch_ = steadySeconds();
         const Workspace* w = &ws();
@@ -806,7 +816,7 @@ private:
         for (int i = 0; i < 5; ++i) r.drawText({cols[i], hy}, heads[i], gfx::semibold(kF11), c.textMuted);
         r.fillRect({listRect_.x + 1.f, hy + 22.f, listRect_.w - 2.f, 1.f}, c.gridLine);
         if (!have_ || view_.versions.empty()) {
-            const std::string empty = ws().role() != Role::Plus ? std::string("R\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+.")
+            const std::string empty = !mayRead() ? std::string("R\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+.")
                                       : !ws().service().ready() ? std::string("Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 (Service en ligne).")
                                       : !have_ ? std::string("Pas encore relev\xC3\xA9" "es.")
                                                : std::string("Aucune version publi\xC3\xA9" "e pour l'instant : \xC2\xAB Publier une version\xE2\x80\xA6 \xC2\xBB.");

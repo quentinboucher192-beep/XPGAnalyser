@@ -6,6 +6,7 @@
 // =============================================================================
 #include "Shell.hpp"
 #include "ListKit.hpp"   // 1.47.0 : la memoire des listes (Mes filtres)
+#include "ClassicView.hpp"   // 1.52.0 : XPG Admin, la gestion seulement (la derogation ouvre tout)
 
 #include "../../core/Json.hpp"
 #include "../../core/SystemOpen.hpp"
@@ -315,7 +316,8 @@ protected:
         if (live) ctx.r.fillRoundedRect({x - 3.f, y + 2.f, 14.f, 14.f}, kLive.withAlpha(46), 7.f);
         ctx.r.fillRoundedRect({x, y + 5.f, 8.f, 8.f}, dot, 4.f);
         const FontId ft = gfx::semibold(kF13);
-        ctx.r.drawText({x + 16.f, y}, "Service en ligne", ft, kNightWhite);
+        // 1.52.0 : XPG Admin sans derogation - pas de page Service en ligne : la carte dit le service (un clic : Ce PC)
+        ctx.r.drawText({x + 16.f, y}, classic::managementOnly(shell_.workspace()) ? "Le service" : "Service en ligne", ft, kNightWhite);
         y += ctx.r.lineHeight(ft) + 3.f;
         std::string line;
         if (!s.problem.empty()) line = "R\xC3\xA9glage illisible";
@@ -344,7 +346,7 @@ public:
             items_.push_back(&static_cast<NavItem&>(addChild(std::move(item))));
         }
         card_ = &static_cast<ServiceCard&>(addChild(std::make_unique<ServiceCard>(shell)));
-        links += card_->clicked->connect([this] { shell_.navigate("service"); });
+        links += card_->clicked->connect([this] { shell_.navigate(classic::servicePage(shell_.workspace())); });   // 1.52.0 : XPG Admin, Ce PC
         folder_ = &static_cast<NightButton&>(addChild(std::make_unique<NightButton>("Dossier du poste", "shell.dossier")));
         // 1.47.0 : le bloc d'identite (le logo, le nom, le role) mene a << Mon compte >>.
         identity_ = &static_cast<IdentityButton&>(addChild(std::make_unique<IdentityButton>()));
@@ -372,7 +374,14 @@ protected:
         const Rect b = bounds();
         // La hauteur d'une entree : 36 (la maquette), moins si la fenetre est basse (toutes restent visibles).
         int sections = 0, shown = 0;
-        for (const auto& e : Shell::entries()) sections += sectionBefore(e.id) ? 1 : 0;
+        // 1.52.0 : un groupe dont aucune entree n'est montree (XPG Admin sans derogation) n'a pas de titre
+        std::vector<bool> capOn(items_.size(), false);
+        for (std::size_t i = 0; i < items_.size(); ++i) {
+            if (!sectionBefore(Shell::entries()[i].id)) continue;
+            for (std::size_t j = i; j < items_.size() && (j == i || !sectionBefore(Shell::entries()[j].id)); ++j)
+                if (items_[j]->visibility() != ui::Visibility::Collapsed) capOn[i] = true;
+            sections += capOn[i] ? 1 : 0;
+        }
         for (auto* it : items_) shown += it->visibility() == ui::Visibility::Collapsed ? 0 : 1;   // 1.44.0 : selon le role
         identity_->setBounds({b.x + 10.f, b.y + 14.f, b.w - 20.f, 52.f});   // 1.47.0 : le bloc d'identite
         const float top = b.y + 84.f, n = static_cast<float>(std::max(1, shown));
@@ -385,7 +394,7 @@ protected:
         float y = top;
         captions_.clear();
         for (std::size_t i = 0; i < items_.size(); ++i) {
-            if (const char* cap = sectionBefore(Shell::entries()[i].id)) {
+            if (const char* cap = sectionBefore(Shell::entries()[i].id); cap && capOn[i]) {
                 captions_.push_back({y + capH - 18.f, cap});
                 y += capH;
             }
@@ -513,6 +522,15 @@ public:
     TopBar(Shell& shell, core::ConnectionScope& links) : ui::Widget("shell.haut"), shell_(shell) {
         key_ = &static_cast<Chip&>(addChild(std::make_unique<Chip>("shell.cle")));
         sync_ = &static_cast<Chip&>(addChild(std::make_unique<Chip>("shell.synchro")));
+        // 1.52.0 (agent D) : la derogation recue (ambre : taper le code) ou qui court (son compte a rebours)
+        derog_ = &static_cast<Chip&>(addChild(std::make_unique<Chip>("shell.derogation")));
+        derog_->setVisibility(ui::Visibility::Collapsed);
+        links += derog_->clicked->connect([this] {
+            bool pending = false;
+            (void)shell_.derogationChipText(&pending);
+            if (pending) shell_.openDerogationCode();
+            else shell_.navigate("compte");
+        });
         // 1.41.0 : l'action principale de l'Admin, toujours en haut a droite (la maquette).
         auto nl = std::make_unique<ui::Button>("Nouvelle licence", "shell.nouvelle-licence");
         nl->setStyle(ui::Button::Style::Primary);
@@ -521,9 +539,10 @@ public:
         // 1.44.0 : un admin (sa cle d'admin) va a Administrateurs, l'admin+ et un poste sans cle a Parametres de securite.
         links += key_->clicked->connect([this] {
             const Role r = shell_.workspace().role();
-            shell_.navigate(r == Role::Plus || r == Role::None ? "securite" : "admins");
+            if (license_admin::classique()) shell_.navigate("compte");   // 1.52.0 : XPG Admin - sa cle, son code : Mon compte
+            else shell_.navigate(r == Role::Plus || r == Role::None ? "securite" : "admins");
         });
-        links += sync_->clicked->connect([this] { shell_.navigate("service"); });
+        links += sync_->clicked->connect([this] { shell_.navigate(classic::servicePage(shell_.workspace())); });   // 1.52.0 : XPG Admin, Ce PC
         links += newLicence_->clicked->connect([this] {
             if (shell_.workspace().can("licence_creer") && shell_.workspace().hasRegistry()) shell_.openDialog(makeLicenceWizard(shell_.host(), {}));
         });
@@ -532,20 +551,36 @@ public:
     // L'etat a montrer (a chaque image : un travail lent commence ou finit).
     void update() {
         const Workspace& w = shell_.workspace();
+        {   // 1.52.0 (agent D) : la pastille de la derogation
+            bool pending = false;
+            const std::string t = shell_.derogationChipText(&pending);
+            const auto want = t.empty() ? ui::Visibility::Collapsed : ui::Visibility::Visible;
+            if (derog_->visibility() != want) {
+                derog_->setVisibility(want);
+                invalidateLayout();
+            }
+            if (!t.empty()) {
+                derog_->set(t, Tone::Warning, pending ? ui::Icon::Warning : ui::Icon::Lock, false, false);
+                derog_->setTooltip(pending ? std::string("L'admin+ t'a envoy\xC3\xA9 une d\xC3\xA9rogation : clic, tape le code qu'il voit sur son PC.")
+                                           : std::string("Ta d\xC3\xA9rogation court : tu vois tout comme l'admin+. Clic : Mon compte."));
+            }
+        }
         const auto& k = w.key();
         const Role role = w.role();
         key_->set(shell_.keyStatusText(), shell_.keyStatusTone(), role == Role::Plus || role == Role::Admin ? ui::Icon::Lock : ui::Icon::Unlock, false, false);
-        if (role == Role::Plus || role == Role::None)
+        if (role == Role::None && license_admin::classique())   // 1.52.0 : XPG Admin - son code d'invitation, dans Mon compte
+            key_->setTooltip("Pas encore de cl\xC3\xA9 d'admin sur ce poste : ton code d'invitation la cr\xC3\xA9" "e. Clic : Mon compte.");
+        else if (role == Role::Plus || role == Role::None)
             key_->setTooltip(k.present ? "La cl\xC3\xA9 de l'\xC3\xA9" "diteur : " + k.id + (k.name.empty() ? std::string() : " (" + k.name + ")") + ". Clic : Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9."
                                        : (k.problem.empty() ? std::string("Aucune cl\xC3\xA9 sur ce poste.") : k.problem) + " Clic : Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9.");
-        else   // 1.44.0 : un admin (ou en attente, ou retire) : sa cle d'admin
+        else   // 1.44.0 : un admin (ou en attente, ou retire) : sa cle d'admin ; 1.52.0 : XPG Admin, Mon compte
             key_->setTooltip("Ta cl\xC3\xA9 d'admin : " + w.adminKey().id + (role == Role::Admin ? " \xC2\xB7 " + std::to_string(w.myRights().size()) + " droits sur 13" : std::string()) +
-                             ". Clic : Administrateurs.");
+                             ". Clic : " + classic::accountName() + ".");
         // 1.44.0 : le droit << licence_creer >> (un admin qui ne l'a pas : le bouton dit pourquoi).
         const bool canSign = w.can("licence_creer") && w.hasRegistry();
         newLicence_->setEnabled(canSign);
         newLicence_->setTooltip(canSign ? std::string("L'assistant : le client, l'\xC3\xA9" "dition, les PC (ou une licence en ligne), la dur\xC3\xA9" "e, puis signer.")
-                                : role == Role::None ? std::string(license_admin::classique() ? "Il faut d'abord devenir admin (Administrateurs : ton invitation)."   // 1.49.0
+                                : role == Role::None ? std::string(license_admin::classique() ? "Il faut d'abord devenir admin (Mon compte : ton code d'invitation)."   // 1.49.0 ; 1.52.0
                                                                                       : "Il faut d'abord la cl\xC3\xA9 de l'\xC3\xA9" "diteur (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9).")
                                 : !w.can("licence_creer") ? w.whyNot("licence_creer")
                                              : std::string("Il faut d'abord le registre sign\xC3\xA9 (\xC3\x89" "ditions ; un admin le re\xC3\xA7oit avec l'archive)."));
@@ -565,6 +600,10 @@ public:
                               : s.configured   ? "Le service des licences : " + s.config.url + (certWarn ? std::string(" ; sa cl\xC3\xA9 est \xC3\xA0 certifier ou \xC3\xA0 renouveler") : std::string()) +
                                                      ". Clic : la page Service en ligne."
                                                : std::string("Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9. Clic : la page Service en ligne."));
+            // 1.52.0 : XPG Admin sans derogation - l'adresse, l'archive, le mail de ce PC (Mon compte > Ce PC)
+            if (classic::managementOnly(w) && s.problem.empty())
+                sync_->setTooltip(s.configured ? "Le service des licences : " + s.config.url + ". Clic : Mon compte \xE2\x80\xBA Ce PC (l'adresse, l'archive, le mail)."
+                                               : std::string("Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9. Clic : Mon compte \xE2\x80\xBA Ce PC (son adresse)."));
         }
     }
 
@@ -576,7 +615,8 @@ protected:
         x -= bw;
         newLicence_->setBounds({x, b.y + (b.h - 36.f) * 0.5f, bw, 36.f});
         x -= 12.f;
-        for (Chip* chip : {key_, sync_}) {
+        for (Chip* chip : {key_, sync_, derog_}) {
+            if (chip->visibility() == ui::Visibility::Collapsed) continue;   // 1.52.0 : la derogation, quand il y en a une
             const float w = std::min(chip->wanted(), std::max(120.f, b.w * 0.27f));
             x -= w;
             chip->setBounds({x, b.y + (b.h - 32.f) * 0.5f, w, 32.f});
@@ -628,6 +668,7 @@ private:
     Shell&      shell_;
     Chip*       key_{nullptr};
     Chip*       sync_{nullptr};
+    Chip*       derog_{nullptr};   // 1.52.0 (agent D)
     ui::Button* newLicence_{nullptr};
     float       titleRight_{0.f};
 };
@@ -965,6 +1006,7 @@ const std::vector<Shell::NavEntry>& Shell::subPages() {
         {"client", "Un client", ui::Icon::User, false},   // 1.47.0 : Clients > la fiche d'un client et ses courbes (planche 10)
         {"globe", "Le globe", ui::Icon::Globe, false},   // 1.47.0 : Statistiques > Le globe (PageStatsGlobe.cpp ; la petite carte du tableau de bord y mene)
         {"graphes-essai", "Graphiques (essai)", ui::Icon::Chart, false},   // 1.47.0 : la galerie des graphiques (--page seulement)
+        {"poste", "Ce PC", ui::Icon::Station, false},   // 1.52.0 : Mon compte > Ce PC (XPG Admin : l'adresse, l'archive, le mail ; PageService.cpp)
     };
     return list;
 }
@@ -972,6 +1014,7 @@ const std::vector<Shell::NavEntry>& Shell::subPages() {
 std::string Shell::parentOf(const std::string& pageId) {
     if (pageId == "globe") return "statistiques";   // 1.47.0 : Statistiques > Le globe
     if (pageId == "client") return "clients";       // 1.47.0 : Clients > un client (planche 10)
+    if (pageId == "poste") return "compte";         // 1.52.0 : Mon compte > Ce PC
     return pageId == "droits" ? std::string("admins") : std::string();
 }
 
@@ -979,7 +1022,11 @@ bool Shell::plusOnly(const std::string& pageId) {
     return pageId == "journal" || pageId == "droits" || pageId == "versions";   // 1.51.0 : plus de page Demandes d'admin
 }
 
-bool Shell::pageAllowed(const std::string& pageId) const { return !plusOnly(pageId) || ws_->role() == Role::Plus; }
+bool Shell::pageAllowed(const std::string& pageId) const {
+    // 1.52.0 : XPG Admin - la gestion seulement ; une derogation de l'admin+ qui court : tout, comme lui (ClassicView.hpp)
+    if (license_admin::classique()) return !classic::needsDerogation(pageId) || classic::derogationOpen(*ws_);
+    return !plusOnly(pageId) || ws_->role() == Role::Plus;
+}
 
 Shell::Shell(std::string folder, std::function<Seconds()> clock)
     : menu::WidgetMenu("admin.shell"), ws_(std::make_unique<Workspace>(std::move(folder))) {
@@ -1065,6 +1112,7 @@ Page* Shell::ensurePage(const std::string& id) {
     else if (id == "commandes") p = makeOrdersPage(h);
     else if (id == "revocations") p = makeRevocationsPage(h);
     else if (id == "service") p = makeServicePage(h);
+    else if (id == "poste") p = makePcPage(h);   // 1.52.0 : Mon compte > Ce PC (PageService.cpp, le mode << poste >>)
     else if (id == "historique") p = makeHistoryPage(h);
     else if (id == "securite") p = makeSecurityPage(h);
     else if (id == "admins") p = makeAdminsPage(h);     // 1.44.0
@@ -1109,8 +1157,11 @@ void Shell::navigate(const std::string& requested) {
         return;
     }
     if (!pageAllowed(pageId)) {   // 1.44.0 : le journal des admins, les droits : l'admin+ seul
-        if (license_admin::classique()) {   // 1.49.0 : XPG Admin n'a pas ces pages (un lien, --page)
-            flash("\xC2\xAB " + std::string(entry(pageId)->label) + " \xC2\xBB n'est pas dans XPG Admin : c'est \xC3\xA0 l'admin+ (XPG License Manager Admin).", Tone::Warning);
+        if (license_admin::classique()) {   // 1.49.0 : XPG Admin n'a pas ces pages (un lien, --page) ; 1.52.0 : sans derogation
+            std::string t = "\xC2\xAB " + std::string(entry(pageId)->label) + " \xC2\xBB s'ouvre avec une d\xC3\xA9rogation de l'admin+.";
+            if (pageId == "service") t += " L'adresse du service, l'archive et le mail de ce PC : Mon compte \xE2\x80\xBA Ce PC.";
+            else if (pageId == "admins" || pageId == "securite") t += " Ta cl\xC3\xA9 d'admin, ton code d'invitation : Mon compte.";
+            flash(t, Tone::Warning);
             return;
         }
         flash("\xC2\xAB " + std::string(entry(pageId)->label) + " \xC2\xBB est r\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+ (le poste qui a la cl\xC3\xA9 de l'\xC3\xA9" "diteur).",
@@ -1395,23 +1446,52 @@ bool Shell::autoWatch() {
                      lastLive_ = steadyNow();
                      // 1.47.0 : la derogation << Gerer le service >> (la sienne ; l'admin+ : celle en place) - accordee, finie,
                      // revoquee : l'Admin le dit et les pages le montrent (docs/ADMINS.md, par. 11).
+                     // 1.52.0 (agent D) : la derogation << tout >>, activee par un code - recue en attente du code (XPG Admin :
+                     // l'alerte, le dialogue du code, la barre des taches, la pastille), activee (l'admin+ : << a tape le code >>),
+                     // annulee.
                      if (st->derogationSaid) {
                          const bool manageBefore = ws_->mayManageService();
-                         const std::string idBefore = ws_->derogation().id, stateBefore = ws_->derogation().state;
+                         const Derogation was = ws_->derogation();
                          ws_->adoptDerogation(*st);
+                         const Derogation& d = ws_->derogation();
+                         const Seconds now = ws_->now();
                          const bool manageAfter = ws_->mayManageService();
-                         if (manageAfter != manageBefore || idBefore != ws_->derogation().id || stateBefore != ws_->derogation().state) {
-                             if (ws_->role() == Role::Admin && manageAfter && !manageBefore)
-                                 flash("D\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB accord\xC3\xA9" "e par l'admin+ : " +
-                                           derogationText(ws_->derogation(), ws_->now()) + " (Service en ligne).",
+                         const bool mine = ws_->role() == Role::Admin && d.forKey(ws_->adminKey().keyHex);
+                         if (manageAfter != manageBefore || was.id != d.id || was.state != d.state) {
+                             if (mine && d.pendingAt(now) && derogationNoticed_ != d.id) {
+                                 derogationNoticed_ = d.id;
+                                 const std::string text = "L'admin+ t'a envoy\xC3\xA9 une d\xC3\xA9rogation (" + durationText(d.duration) +
+                                                          ") : tape le code qu'il voit sur son PC.";
+                                 Toast t;
+                                 t.derogation = true;
+                                 t.level = static_cast<int>(licensing::admins::Level::High);
+                                 t.title = text;
+                                 t.line = "Valable jusqu'\xC3\xA0 " + clockText(d.localTime(d.validUntil, now), now) + " \xC2\xB7 Voir : taper le code";
+                                 t.shownAt = steadyNow();
+                                 toasts_.push_back(std::move(t));
+                                 flash(text, Tone::Warning);
+                                 wantCodeDialog_ = true;   // le dialogue du code, une fois (derogationTick)
+                                 if (attention_) attention_();   // Windows : le bouton de la barre des taches clignote
+                             } else if (mine && was.id == d.id && was.state == "en_attente" && d.state == "annulee") {
+                                 flash("Ta d\xC3\xA9rogation est " + derogationText(d, now) + " : demande \xC3\xA0 l'admin+ une nouvelle d\xC3\xA9rogation.", Tone::Warning);
+                             } else if (ws_->role() == Role::Admin && manageAfter && !manageBefore) {
+                                 flash(d.everything() ? "D\xC3\xA9rogation active : tu vois tout comme l'admin+ (" + derogationText(d, now) + ")."
+                                                      : "D\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB accord\xC3\xA9" "e par l'admin+ : " + derogationText(d, now) +
+                                                            " (Service en ligne).",
                                        Tone::Warning);
-                             else if (ws_->role() == Role::Admin && manageBefore && !manageAfter)
-                                 flash("Ta d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB est " +
-                                           std::string(ws_->derogation().state == "revoquee" ? "r\xC3\xA9voqu\xC3\xA9" "e" : "termin\xC3\xA9" "e") +
-                                           " : le service repasse en lecture seule.",
+                             } else if (ws_->role() == Role::Admin && manageBefore && !manageAfter) {
+                                 const std::string how = d.state == "revoquee" ? "r\xC3\xA9voqu\xC3\xA9" "e par l'admin+" : "termin\xC3\xA9" "e";
+                                 flash(d.everything() ? "Ta d\xC3\xA9rogation est " + how + " : XPG Admin repasse \xC3\xA0 la gestion."
+                                                      : "Ta d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB est " + how + " : le service repasse en lecture seule.",
                                        Tone::Info);
+                             } else if (ws_->role() == Role::Plus && was.id == d.id && was.state == "en_attente" && d.state == "active") {
+                                 flash(d.adminName + " a tap\xC3\xA9 le code : sa d\xC3\xA9rogation court jusqu'\xC3\xA0 " + clockText(d.localTime(d.end, now), now) + ".", Tone::Warning);
+                             } else if (ws_->role() == Role::Plus && was.id == d.id && was.state == "en_attente" && d.state == "annulee") {
+                                 flash("La d\xC3\xA9rogation de " + d.adminName + " est " + derogationText(d, now) + ".", Tone::Warning);
+                             }
                              refreshPages();
                          }
+                         derogationTick();
                      }
                      // 1.45.0 : une autre version en ligne (deployee d'ailleurs : deployer.bat, un autre PC) - l'etat la suit.
                      if (const auto& sv = ws_->service(); sv.hasState && sv.state.reached && !st->version.empty() && st->version != sv.state.version) {
@@ -1428,9 +1508,9 @@ bool Shell::autoWatch() {
                          refreshPages();
                          if (ws_->role() != before) {
                              if (ws_->role() == Role::Retired) flash("Tu as \xC3\xA9t\xC3\xA9 retir\xC3\xA9 de la liste des admins : ta cl\xC3\xA9 ne signe plus rien.", Tone::Error);
-                             if (!pageAllowed(current_)) navigate("admins");
+                             if (!pageAllowed(current_)) navigate(classic::accountPage());   // 1.52.0 : XPG Admin, Mon compte
                          } else if (ar->listAdopted && before == Role::Admin) {
-                             flash("Tes droits d'admin ont chang\xC3\xA9 : " + std::to_string(ws_->myRights().size()) + " sur 13 (Administrateurs).", Tone::Info);
+                             flash("Tes droits d'admin ont chang\xC3\xA9 : " + std::to_string(ws_->myRights().size()) + " sur 13 (" + classic::accountName() + ").", Tone::Info);
                          }
                      }
                      // 1.51.0 : des admins inscrits par leur code d'invitation, signes d'office (plus de demande a accepter)
@@ -1479,7 +1559,9 @@ bool Shell::checkServiceVersion() {
                      ws_->adoptServiceState(*st);
                      refreshPages();
                      if (const deployer::VersionCheck v = serviceVersion(*ws_); v.outdated)
-                         flash(deployer::outdatedMessage(v) + " (Service en ligne \xE2\x80\xBA D\xC3\xA9ployer le service)", Tone::Warning);
+                         flash(deployer::outdatedMessage(v) + (classic::managementOnly(*ws_) ? std::string(" (l'admin+ le d\xC3\xA9ploie : Service en ligne est \xC3\xA0 lui)")   // 1.52.0
+                                                                                           : std::string(" (Service en ligne \xE2\x80\xBA D\xC3\xA9ployer le service)")),
+                               Tone::Warning);
                      if (view_) static_cast<ShellView*>(view_)->update();
                  }))
         return false;
@@ -1513,7 +1595,8 @@ bool Shell::watchPending() {
                          return;
                      }
                      if (x->joinState != pendingState_ && x->joinState == "aucune")
-                         flash("Le service n'a pas d'inscription pour ta cl\xC3\xA9 : tape le code d'invitation que t'envoie l'admin+ (Administrateurs).", Tone::Warning);
+                         flash(std::string("Le service n'a pas d'inscription pour ta cl\xC3\xA9 : tape le code d'invitation que t'envoie l'admin+ (") + classic::accountName() + ").",
+                               Tone::Warning);
                      pendingState_ = x->joinState;
                  }))
         return false;
@@ -1543,10 +1626,11 @@ bool Shell::autoJoin() {
                          nextWatch_ = 0;   // le regard tout de suite : l'Admin+ l'a peut-etre deja signee
                      } else {
                          flash((*refused ? std::string("Ton code d'invitation est refus\xC3\xA9 : ") : std::string("Devenir admin : ")) + r.message +
-                                   " (Administrateurs : retape-le).",
+                                   " (Mon compte : retape-le).",
                                Tone::Error);
-                         requestPageFocus("admins", "code-refuse:" + r.message);   // la carte le dit, le code se retape
-                         navigate("admins");
+                         // 1.52.0 : la carte << Ton code d'invitation >> est dans Mon compte (AccountInvite.cpp) : elle le dit, le code se retape
+                         requestPageFocus("compte.invitation", "code-refuse:" + r.message);
+                         navigate("compte");
                      }
                  }))
         return false;
@@ -1607,6 +1691,12 @@ void Shell::dismissToasts() {
 
 void Shell::openToast() {
     if (toasts_.empty()) return;
+    if (toasts_.back().derogation) {   // 1.52.0 : une derogation recue - le dialogue du code
+        toasts_.clear();
+        openDerogationCode();
+        if (view_) static_cast<ShellView*>(view_)->update();
+        return;
+    }
     requestPageFocus("journal", "ligne:" + std::to_string(toasts_.back().number));
     toasts_.clear();
     navigate("journal");
@@ -1672,8 +1762,60 @@ std::vector<std::string> Shell::describeChanges(const online::Snapshot& before, 
     return out;
 }
 
+// 1.52.0 : XPG ADMIN ET LA DEROGATION (ClassicView.hpp) - elle commence ou finit (le regard l'a relue, ou son heure est
+// passee, meme hors ligne) : le menu suit tout de suite ; finie pendant qu'une page qu'elle ouvrait est montree : retour a
+// Mon compte, et c'est dit. L'Admin+ : rien.
+void Shell::classicGate() {
+    if (!license_admin::classique()) return;
+    const bool open = classic::derogationOpen(*ws_);
+    if (open == derogationOpen_) return;
+    derogationOpen_ = open;
+    if (!open && !pageAllowed(current_)) {
+        current_ = "compte";
+        showCurrent();
+        flash("Ta d\xC3\xA9rogation a pris fin : retour \xC3\xA0 la gestion.", Tone::Info);
+    }
+    refreshPages();   // les pages ouvertes (Mon compte, Ce PC) le disent
+    if (view_) static_cast<ShellView*>(view_)->update();
+}
+
+// 1.52.0 (agent D) : LA DEROGATION RECUE - le dialogue du code (une fois par derogation ; sous un autre dialogue : apres).
+void Shell::openDerogationCode() {
+    wantCodeDialog_ = false;
+    openDialog(makeDerogationCodeDialog(host(), [this] {
+        refreshPages();
+        if (view_) static_cast<ShellView*>(view_)->update();
+    }));
+}
+
+void Shell::derogationTick() {
+    if (!wantCodeDialog_) return;
+    const Derogation& d = ws_->derogation();
+    if (ws_->role() != Role::Admin || !d.forKey(ws_->adminKey().keyHex) || !d.pendingAt(ws_->now())) {
+        wantCodeDialog_ = false;   // activee, revoquee, annulee entre-temps : plus rien a taper
+        return;
+    }
+    if (attached_ && manager().top() != this) return;   // un autre dialogue est ouvert : apres
+    openDerogationCode();
+}
+
+std::string Shell::derogationChipText(bool* pending) const {
+    if (pending) *pending = false;
+    const Derogation& d = ws_->derogation();
+    if (ws_->role() != Role::Admin || !d.forKey(ws_->adminKey().keyHex)) return {};
+    const Seconds now = ws_->now();
+    if (d.pendingAt(now)) {
+        if (pending) *pending = true;
+        return "D\xC3\xA9rogation re\xC3\xA7ue : taper le code";
+    }
+    if (d.activeAt(now)) return "D\xC3\xA9rogation : " + remainingText(d.remaining(now));
+    return {};
+}
+
 void Shell::Update(const menu::FrameContext& fc) {
     (void)poll();
+    classicGate();   // 1.52.0
+    derogationTick();   // 1.52.0 (agent D) : le dialogue du code d'une derogation recue, des que rien n'est ouvert par-dessus
     // 1.36.0 : la releve automatique des demandes (au lancement, puis toutes les 2 minutes ; pas sous un dialogue).
     // 1.40.0 : le regard en direct (toutes les 15 s) ; ce qu'il a vu bouger est relu des que rien ne tourne ; les
     // demandes ne sont plus relues que toutes les 10 minutes quand le regard les suit.

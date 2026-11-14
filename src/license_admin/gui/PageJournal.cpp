@@ -25,6 +25,7 @@
 //  meme quand cette page n'est pas ouverte.
 // =============================================================================
 #include "AdminsKit.hpp"
+#include "ClassicView.hpp"   // 1.52.0 : XPG Admin sous derogation (lire, jamais la criticite)
 #include "ListKit.hpp"   // 1.47.0 : la barre de filtres, le clic droit, le depliage
 #include "Page.hpp"
 
@@ -829,6 +830,7 @@ private:
         export_->setEnabled(!shown_.empty());
         fetch_->setEnabled(ws().service().ready() && !fetching_);
         crit_->setEnabled(ws().role() == Role::Plus);
+        if (ws().role() != Role::Plus) crit_->setTooltip(classic::kEditorKeyOnly);   // 1.52.0 : XPG Admin sous derogation
         rebuildCard();
         invalidateLayout();
         invalidate();
@@ -1057,7 +1059,7 @@ private:
         m.unfold(expanded_ == number, [this, row] { expandAt(row, false); });
         // La criticite de cette ligne (une note a cote du journal : la ligne signee ne change jamais) - l'admin+.
         ui::ListMenu::Entry crit{.label = "Criticit\xC3\xA9 de cette ligne", .icon = ui::Icon::Settings,
-                                 .why = ws().role() == Role::Plus ? std::string() : std::string("r\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+")};
+                                 .why = ws().role() == Role::Plus ? std::string() : std::string(classic::kEditorKeyOnly)};   // 1.52.0
         for (int i = 0; i < 4; ++i) {
             const adm::Level level = kLevels[i];
             crit.children.push_back({.label = adm::levelLabel(level), .run = [this, number, level, typeLevel] {

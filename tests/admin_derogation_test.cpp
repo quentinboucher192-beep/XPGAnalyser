@@ -11,11 +11,17 @@
 //  Contre le VRAI Worker sur ce poste (tests/service_local.hpp) : l'admin+ verifie
 //  et exporte sa connexion ; un poste neuf la prend, demande a devenir admin, est
 //  accepte ; il voit le service en lecture seule (le service lui refuse tout geste) ;
-//  une derogation d'1 h : signee, son document verifie, les gestes permis (le
-//  journal le dit, l'admin+ est prevenu), cle-publique.txt = les cles de l'editeur
-//  (jamais la sienne) ; revoquee : refusee aussitot ; une autre, puis l'horloge du
-//  service avancee d'1 h 02 : finie, refusee, la ligne << derogation_expiree >>.
-//  Aucune vraie cle, aucun vrai client : des cles creees ici, des noms d'essai.
+//  1.52.0 : la derogation << tout >>, activee par un code - le code tire de la cle
+//  de l'editeur (deterministe, 8 chiffres, la recette refaite ici), son empreinte ;
+//  accordee pour 4 h : en attente du code (rien ne s'ouvre), un code faux (4 essais
+//  restent), le bon (tape avec des espaces) : elle court 4 h, les gestes permis (le
+//  journal le dit, l'admin+ est prevenu), le journal et les versions lus par
+//  l'admin, cle-publique.txt = les cles de l'editeur (jamais la sienne) ; ni le code
+//  ni son empreinte au journal ; revoquee : refusee aussitot ; une en attente
+//  revoquee : son code ne sert plus ; une autre, puis l'horloge du service avancee
+//  d'1 h 02 : finie, refusee, la ligne << derogation_expiree >>.
+//  Aucune vraie cle, aucun vrai client : des cles creees ici, des noms d'essai. Les
+//  codes sont compares, jamais ecrits dans un message.
 //
 //    admin_derogation_test SOURCE
 //  Sans Node.js ni wrangler : la partie sans reseau, puis "SAUTE : ...".
@@ -23,6 +29,7 @@
 #include "service_local.hpp"
 
 #include "../src/core/Json.hpp"
+#include "../src/deploy/Crypto.hpp"
 #include "../src/license_admin/Admin.hpp"
 #include "../src/license_admin/ServiceClient.hpp"
 #include "../src/license_admin/ServiceConnection.hpp"
@@ -212,6 +219,48 @@ int main(int argc, char** argv) {
               "en cours a l'heure du SERVICE (l'ecart vu a la lecture), finie d'elle-meme a la fin");
         d.revoked = 1700;
         check(!d.activeAt(5000), "revoquee : plus en cours");
+        // 1.52.0 : en attente du code - jamais en cours ; l'heure limite passee : plus en attente
+        gui::Derogation p;
+        p.id = std::string(32, '2');
+        p.adminKey = std::string(64, 'b');
+        p.state = "en_attente";
+        p.format = 2;
+        p.duration = 4 * 3600;
+        p.validUntil = 2000;
+        p.start = p.end = 2000;   // ce que le service rend a un Admin d'avant (debut = fin = l'heure limite)
+        p.serverNow = 1000;
+        p.readAt = 1000;
+        check(p.pendingAt(1500) && !p.activeAt(1500) && p.remaining(1500) == 0 && !p.pendingAt(2000) && p.everything(),
+              "en attente du code : jamais en cours ; apres l'heure limite, plus en attente");
+        check(gui::durationText(9000) == "2 h 30" && gui::durationText(4 * 3600) == "4 h" && gui::durationText(1800) == "30 min", "les durees : 2 h 30, 4 h, 30 min");
+    }
+    std::printf("-- 1.52.0 : le code, tire de la cle de l'editeur\n");
+    {
+        const std::string id = "0123456789abcdef0123456789abcdef", id2 = "fedcba9876543210fedcba9876543210";
+        const std::string c1 = gui::derogationCode(*plus.signingKey(), id), c2 = gui::derogationCode(*plus.signingKey(), id);
+        const std::string other = gui::derogationCode(*plus.signingKey(), id2), intrus = gui::derogationCode(*intruder, id);
+        bool digits = c1.size() == 8;
+        for (const char c : c1) digits = digits && c >= '0' && c <= '9';
+        check(digits, "8 chiffres");
+        check(c1 == c2, "deterministe : le meme a chaque fois (rien n'est garde)");
+        check(c1 != other && c1 != intrus, "une autre derogation, une autre cle : un autre code");
+        // la recette refaite ici : la signature de "XPG-DEROGATION-CODE-1\n" + id, son SHA-256, 8 octets (poids fort d'abord) mod 10^8
+        const auto sig = plus.signingKey()->sign("XPG-DEROGATION-CODE-1\n" + id);
+        const auto h = deploy::crypto::sha256(sig.data(), sig.size());
+        unsigned long long v = 0;
+        for (int i = 0; i < 8; ++i) v = (v << 8) | h[static_cast<std::size_t>(i)];
+        char want[16];
+        std::snprintf(want, sizeof want, "%08llu", v % 100000000ULL);
+        check(c1 == want, "la recette : signature Ed25519, SHA-256, 8 octets, modulo 10^8");
+        check(gui::derogationCodeHash(id, c1) == deploy::crypto::sha256Hex("XPG-DEROGATION-CODE-1\n" + id + "\n" + c1), "l'empreinte envoyee au service");
+        const std::string shown = gui::formatDerogationCode(c1);
+        check(shown.size() == 9 && shown[4] == ' ' && shown.substr(0, 4) + shown.substr(5) == c1, "montre en deux groupes de 4");
+        std::string dashed = c1;
+        dashed.insert(4, " - ");
+        check(gui::normalizeDerogationCode(shown) == c1 && gui::normalizeDerogationCode(dashed) == c1 && gui::normalizeDerogationCode(" " + c1 + " ") == c1,
+              "tape avec des espaces, des tirets : les 8 chiffres");
+        check(gui::normalizeDerogationCode("1234567").empty() && gui::normalizeDerogationCode("123456789").empty() && gui::normalizeDerogationCode("1234567a").empty(),
+              "7 chiffres, 9 chiffres, une lettre : pas un code");
     }
 
     // ======================================================================== le service local
@@ -291,27 +340,63 @@ int main(int argc, char** argv) {
         const auto u = lea.useDerogation("deployer");
         check(!u.ok && has(u.message, "admin+ seul g"), "le service refuse le geste (" + u.message + ")");
         check(!lea.serviceConfigure("https://autre.essai.workers.dev").ok && lea.service().config.url == svc.url(), "changer l'adresse : refuse");
-        check(!lea.grantDerogation(lea.adminKey().keyHex, 1).ok, "un admin ne s'accorde rien");
+        check(!lea.grantDerogation(lea.adminKey().keyHex, 3600).ok, "un admin ne s'accorde rien");
         gui::Derogation d;
         check(lea.readDerogation(d).ok && !d.exists(), "aucune derogation");
     }
 
-    std::printf("-- la derogation d'1 h : accordee, verifiee, utilisee\n");
+    std::printf("-- 1.52.0 : la derogation de 4 h, accordee : en attente du code\n");
+    std::string code, id;
     {
-        check(!plus.grantDerogation(lea.adminKey().keyHex, 5).ok, "5 h : refuse (1, 4, 24 ou 72)");
+        check(!plus.grantDerogation(lea.adminKey().keyHex, 5 * 60).ok, "5 min : refuse (10 min au moins)");
         check(!plus.grantDerogation(lea.adminKey().keyHex, 0).ok, "permanente (0) : refuse");
+        check(!plus.grantDerogation(lea.adminKey().keyHex, 73 * 3600).ok, "73 h : refuse (72 h au plus)");
         gui::Derogation g;
-        const auto a = plus.grantDerogation(lea.adminKey().keyHex, 1, &g);
-        check(a.ok && g.exists() && g.end - g.start == 3600 && g.adminKey == lea.adminKey().keyHex && has(a.text(), "Cloudflare") && has(a.text(), "jeton partag"),
-              "accordee pour 1 h (" + a.message + ")");
+        const auto a = plus.grantDerogation(lea.adminKey().keyHex, 4 * 3600, &g);
+        id = g.id;
+        code = plus.derogationCode(id);
+        check(a.ok && g.exists() && g.state == "en_attente" && g.duration == 4 * 3600 && g.adminKey == lea.adminKey().keyHex && g.pendingAt(plus.now()) &&
+                  !g.activeAt(plus.now()),
+              "accordee pour 4 h : en attente du code (" + a.message + ")");
+        check(has(a.text(), "elle commence quand il tape le code") && has(a.text(), "Cloudflare") && has(a.text(), "jeton partag"), "elle commence quand il tape le code ; Cloudflare");
+        check(code.size() == 8 && !has(a.text(), code) && !has(a.text(), gui::formatDerogationCode(code)) && a.output == id, "le code n'est pas dans le resultat");
+        check(lea.derogationCode(id).empty(), "un admin ne tire aucun code (il n'a pas la cle de l'editeur)");
         gui::Derogation d;
         const auto r = lea.readDerogation(d);
-        check(r.ok && d.signatureOk && d.activeAt(lea.now()) && d.remaining(lea.now()) > 3500, "Lea la lit : signee par la cle de l'editeur, en cours (" + r.message + ")");
+        check(r.ok && d.signatureOk && d.pendingAt(lea.now()) && !d.activeAt(lea.now()) && d.duration == 4 * 3600 && d.triesLeft == 5,
+              "Lea la lit : signee par la cle de l'editeur, en attente, 5 essais (" + r.message + ")");
+        lea.adoptDerogation(d);
+        check(!lea.mayManageService() && has(lea.whyNotService(), "attend son code"), "en attente : rien ne s'ouvre (" + lea.whyNotService() + ")");
+        online::AdminWatch w;
+        check(lea.serviceWatch(w).ok && w.derogationSaid && w.derogationState == "en_attente" && w.derogationTriesLeft == 5 && w.derogationDuration == 4 * 3600 &&
+                  w.derogationRight == "tout" && w.derogationFormat == 2,
+              "le regard des 15 s la dit en attente (GET /admin/etat)");
+        const auto u = lea.useDerogation("deployer");
+        check(!u.ok && has(u.message, "attend son code"), "le service refuse les gestes (" + u.message + ")");
+        check(!lea.fetchJournal(nullptr).ok, "le journal des admins : pas encore");
+    }
+
+    std::printf("-- le code : un faux, puis le bon\n");
+    {
+        const std::string wrong = code == "00000000" ? std::string("00000001") : std::string("00000000");
+        gui::Derogation d;
+        auto r = lea.activateDerogation(id, wrong, &d);
+        check(!r.ok && has(r.message, "Code faux : il te reste 4 essais.") && d.triesLeft == 4 && d.pendingAt(lea.now()), "un code faux : refuse, 4 essais (" + r.message + ")");
+        r = lea.activateDerogation(id, "1234");
+        check(!r.ok && has(r.message, "8 chiffres"), "4 chiffres : pas envoye (" + r.message + ")");
+        online::AdminWatch w;
+        check(lea.serviceWatch(w).ok && w.derogationTriesLeft == 4, "un code mal ecrit ne compte pas : toujours 4 essais");
+        check(!plus.activateDerogation(id, code).ok, "l'admin+ ne tape pas de code");
+        r = lea.activateDerogation({}, gui::formatDerogationCode(code).insert(4, "-"), &d);
+        check(r.ok && d.activeAt(lea.now()) && d.signatureOk && d.remaining(lea.now()) > 4 * 3600 - 60 && has(r.message, "tu vois tout comme l'admin+ pendant 4 h"),
+              "le bon code (tape avec un tiret) : active pour 4 h (" + r.message + ")");
         lea.adoptDerogation(d);
         check(lea.mayManageService() && lea.whyNotService().empty(), "Lea gere le service");
-        online::AdminWatch w;
-        check(lea.serviceWatch(w).ok && w.derogationSaid && w.derogationState == "active" && w.derogationAdmin == lea.adminKey().keyHex,
-              "le regard des 15 s la dit (GET /admin/etat)");
+        check(lea.serviceWatch(w).ok && w.derogationState == "active" && w.derogationAdmin == lea.adminKey().keyHex, "le regard la dit active");
+    }
+
+    std::printf("-- active : les gestes, le journal et les versions lus par l'admin\n");
+    {
         const auto u = lea.useDerogation("deployer", "service-deployer --essai");
         check(u.ok && has(u.message, "journal"), "le geste << deployer >> : permis par le service (" + u.message + ")");
         check(lea.serviceConfigure(svc.url()).ok, "l'adresse : permise");
@@ -321,16 +406,30 @@ int main(int argc, char** argv) {
         const std::string pub = readFile(kit / "cle-publique.txt");
         check(k.ok && has(pub, plus.signingKey()->publicKeyHex()) && !has(pub, lea.adminKey().keyHex), "cle-publique.txt : la cle de l'editeur, jamais la sienne");
         check(!lea.revokeDerogation().ok, "Lea ne revoque rien");
+        int seen = 0;
+        const auto j = lea.fetchJournal(&seen);
+        check(j.ok && seen > 0 && rowOf(lea.journalLines(), "derogation_activee") != nullptr, "Lea releve le journal des admins (" + j.message + ")");
+        gui::VersionsView vv;
+        check(lea.versions(vv).ok, "Lea lit les versions publiees");
         int added = 0;
         check(plus.fetchJournal(&added).ok, "l'admin+ releve le journal");
         const auto v = plus.journalLines();
         const auto* granted = rowOf(v, "derogation_accorder");
         const auto* used = rowOf(v, "derogation_utilisee");
-        check(granted && granted->verified && granted->who == "admin+", "au journal : << derogation_accorder >> (l'admin+)");
+        const auto* activated = rowOf(v, "derogation_activee");
+        check(granted && granted->verified && granted->who == "admin+" && has(granted->line.parsed.detail, "\"duree\":14400") && has(granted->line.parsed.detail, "valable"),
+              "au journal : << derogation_accorder >> (l'admin+ ; la duree, l'heure limite)");
+        check(activated && activated->verified && countOf(v, "derogation_code_refuse") == 1, "au journal : << derogation_activee >>, un << derogation_code_refuse >> (le service)");
         check(used && used->verified && has(used->line.parsed.summary, "deployer"), "au journal : << derogation_utilisee >> (le service)");
-        bool alerted = false;
-        for (const auto& al : plus.newAlerts()) alerted = alerted || al.line.parsed.action == "derogation_utilisee";
-        check(alerted, "l'admin+ est prevenu tout de suite de l'usage");
+        bool clean = true;
+        for (const auto& row : v.rows) clean = clean && !has(row.line.text, code) && !has(row.line.text, gui::derogationCodeHash(id, code));
+        check(clean, "ni le code ni son empreinte au journal");
+        bool alerted = false, toldActivated = false;
+        for (const auto& al : plus.newAlerts()) {
+            alerted = alerted || al.line.parsed.action == "derogation_utilisee";
+            toldActivated = toldActivated || al.line.parsed.action == "derogation_activee";
+        }
+        check(alerted && toldActivated, "l'admin+ est prevenu tout de suite : le code tape, l'usage");
     }
 
     std::printf("-- revoquee avant la fin\n");
@@ -344,13 +443,28 @@ int main(int argc, char** argv) {
         check(lea.serviceWatch(w).ok && w.derogationState == "revoquee", "le regard : revoquee");
         lea.adoptDerogation(w);
         check(!lea.mayManageService() && has(lea.whyNotService(), "voqu"), "Lea : lecture seule (" + lea.whyNotService() + ")");
+        check(!lea.fetchJournal(nullptr).ok, "le journal des admins : refuse de nouveau");
         (void)plus.fetchJournal(nullptr);
         check(rowOf(plus.journalLines(), "derogation_revoquer") != nullptr, "au journal : << derogation_revoquer >>");
     }
 
+    std::printf("-- une en attente, revoquee avant le code : le code ne sert plus\n");
+    {
+        gui::Derogation g;
+        check(plus.grantDerogation(lea.adminKey().keyHex, 30 * 60, &g).ok && g.pendingAt(plus.now()), "une derogation de 30 min, en attente");
+        const std::string c = plus.derogationCode(g.id);
+        gui::Derogation d;
+        const auto r = plus.revokeDerogation(&d);
+        check(r.ok && d.state == "revoquee" && has(r.message, "son code ne sert plus"), "revoquee en attente (" + r.message + ")");
+        const auto a = lea.activateDerogation(g.id, c);
+        check(!a.ok && has(a.message, "voqu"), "le code ne sert plus (" + a.message + ")");
+    }
+
     std::printf("-- une autre, puis sa fin a l'heure du service\n");
     {
-        check(plus.grantDerogation(lea.adminKey().keyHex, 1).ok, "une nouvelle derogation d'1 h");
+        gui::Derogation g;
+        check(plus.grantDerogation(lea.adminKey().keyHex, 3600, &g).ok, "une nouvelle derogation d'1 h");
+        check(lea.activateDerogation(g.id, plus.derogationCode(g.id)).ok, "Lea tape le code");
         online::AdminWatch w;
         check(lea.serviceWatch(w).ok && w.derogationState == "active", "en cours");
         lea.adoptDerogation(w);

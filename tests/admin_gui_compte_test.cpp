@@ -194,6 +194,8 @@ int journalCount(const gui::Workspace& w, const std::string& action) {
 
 } // namespace
 
+#include "admin_gui_derogation152.inl"   // 1.52.0 (agent D) : la derogation par code (l'Admin+, XPG Admin)
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::printf("usage : admin_gui_compte_test <racine du depot>\n");
@@ -222,9 +224,11 @@ int main(int argc, char** argv) {
         auto cpage = gui::makeAccountPage(rig.host());
         (void)draw(*cpage);
         const std::string ct = draw(*cpage);
-        check(!shown(*cpage, "compte.creer-cle") && has(ct, "Mon code d'invitation") && !has(ct, "Demander \xC3\xA0 devenir admin") &&
-                  click(*cpage, "compte.devenir-admin") && rig.navigations.back() == "admins",
-              "XPG Admin : Mon code d'invitation... -> Administrateurs (pas la cle de l'editeur)");
+        // 1.52.0 : XPG Admin n'a plus Administrateurs sans derogation - la carte du code d'invitation est ici (AccountInvite.cpp)
+        check(!shown(*cpage, "compte.creer-cle") && has(ct, "Ton code d'invitation") && !has(ct, "Demander \xC3\xA0 devenir admin") &&
+                  shown(*cpage, "compte.invitation.code") && shown(*cpage, "compte.invitation.valider") && !shown(*cpage, "compte.devenir-admin"),
+              "XPG Admin : la carte << Ton code d'invitation >> dans Mon compte (pas la cle de l'editeur)");
+        check(click(*cpage, "compte.ce-pc") && rig.navigations.back() == "poste", "XPG Admin : Ce PC... -> Mon compte > Ce PC (l'adresse du service)");
         la::setEdition(la::Edition::Plus);
     }
 
@@ -463,5 +467,6 @@ int main(int argc, char** argv) {
         check(has(t, "actif") && has(t, "n\xC2\xB0 " + std::to_string(number0 + 1)) && has(t, "lea@exemple.invalid") && has(t, "6 sur 13"),
               "Mon compte de Lea : actif, la liste n\xC2\xB0 " + std::to_string(number0 + 1) + ", son courriel, 6 pouvoirs");
     }
+    derogationGui152(wf, lsf, leaHex);   // 1.52.0 (agent D) : la derogation par code
     return finish();
 }

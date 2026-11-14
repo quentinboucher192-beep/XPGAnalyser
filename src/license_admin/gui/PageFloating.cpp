@@ -21,6 +21,7 @@
 //  l'etat, le bail, emise le, l'offre), le clic droit (ses deux listes), une
 //  licence se deplie (ses postes, ses jetons, la licence de l'archive).
 // =============================================================================
+#include "ClassicView.hpp"   // 1.52.0 : XPG Admin sans derogation, Mon compte > Ce PC
 #include "ListKit.hpp"
 #include "Page.hpp"
 
@@ -115,7 +116,7 @@ public:
         });
         links_ += retire_->clicked->connect([this] { askRetire(); });
         links_ += settings_->clicked->connect([this] {
-            if (host_.navigate) host_.navigate("service");
+            if (host_.navigate) host_.navigate(classic::servicePage(ws()));   // 1.52.0 : XPG Admin sans derogation, Mon compte > Ce PC
         });
         links_ += licences_->selectionChanged->connect([this](const std::vector<RowIndex>& sel) {
             if (syncing_) return;

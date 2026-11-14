@@ -9,7 +9,10 @@ Ce document est le contrat entre l'Admin, le service (`service/`) et les Studios
 - **L'admin+** : le PC qui a **la clé de l'éditeur** (`cle-editeur-licences.cle`). Il n'y en a qu'un. Il fait tout.
 - **Un admin** : un Admin qui a **sa propre clé** (`cle-admin.cle`, Ed25519, née sur son PC, protégée par DPAPI comme
   celle de l'éditeur ; elle n'en sort jamais) et qui figure, non retiré, dans **la liste des admins** signée par la clé de
-  l'éditeur. Il signe avec sa clé ce que ses **droits** permettent.
+  l'éditeur. Il signe avec sa clé ce que ses **droits** permettent. 1.52.0 : dans XPG Admin, il ne fait **que la
+  gestion** (les licences, les clients, le catalogue, la boutique, Mon compte) : ni « Paramètres de sécurité », ni
+  « Service en ligne », ni « Administrateurs » dans son menu (§ 12) ; **une dérogation de l'admin+ qui court lui ouvre
+  tout**, comme à l'admin+ (§ 11), sauf ce que signe la clé de l'éditeur.
 - **Pas encore admin** : un Admin sans aucune des deux clés. Il peut **créer la clé de l'éditeur** (le premier PC,
   comme avant : l'Admin+) ou, dans XPG Admin, **devenir admin par son code d'invitation** (§ 4 ; 1.51.0 : plus de demande
   d'admin).
@@ -105,7 +108,8 @@ ni « Refuser ») : l'admin+ décide tout en créant l'invitation, le code fait 
    courriel sont ceux de l'invitation : rien à taper). Le service vérifie le code (connu, pas servi par une autre clé,
    pas expiré : § 12), le **sert et inscrit la clé d'un coup** → 201 `{"etat":"inscrit","empreinte","invitation":{"id",
    "nom","courriel","profil"},"admins"}`. Un code refusé : la phrase du service (« Ce code d'invitation est inconnu. »,
-   « … a expiré (48 h). », « … a déjà servi. »), dite au lancement et dans Administrateurs, où le code se retape. Sans
+   « … a expiré (48 h). », « … a déjà servi. »), dite au lancement et dans Mon compte (1.52.0 ; avant : Administrateurs),
+   où le code se retape. Sans
    `invitation.txt` (une installation silencieuse sans `/INVITATION=`), la carte « Ton code d'invitation » le demande.
 3. **L'admin+ signe d'office** (`Workspace::admitInvitedAdmins`) : son regard (toutes les 15 s, `GET /admin/etat` →
    `admins_inscrits`), « Relever » dans Administrateurs, la console (`admins-inscrits`). Pour chaque inscrit
@@ -176,6 +180,8 @@ refusée », écrite par le service). Les documents déposés (licence, registre
 | `GET /admin/derogation` | admin+ (celle en place) ou admin (la sienne) | — |
 | `POST /admin/derogation/utiliser` | admin (sa dérogation en cours) | — |
 | `POST /admin/stats/releve` | admin+, ou l'admin dont la dérogation court | — |
+| 1.52.0 (§ 11) : `POST /admin/derogation/activer` | admin (sa dérogation en attente du code) | le code |
+| 1.52.0 (§ 11) : `GET /admin/journal`, `GET /admin/versions` | admin+, ou l'admin dont la dérogation « tout » (format 2) court | — |
 | 1.49.0 (§ 12) : `POST /admin/admins/invitation` | admin+ | — |
 | 1.51.0 (§ 4) : `POST /v1/admins/inscription`, `GET /v1/admins/inscription` (et, pour un XPG Admin d'avant, `POST`/`GET /v1/admins/demande`) | la clé qui s'inscrit | le code d'invitation |
 
@@ -429,32 +435,76 @@ Les installateurs (`installateur/XPG-License-Admin.iss`) : **le kit du service e
 Un admin voit l'état du service **en lecture seule** : une carte « L'admin+ seul gère le service (dérogation
 possible) », l'adresse non modifiable, les boutons gris (ils disent pourquoi) ; « Vérifier » et les relevés restent.
 
-### La dérogation « Gérer le service »
+### La dérogation : tout, comme l'admin+, activée par un code (1.52.0)
 
-- **L'admin+ l'accorde** à UN admin de la liste (Service en ligne › « Accorder une dérogation… », ou la fiche de
-  l'admin › « Dérogation… », ou `derogation-accorder --cle HEX --heures N`) : **1 h, 4 h, 24 h ou 72 h**, jamais plus,
-  jamais permanente. Une nouvelle remplace celle en cours.
-- **Le document**, signé par la clé de l'éditeur (la signature porte sur `"XPG-DEROGATION-1\n" + texte`) :
-  `{"format":1,"id":"<32 hexa>","droit":"service","admin":"<64 hexa>","nom","debut","fin","emise"}` ; `debut` = l'heure
-  du service (à 10 min près), `fin - debut` entre 10 min et 72 h. `PUT /admin/derogation` `{"derogation","signature"}` ;
-  le service la garde dans `config` (une ligne `derogation` : elle part avec la sauvegarde ; pas de table neuve,
-  schéma 5 inchangé).
-- **Le service en est l'arbitre, à SON heure** : `POST /admin/derogation/utiliser` `{"action","detail"}` (`deployer`,
-  `connexion_cloudflare`, `adresse`, `secours`, `releve`, `verifier`) — l'Admin le demande **avant** chaque geste ; 200
-  tant qu'elle court, sinon 403 `derogation` et la phrase (« Ta dérogation … a pris fin », « … a été révoquée », « L'admin+
-  seul gère le service : tu n'as pas de dérogation … en cours »). Une route réservée à l'admin+ marquée « dérogation »
-  (`POST /admin/stats/releve`) s'ouvre aussi à lui. `GET /admin/derogation` (l'admin+ : celle en place ; un admin : la
-  sienne, avec son document signé, que l'Admin vérifie) ; `GET /admin/etat` dit `derogation` (sans le document) à chaque
-  regard (15 s). `POST /admin/derogation/revoquer` `{"id"}` (admin+) : finie tout de suite.
-- **L'Admin** : la carte « Ta dérogation « Gérer le service » : il reste 52 min (jusqu'à 15:42) », les boutons rouverts ;
-  le compte à rebours se fait à l'heure du service (l'écart vu à la lecture) ; **à la fin, la page repasse d'elle-même en
-  lecture seule** (même hors ligne), et le regard des 15 s le confirme (accordée, finie, révoquée : un avis).
-  `Workspace::mayManageService()`, `whyNotService()`, `derogation()` (`gui/Derogation.hpp` : `activeAt`, `remaining`,
-  `derogationText`) — Mon compte les montre.
-- **Le journal** : `derogation_accorder` et `derogation_revoquer` (l'Admin de l'admin+, signées par sa clé),
-  `derogation_utilisee` (le service, à chaque geste ; 200 lignes au plus par dérogation) et `derogation_expiree` (le
-  service, une fois, au premier appel qui la voit finie). `derogation_utilisee` est « Critique, me prévenir tout de suite » :
-  **l'admin+ est prévenu** (l'alerte) dès que son Admin relève le journal.
+Avant la 1.52.0, la dérogation ne donnait que « Gérer le service » et commençait tout de suite (le format 1, ci-dessous,
+toujours reçu). **1.52.0** : elle donne **tout** — un admin de XPG Admin voit et fait ce que fait l'admin+ (les pages,
+§ 12 : Paramètres de sécurité, Service en ligne, Administrateurs, le journal, les versions) — sauf ce qui repose sur la
+signature de la clé de l'éditeur ou lui est réservé ; elle **commence quand l'admin tape le code** que l'admin+ voit sur
+son PC ; sa **durée est choisie par l'admin+** quand il l'envoie.
+
+- **L'admin+ l'accorde** à UN admin de la liste (Service en ligne › « Accorder une dérogation… », la fiche de l'admin ›
+  « Dérogation… », ou `derogation-accorder --cle HEX --duree 2h30` / `--minutes N` / `--heures N`) : **30 min, 1 h, 4 h,
+  24 h, 72 h** ou **« Autre durée »** (des heures et des minutes : de 10 min à 72 h ; une durée hors de ces bornes est dite
+  dans le dialogue, rien ne part). Jamais permanente. « Elle commence quand il tape le code. Le code est valable 1 h. »
+  Une nouvelle remplace celle en attente ou en cours.
+- **Le code** : 8 chiffres, montrés « 4821 7730 ». L'Admin+ le **retire de sa clé**, sans jamais le garder : la signature
+  Ed25519 (déterministe) par la clé de l'éditeur de `"XPG-DEROGATION-CODE-1\n" + id`, son SHA-256, les 8 premiers octets
+  (un entier, poids fort d'abord) modulo 10^8 (`gui::derogationCode`). Le dialogue le montre en grand après l'envoi
+  (« Donne-lui ce code (de vive voix, au téléphone) : il le tape dans XPG Admin. Valable jusqu'à 15:42. », Copier) ; tant
+  qu'il attend, l'Admin+ le revoit (Service en ligne : « En attente du code : 4821 7730 (valable jusqu'à 15:42) » et
+  Révoquer ; la fiche de l'admin dans Administrateurs ; Mon compte ; `derogation-etat`). La console `derogation-accorder`
+  l'écrit sur le terminal de l'admin+. **Jamais** dans un journal, un message, le résultat d'une opération.
+- **Le document** (format 2), signé par la clé de l'éditeur (la signature porte sur `"XPG-DEROGATION-1\n" + texte`) :
+  `{"format":2,"id":"<32 hexa>","droit":"tout","admin":"<64 hexa>","nom","duree":S,"valable":T,"emise":T}` ; `duree` de
+  600 à 259 200 s (10 min à 72 h) ; `valable` : l'heure limite pour taper le code (l'Admin+ met `emise` + 1 h ; le service
+  accepte 10 min à 24 h après `emise`) ; `emise` à 10 min près de l'heure du service. **Ni le code ni son empreinte n'y
+  sont.** `PUT /admin/derogation` `{"derogation","signature","code"}` : `code` = `sha256hex("XPG-DEROGATION-CODE-1\n" + id
+  + "\n" + 8 chiffres)`, à côté du document. Le service la garde dans `config` (une ligne `derogation` ; schéma 5 inchangé)
+  et **ne la rend jamais** : ni `GET /admin/derogation` (admin ou admin+), ni `GET /admin/etat`, ni la sauvegarde (la ligne
+  part sans elle : une dérogation restaurée en attente ne s'active plus). Pourquoi : 10^8 codes s'essaient en quelques
+  secondes hors ligne par qui lirait l'empreinte ; en ligne, 5 essais.
+  Le **format 1** (un Admin+ d'avant) : `{"format":1,"id","droit":"service","admin","nom","debut","fin","emise"}`,
+  « Gérer le service » seulement, tout de suite, sans code ; il n'ouvre pas les lectures ci-dessous.
+- **L'activation** : `POST /admin/derogation/activer` `{"id","code":"<8 chiffres>"}` (l'admin de la dérogation ; l'admin+ :
+  403). En attente et avant `valable` : l'empreinte comparée en temps constant ; **faux** : un essai de moins, 403 `code`
+  « Code faux : il te reste N essais. » (`essais_restants`) ; le **5e faux l'annule** (raison `code_faux`) ; **juste** :
+  `debut` = maintenant, `fin` = maintenant + `duree`, elle court. Un code mal écrit (pas 8 chiffres) : 400, sans essai.
+  Après `valable` sans code : annulée (raison `code_perime`, dite une fois, comme la fin). Révoquée, annulée, déjà
+  finie : 409 et la phrase. Le même bon code sur une dérogation déjà active : la même réponse (un appel répété).
+- **Les états** (`vue()`, `GET /admin/etat`, `GET /admin/derogation`) : `en_attente` (avec `duree`, `valable`,
+  `essais_restants`), `active`, `expiree`, `revoquee`, `annulee` (+ `raison`), `a_venir` (format 1). Un Admin 1.51 ne
+  connaît ni `en_attente` ni `annulee` : `debut` = `fin` (l'heure limite, ou celle de l'annulation), elle n'est jamais
+  « en cours » pour lui. `POST /admin/derogation/revoquer` `{"id"}` (admin+) : en attente ou en cours, finie tout de suite.
+- **Ce qu'elle ouvre sur le service** : les routes de l'admin+ marquées « dérogation » (`POST /admin/stats/releve`),
+  `POST /admin/derogation/utiliser` (les gestes de gestion du service : `deployer`, `connexion_cloudflare`, `adresse`,
+  `secours`, `releve`, `verifier` — 200 tant qu'elle court, sinon 403 `derogation` et la phrase : « … attend son code »,
+  « … a pris fin », « … a été révoquée », « … est annulée », « L'admin+ seul gère le service : tu n'as pas de
+  dérogation … en cours ») et, **pour le format 2 seulement**, les lectures `GET /admin/journal` et `GET /admin/versions`
+  (marquées `derogation: "tout"`). **Jamais** : la liste des admins, les invitations, le trousseau, les fichiers, les
+  messages, déposer une version, la boutique, Stripe, rembourser, la sauvegarde, la restauration, repartir de zéro,
+  accorder ou révoquer une dérogation, certifier — la clé de l'éditeur signe, ou c'est à l'admin+.
+- **XPG Admin (l'admin)** : le regard des 15 s (`GET /admin/etat`) voit une dérogation **en attente** pour sa clé (une
+  nouvelle) : l'alerte « L'admin+ t'a envoyé une dérogation (4 h) : tape le code qu'il voit sur son PC. » (« Voir » : le
+  code), **le dialogue du code s'ouvre seul**, une fois par dérogation (sous un autre dialogue : après), le bouton de la
+  barre des tâches clignote (Windows ; `core::instance::attention`), la pastille ambre « Dérogation reçue : taper le code »
+  en haut (un clic : le dialogue) et une carte dans Mon compte avec le champ. Le champ accepte espaces et tirets ;
+  « Activer » ; le refus du service est dit dans le dialogue (les essais, trop tard, annulée). Réussi : « Dérogation
+  active : tu vois tout comme l'admin+ pendant 4 h (jusqu'à 19:42). » — le menu suit aussitôt (§ 12). Pendant qu'elle
+  court : la pastille « Dérogation : 3 h 52 » (le compte à rebours, à l'heure du service). Le journal des admins se relève
+  (`fetchJournal`), les versions se lisent. À la fin, ou révoquée : l'avis, retour à la gestion (même hors ligne : son
+  heure passée). `Workspace::mayManageService()`, `whyNotService()`, `derogation()` (`gui/Derogation.hpp` : `activeAt` —
+  jamais vraie en attente du code —, `pendingAt`, `remaining`, `derogationText`), `activateDerogation(id, code)` ; la
+  console : `derogation-activer --code 12345678`.
+- **L'Admin+** : son regard la voit activée : « Léa Essai a tapé le code : sa dérogation court jusqu'à 19:42. » (et
+  l'alerte `derogation_activee`) ; annulée : un avis.
+- **Le journal** : `derogation_accorder` (l'Admin de l'admin+, signée par sa clé : la durée, `valable`, jamais le code)
+  et `derogation_revoquer` ; le service écrit (signées par SA clé, jamais le code ni son empreinte) `derogation_activee`
+  (« Critique, me prévenir tout de suite », comme `derogation_utilisee` : **l'admin+ est prévenu**), `derogation_code_refuse`
+  (un par code faux, 5 au plus), `derogation_annulee` (5 codes faux, ou pas tapé à temps ; une fois),
+  `derogation_utilisee` (à chaque geste, 200 lignes au plus par dérogation ; **une lecture** — le journal, les versions,
+  relus toutes les 15 s — **une ligne la première fois seulement**, par route et par dérogation) et `derogation_expiree`
+  (une fois, au premier appel qui la voit finie).
 - **Cloudflare** : l'admin sous dérogation met le Worker en ligne **avec son propre compte Cloudflare, sur son PC** —
   l'admin+ l'invite comme **membre** de son compte Cloudflare (tableau de bord › Gérer le compte › Membres) ; **jamais un
   jeton partagé**, jamais le mot de passe de l'admin+. Le kit reçoit les clés publiques de l'éditeur que le service croit
@@ -486,16 +536,36 @@ XPG Admin, lui, **n'offre simplement jamais** ce qui est à l'admin+ (`license_a
 - **la clé de l'éditeur** : il ne la lit jamais, même posée dans son dossier (`Workspace::loadKey`, `detail::loadCaller`) —
   son rôle n'est donc jamais « admin+ » ; « Créer la clé », « Restaurer une sauvegarde » (de la clé) et « Restaurer une
   sauvegarde complète » ne sont pas dans Paramètres de sécurité ; `createKey`, `restoreKey`, `restoreBackup` refusent ;
-- **les pages de l'admin+** (Journal des admins, Droits, Versions ; 1.51.0 : plus de Demandes d'admin) ne sont pas dans le menu ; un lien
-  vers l'une d'elles (une autre page, `--page`) est refusé et dit : « « Versions » n'est pas dans XPG Admin : c'est à
-  l'admin+ (XPG License Manager Admin). » ;
+- **les pages de l'admin+** (Journal des admins, Droits, Versions ; 1.51.0 : plus de Demandes d'admin) et, 1.52.0,
+  **« Paramètres de sécurité », « Service en ligne », « Administrateurs »** ne sont pas dans le menu : un admin (ou un
+  poste pas encore admin) ne fait que **la gestion** — Tableau de bord, Statistiques, Licences, Clients, Activations,
+  Offres, Options, Fonctionnalités, Licences flottantes, Boutique, Commandes et demandes, Mon compte, Révocations,
+  Historique (un groupe du menu dont rien n'est montré n'a pas de titre). Un lien vers l'une d'elles (une autre page,
+  `--page`) est refusé et dit : « « Service en ligne » s'ouvre avec une dérogation de l'admin+. » (et où trouver ce qui
+  est à lui : Mon compte, Mon compte › Ce PC) ; `gui/ClassicView.hpp`, `Shell::pageAllowed` ;
+- **ce dont un admin a besoin pour lui-même est dans Mon compte** (1.52.0) : la carte « Ton code d'invitation » (le code
+  de l'installateur, sinon le champ ; un code refusé — ici ou au premier lancement — : la phrase du service, le code se
+  retape ; `gui/AccountInvite.cpp`), « Ton ajout comme admin » et « Vérifier maintenant », et la sous-page **« Ce PC »**
+  (`--page poste` ; la page Service en ligne dans son mode « poste », `gui/PageServicePc.inl`) : la connexion signée et
+  « Utiliser une connexion… », l'adresse du service (tapée par un poste pas encore admin ; lue par un admin),
+  « Vérifier », l'archive en ligne (la clé de synchro reçue par le trousseau, Synchroniser, Recevoir seulement) et le mail
+  au client — jamais Déployer, Certifier, les adresses de secours, la dérogation, Repartir de zéro. La pastille de la clé
+  (en haut) mène à Mon compte, celle du service et la carte du menu à Ce PC ; les avis disent « (Mon compte) » ;
+- **une dérogation de l'admin+ qui court** (activée par son code, § 11) : le menu devient **celui de l'admin+, tout
+  entier**, tout de suite (sans relancer) ; dans les pages, ce que le service permet marche (Service en ligne ; le journal
+  des admins et les versions se lisent : `GET /admin/journal`, `GET /admin/versions`) et chaque geste signé par la clé de
+  l'éditeur reste gris avec sa raison : « Signé par la clé de l'éditeur : l'admin+ seul, même sous dérogation. »
+  (Ajouter un admin, les droits et profils, publier ou renvoyer une version, la criticité du journal ; Certifier, accorder
+  une dérogation, la sauvegarde complète et Repartir de zéro n'y sont jamais). Elle finit (son heure, même hors ligne, ou
+  révoquée) pendant qu'une page qu'elle ouvrait est montrée : retour à Mon compte, « Ta dérogation a pris fin : retour à
+  la gestion. » (`Shell::classicGate`) ;
 - **les gestes de l'admin+** : Ajouter / retirer un admin, les droits et profils, publier une version, envoyer un
   fichier ou un message, « Certifier la clé du service » (absent de Service en ligne), accorder une dérogation, Gérer le
   service hors dérogation ; atteint autrement (un essai, un lien), le geste refuse avec « XPG Admin ne fait pas cela :
   c'est à l'admin+ (XPG License Manager Admin, sur le poste qui a la clé de l'éditeur) » (`kClassicRefusal`,
   `detail::callerDenied`) ;
-- il **garde** ce que ses droits permettent (§ 2) et la dérogation courte « Gérer le service » (§ 11 ; le kit du service
-  est installé avec lui) ;
+- il **garde** ce que ses droits permettent (§ 2) et la dérogation courte (§ 11 ; le kit du service est installé avec
+  lui) ;
 - **sans clé d'admin** : seulement le chemin de l'admin (l'invitation, ci-dessous) — jamais « Créer la clé de
   l'éditeur… » ni « Restaurer… ».
 
@@ -505,6 +575,10 @@ invitation. » (le tableau de bord, Administrateurs, Mon compte) ; **jamais le c
 
 Les essais : `admin_gui_edition_test` (ctest `adminguiedition`) — XPG Admin construit dans le même processus
 (`setEdition`) sur un poste qui a la clé de l'éditeur, puis chez une admin de la liste (Camille Essai) ; l'Admin+ sans clé.
+1.52.0 (`tests/admin_gui_edition152.inl`) : le menu de la gestion exactement (pas encore admin, et Camille), les refus,
+les pastilles, la carte du code dans Mon compte (un code refusé se retape), Ce PC, une dérogation forgée dans le
+processus (`adoptDerogation`) qui ouvre le menu de l'admin+ et laisse gris les gestes de sa clé, sa fin sur une page
+qu'elle ouvrait ; le menu de l'Admin+ inchangé.
 
 ### Les installateurs
 

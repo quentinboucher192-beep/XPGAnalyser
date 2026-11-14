@@ -232,7 +232,7 @@ int main(int argc, char** argv) {
             const std::string cd = draw(*cdash);
             check(has(cd, "Mon code d'invitation") && !shown(*cdash, "tableau.creer-cle") && !has(cd, "Demander \xC3\xA0 devenir admin"),
                   "XPG Admin, le tableau de bord : son code d'invitation seulement");
-            check(click(*cdash, "tableau.devenir-admin") && rig.navigations.back() == "admins", "Mon code d'invitation... -> Administrateurs");
+            check(click(*cdash, "tableau.devenir-admin") && rig.navigations.back() == "compte", "Mon code d'invitation... -> Mon compte (1.52.0 : la carte y est)");
         }
         la::setEdition(la::Edition::Plus);
     }

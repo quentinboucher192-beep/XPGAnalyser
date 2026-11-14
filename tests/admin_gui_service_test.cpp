@@ -191,7 +191,7 @@ int main(int argc, char** argv) {
         HostRig rig(fx);
         auto page = gui::makeServicePage(rig.host());
         std::string t = draw(*page);
-        check(has(t, "La d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB") && has(t, "jamais permanente"), "la carte de l'admin+ : jamais permanente");
+        check(has(t, "La d\xC3\xA9rogation : tout, comme toi") && has(t, "jamais permanente"), "la carte de l'admin+ : tout, comme toi ; jamais permanente (1.52.0)");
         check(enabledOf(*page, "service.derogation.accorder") && !page->findById("service.derogation.revoquer")->visible(),
               "Accorder... permis ; Revoquer cache (aucune en cours)");
         check(!has(t, "L'admin+ seul g\xC3\xA8re le service (d\xC3\xA9rogation possible)") && enabledOf(*page, "service.deployer"), "l'admin+ gere le service");
@@ -200,12 +200,15 @@ int main(int argc, char** argv) {
             auto& dlg = *rig.dialogs.back();
             const std::string d = drawMenu(dlg);
             ui::Widget& root = *dlg.widgetRoot();
-            check(has(d, "D\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB") && has(d, "72 h au plus, jamais permanente"), "le titre ; 72 h au plus, jamais permanente");
-            check(root.findById("derogation.duree.1") && root.findById("derogation.duree.4") && root.findById("derogation.duree.24") &&
-                      root.findById("derogation.duree.72") && !root.findById("derogation.duree.0"),
-                  "les durees : 1 h, 4 h, 24 h, 72 h - et rien d'autre");
+            check(has(d, "D\xC3\xA9rogation : tout, comme l'admin+") && has(d, "72 h au plus, jamais permanente"), "le titre ; 72 h au plus, jamais permanente");
+            // 1.52.0 : 30 min, 1 h, 4 h, 24 h, 72 h et << Autre duree >> (10 min a 72 h) ; jamais permanente
+            check(root.findById("derogation.duree.30min") && root.findById("derogation.duree.1") && root.findById("derogation.duree.4") &&
+                      root.findById("derogation.duree.24") && root.findById("derogation.duree.72") && root.findById("derogation.duree.autre") &&
+                      !root.findById("derogation.duree.0"),
+                  "les durees : 30 min, 1 h, 4 h, 24 h, 72 h, Autre duree - jamais permanente");
+            check(has(d, "Elle commence quand il tape le code. Le code est valable 1 h."), "elle commence quand il tape le code (1.52.0)");
             check(has(d, "SON propre compte") && has(d, "Jamais un jeton partag"), "Cloudflare : son propre compte, jamais un jeton partage");
-            check(has(d, "Jamais : certifier") && has(d, "Brancher Stripe"), "ce qu'elle n'ouvre jamais : certifier, la sauvegarde, Stripe");
+            check(has(d, "Jamais ce qui demande ta cl") && has(d, "certifier") && has(d, "Brancher Stripe"), "ce qu'elle n'ouvre jamais : la cle de l'editeur (certifier, la sauvegarde), Stripe");
             auto* who = find<ui::DropDown>(root, "derogation.admin");
             check(who && who->selectedItem() && who->selectedItem()->value == leaKey->publicKeyHex(), "l'admin : Lea (la liste des admins actifs)");
             check(enabledOf(root, "derogation.accorder") && !root.findById("derogation.revoquer")->visible(), "Accorder ; pas de Revoquer");
@@ -215,6 +218,21 @@ int main(int argc, char** argv) {
         t = draw(*page);
         check(has(t, "En cours") && has(t, kLea + " \xE2\x80\x94 il reste 3 h 59") && enabledOf(*page, "service.derogation.revoquer"),
               "en cours : Lea, il reste 3 h 59 ; Revoquer maintenant");
+        // 1.52.0 : en attente du code (un FAUX relu) - le code retire de la cle de l'editeur, l'heure limite, Revoquer
+        gui::Derogation p = fakeDerogation(leaKey->publicKeyHex(), kLea, 0);
+        p.state = "en_attente";
+        p.format = 2;
+        p.right = "tout";
+        p.duration = 9000;
+        p.validUntil = g_now + 3000;
+        p.start = p.end = p.validUntil;
+        fx.ws->adoptDerogation(p);
+        page->refresh();
+        t = draw(*page);
+        const std::string code = fx.ws->derogationCode(p.id);
+        check(code.size() == 8 && has(t, "En attente du code") && has(t, gui::formatDerogationCode(code)) && has(t, "2 h 30") && enabledOf(*page, "service.derogation.revoquer"),
+              "en attente du code : le code (retire de la cle), 2 h 30, Revoquer");
+        check(lf.ws->derogationCode(p.id).empty(), "un admin ne tire aucun code");
         fx.ws->adoptDerogation(gui::Derogation{});
     }
 

@@ -24,6 +24,8 @@
 //  Sauvegarder ma cle... (l'admin+ : Parametres de securite), Demander a
 //  devenir admin... (sans cle : Administrateurs), l'ecran d'attente (en attente).
 // =============================================================================
+#include "AccountDerogation.hpp"   // 1.52.0 (agent D) : la derogation recue - le code a taper, puis son compte a rebours
+#include "AccountInvite.hpp"   // 1.52.0 : XPG Admin - ton code d'invitation, ton ajout (avant : Administrateurs)
 #include "AdminsKit.hpp"
 #include "Page.hpp"
 
@@ -164,6 +166,13 @@ public:
         links_ += ask_->clicked->connect([this] { go("admins"); });
         links_ += createKey_->clicked->connect([this] { go("securite"); });
         links_ += waiting_->clicked->connect([this] { go("admins"); });
+        // 1.52.0 : XPG Admin sans Administrateurs ni Service en ligne - la carte du code d'invitation (AccountInvite.cpp) et
+        // << Ce PC >> (l'adresse du service, l'archive, le mail : la sous-page "poste")
+        invite_ = &kit::adopt(*this, std::make_unique<InviteCard>(host_));
+        derogation_ = &kit::adopt(*this, std::make_unique<DerogationCard>(host_));   // 1.52.0 (agent D)
+        thisPc_ = &kit::button(*this, "Ce PC : le service, l'archive, le mail\xE2\x80\xA6", "compte.ce-pc", ui::Button::Style::Default, ui::Icon::Station);
+        thisPc_->setTooltip("L'adresse du service de l'\xC3\xA9" "diteur, l'archive re\xC3\xA7ue par le trousseau, le mail au client : ce que ce PC r\xC3\xA8gle lui-m\xC3\xAAme.");
+        links_ += thisPc_->clicked->connect([this] { go("poste"); });
         refresh();
     }
     ~AccountPage() override { links_.clear(); }
@@ -172,6 +181,8 @@ public:
 
     void refresh() override {
         info_ = ws().account();
+        if (invite_) invite_->refresh();   // 1.52.0
+        if (derogation_) derogation_->refresh();   // 1.52.0 (agent D)
         build();
         invalidateLayout();
         invalidate();
@@ -220,12 +231,28 @@ protected:
         const bool hasKey = !info_.keyHex.empty();
         place(copyId_, {id_.right() - 20.f - kit::buttonWidth(*copyId_, 90.f), id_.y + 40.f, kit::buttonWidth(*copyId_, 90.f), 30.f}, hasKey);
         place(copyFp_, {id_.right() - 20.f - kit::buttonWidth(*copyFp_, 150.f), id_.bottom() - 46.f, kit::buttonWidth(*copyFp_, 150.f), 30.f}, hasKey);
+        // 1.52.0 : XPG Admin - ton code d'invitation, ton ajout (AccountInvite.cpp)
+        if (invite_->wanted()) {
+            const float ih = invite_->wantedHeight(w);
+            place(invite_, {x, y, std::min(w, 760.f), ih}, true);
+            y += ih + kGap;
+        } else {
+            place(invite_, {}, false);
+        }
+        // 1.52.0 (agent D) : la derogation recue (le code a taper) ou qui court (AccountDerogation.hpp)
+        if (derogation_->wanted()) {
+            const float dh = derogation_->wantedHeight(w);
+            place(derogation_, {x, y, std::min(w, 760.f), dh}, true);
+            y += dh + kGap;
+        } else {
+            place(derogation_, {}, false);
+        }
         // L'ETAT DU COMPTE : ses lignes, puis les gestes du role
         const std::vector<ui::Button*> acts = actions();
         const float stateH = 52.f + static_cast<float>(state_.size()) * kRowH + (acts.empty() ? 12.f : 56.f);
         stateBox_ = {x, y, w, stateH};
         float bx = x + 20.f;
-        for (ui::Button* btn : {backup_, ask_, createKey_, waiting_}) {
+        for (ui::Button* btn : {backup_, ask_, createKey_, waiting_, thisPc_}) {
             const bool on = std::find(acts.begin(), acts.end(), btn) != acts.end();
             const float bw = kit::buttonWidth(*btn, 120.f);
             place(btn, {bx, stateBox_.bottom() - 46.f, bw, 32.f}, on);
@@ -290,11 +317,13 @@ private:
             case Role::Pending: return "Ton code d'invitation est accept\xC3\xA9 : l'Admin+ ajoute ta cl\xC3\xA9 \xC3\xA0 la liste sign\xC3\xA9" "e des admins d'office, d\xC3\xA8s qu'il est en ligne.";
             case Role::None: break;
         }
-        if (license_admin::classique()) return "Pas encore de cl\xC3\xA9 d'admin sur ce poste : ton code d'invitation fait de toi un admin (Administrateurs).";
+        if (license_admin::classique()) return "Pas encore de cl\xC3\xA9 d'admin sur ce poste : ton code d'invitation fait de toi un admin (ci-dessous).";   // 1.52.0
         return "Ce programme est celui de l'admin+. Un admin installe XPG Admin, re\xC3\xA7u avec son invitation. Pas encore de cl\xC3\xA9 de l'\xC3\xA9" "diteur sur ce poste.";
     }
 
     [[nodiscard]] std::vector<ui::Button*> actions() const {
+        // 1.52.0 : XPG Admin - le code d'invitation et l'ajout ont leur carte (AccountInvite.cpp) ; << Ce PC >> pour tous
+        if (license_admin::classique()) return {thisPc_};
         switch (info_.role) {
             case Role::Plus: return {backup_};
             case Role::Pending: return {waiting_};
@@ -376,7 +405,9 @@ private:
                 break;
             case Role::Pending:   // 1.51.0 : inscrit par son code d'invitation, l'Admin+ le signe d'office
                 if (!w.joined() && a.joinedAt == 0) {   // une cle sans code accepte (refuse) : le code a taper
-                    state_.push_back({"\xC3\x89tat", "une cl\xC3\xA9 d'admin, pas encore inscrite : tape ton code d'invitation (Administrateurs)", ui::Tone::Warning});
+                    state_.push_back({"\xC3\x89tat", std::string("une cl\xC3\xA9 d'admin, pas encore inscrite : tape ton code d'invitation (") +
+                                                          (license_admin::classique() ? "ci-dessus" : "Administrateurs") + ")",   // 1.52.0
+                                      ui::Tone::Warning});
                     break;
                 }
                 state_.push_back({"\xC3\x89tat", "admin, ajout en cours : l'Admin+ signe ta cl\xC3\xA9 d'office", ui::Tone::Warning});
@@ -413,9 +444,18 @@ private:
         state_.push_back({"Versions", versions});
         // la derogation << Gerer le service >> (Derogation.hpp, l'agent S : celle que ce poste a relue du service)
         const Derogation& d = w.derogation();
-        if (d.exists() && d.activeAt(now)) {
+        if (d.exists() && d.pendingAt(now) && (a.role == Role::Plus || d.forKey(a.keyHex))) {
+            // 1.52.0 (agent D) : en attente du code - l'admin+ revoit le code (retire de sa cle), l'admin le tape (ci-dessus)
+            const std::string until = clockText(d.localTime(d.validUntil, now), now);
+            if (a.role == Role::Plus)
+                state_.push_back({"D\xC3\xA9rogation", "en attente du code : " + formatDerogationCode(w.derogationCode(d.id)) + " (valable jusqu'\xC3\xA0 " + until + ") \xE2\x80\x94 " +
+                                                             d.adminName + ", " + durationText(d.duration),
+                                  ui::Tone::Warning});
+            else
+                state_.push_back({"D\xC3\xA9rogation", "re\xC3\xA7ue, en attente de ton code (ci-dessus) : valable jusqu'\xC3\xA0 " + until, ui::Tone::Warning});
+        } else if (d.exists() && d.activeAt(now)) {
             const bool mine = d.forKey(a.keyHex);
-            state_.push_back({"G\xC3\xA9rer le service",
+            state_.push_back({d.everything() ? "D\xC3\xA9rogation" : "G\xC3\xA9rer le service",
                               (mine ? std::string("d\xC3\xA9rogation en cours pour toi : ") : "d\xC3\xA9rogation en cours pour " + (d.adminName.empty() ? std::string("un admin") : d.adminName) + " : ") +
                                   derogationText(d, now),
                               ui::Tone::Warning});
@@ -741,6 +781,9 @@ private:
     ui::Button*                        ask_{nullptr};
     ui::Button*                        createKey_{nullptr};
     ui::Button*                        waiting_{nullptr};
+    InviteCard*                        invite_{nullptr};   // 1.52.0 : XPG Admin, ton code d'invitation, ton ajout
+    DerogationCard*                    derogation_{nullptr};   // 1.52.0 (agent D) : la derogation recue, son code
+    ui::Button*                        thisPc_{nullptr};   // 1.52.0 : XPG Admin, Mon compte > Ce PC
     ui::ScrollArea                     scroll_;
     float                              offset_{0.f}, content_{0.f}, titleY_{0.f};
     Rect                               who_{}, id_{}, stateBox_{}, powersBox_{}, historyBox_{};

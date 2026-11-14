@@ -1656,9 +1656,15 @@ WizardBody::WizardBody(WizardMenu& owner, ShellHost host, std::vector<std::strin
     // 1.44.0 : un admin signe avec SA cle s'il a le droit (creer, ou prolonger une licence) ; le Workspace verifie le droit exact.
     const char* right = extendId.empty() ? "licence_creer" : "licence_prolonger";
     if (w.role() != Role::None && w.role() != Role::Plus && !w.can(right)) {
-        blockedWhy_ = w.whyNot(right) + "\n\nLa page Administrateurs montre tes droits.";
-        blockedPage_ = "admins";
-        blockedLabel_ = "Aller \xC3\xA0 Administrateurs";
+        // 1.52.0 : XPG Admin - tes droits se lisent dans Mon compte (Administrateurs s'ouvre avec une derogation)
+        const bool classic = license_admin::classique();
+        blockedWhy_ = w.whyNot(right) + (classic ? "\n\nMon compte montre tes droits." : "\n\nLa page Administrateurs montre tes droits.");
+        blockedPage_ = classic ? "compte" : "admins";
+        blockedLabel_ = classic ? "Aller \xC3\xA0 Mon compte" : "Aller \xC3\xA0 Administrateurs";
+    } else if (!w.signer() && license_admin::classique()) {   // 1.52.0 : XPG Admin - pas encore admin : son code d'invitation (Mon compte)
+        blockedWhy_ = "Il faut d'abord \xC3\xAAtre admin pour signer une licence : ton code d'invitation, dans Mon compte, fait de toi un admin.";
+        blockedPage_ = "compte";
+        blockedLabel_ = "Aller \xC3\xA0 Mon compte";
     } else if (!w.signer()) {
         blockedWhy_ = "Il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur pour signer une licence" + (w.key().problem.empty() ? std::string() : " : " + w.key().problem)
                       + ".\n\nCr\xC3\xA9" "e-la, ou restaure ta sauvegarde, dans Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 ; puis reviens ici.";

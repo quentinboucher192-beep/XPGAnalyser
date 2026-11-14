@@ -7,6 +7,11 @@
 //  (l'arbitre, a son heure). Le document, signe par la cle de l'editeur :
 //  "XPG-DEROGATION-1\n" + {"format":1,"id","droit":"service","admin","nom","debut",
 //  "fin","emise"} - debut : l'heure du service, fin : debut + 1, 4, 24 ou 72 h.
+//  1.52.0 : le format 2 - {"format":2,"id","droit":"tout","admin","nom","duree",
+//  "valable","emise"} (duree : 10 min a 72 h ; valable : emise + 1 h, l'heure limite
+//  pour taper le code). Le code (8 chiffres) est retire de la cle de l'editeur
+//  (derogationCode : rien n'est garde) ; seule son empreinte part, a cote du
+//  document ; l'admin le tape (activateDerogation), le service compare.
 //  La connexion : ServiceConnection.hpp ; ici, la recherche au chargement (aucune
 //  adresse reglee, pas l'admin+), << Utiliser une connexion... >>, << Exporter la
 //  connexion... >>.
@@ -34,6 +39,7 @@ namespace adm = licensing::admins;
 using core::json::Value;
 
 constexpr const char* kPrefix = "XPG-DEROGATION-1\n";
+constexpr const char* kCodePrefix = "XPG-DEROGATION-CODE-1\n";   // 1.52.0 : le code (sa signature, son empreinte)
 constexpr const char* kServicePlusOnly = "L'admin+ seul g\xC3\xA8re le service (d\xC3\xA9rogation possible).";
 
 std::string two(long v) {
@@ -55,6 +61,13 @@ std::string serviceTooOld(const online::Reply& r) {
     return {};
 }
 
+// 1.52.0 : un service d'avant (1.47 a 1.51) refuse le format 2 (<< format 1 attendu >>), ou n'a pas la route du code.
+std::string serviceTooOldForCode(const online::Reply& r) {
+    if (r.error.empty() && ((r.status == 404 && r.code() == "route") || (r.status == 400 && r.code() == "derogation" && r.message().find("format 1 attendu") != std::string::npos)))
+        return "ton service en ligne ne conna\xC3\xAEt pas encore la d\xC3\xA9rogation par code : l'admin+ doit d\xC3\xA9ployer la 1.52.0 (Service en ligne \xE2\x80\xBA D\xC3\xA9ployer le service)";
+    return {};
+}
+
 // La vue JSON du service -> Derogation (sans la verification du document).
 Derogation fromJson(const Value& d, Seconds serverNow, Seconds localNow) {
     Derogation out;
@@ -71,6 +84,14 @@ Derogation fromJson(const Value& d, Seconds serverNow, Seconds localNow) {
     out.revoked = static_cast<Seconds>(d.integer("revoquee"));
     out.state = d.str("etat").substr(0, 20);
     out.uses = static_cast<int>(d.integer("usages"));
+    // 1.52.0 : le format 2 (jamais le code ni son empreinte : le service ne les rend pas)
+    out.format = static_cast<int>(d.integer("format", 1));
+    out.right = d.str("droit").substr(0, 20);
+    out.duration = static_cast<Seconds>(d.integer("duree"));
+    out.validUntil = static_cast<Seconds>(d.integer("valable"));
+    out.cancelled = static_cast<Seconds>(d.integer("annulee"));
+    out.triesLeft = static_cast<int>(d.integer("essais_restants"));
+    out.reason = d.str("raison").substr(0, 20);
     return out;
 }
 
@@ -87,8 +108,20 @@ bool documentOk(const Value& d, const std::vector<licensing::crypto::PublicKey>&
     if (!signedOk) return false;
     Value doc;
     if (!core::json::parse(text, doc, nullptr) || !doc.isObject()) return false;
+    if (doc.integer("format") == 2)   // 1.52.0 : << tout >>, la duree et l'heure limite du code (le debut : quand il tape le code)
+        return doc.str("id") == view.id && doc.str("admin") == view.adminKey && doc.str("droit") == "tout" && !doc.find("code") &&
+               static_cast<Seconds>(doc.integer("duree")) == view.duration && static_cast<Seconds>(doc.integer("valable")) == view.validUntil &&
+               (view.state != "active" || view.end - view.start == view.duration);
     return doc.str("id") == view.id && doc.str("admin") == view.adminKey && doc.str("droit") == "service" &&
            static_cast<Seconds>(doc.integer("fin")) == view.end && static_cast<Seconds>(doc.integer("debut")) == view.start;
+}
+
+// 1.52.0 : << 15:42 >> pour aujourd'hui, la date sinon.
+std::string clockOrDate(Seconds t, Seconds now) {
+    const std::string a = dateTimeFr(t), b = dateTimeFr(now);
+    const auto sa = a.find(' '), sb = b.find(' ');
+    if (sa != std::string::npos && sb != std::string::npos && a.compare(0, sa, b, 0, sb) == 0) return a.substr(sa + 1);
+    return a;
 }
 
 std::string P8(const fs::path& p) {
@@ -107,9 +140,23 @@ std::string remainingText(Seconds s) {
     return std::to_string(h) + " h " + two(m);
 }
 
+std::string durationText(Seconds s) {
+    if (s <= 0) return "0 min";
+    if (s < 3600) return std::to_string((s + 59) / 60) + " min";
+    const long h = static_cast<long>(s / 3600), m = static_cast<long>((s % 3600) / 60);
+    return m ? std::to_string(h) + " h " + two(m) : std::to_string(h) + " h";
+}
+
+std::string clockText(Seconds localTime, Seconds localNow) { return clockOrDate(localTime, localNow); }
+
 std::string derogationText(const Derogation& d, Seconds localNow) {
     if (!d.exists()) return "aucune";
     if (d.revoked || d.state == "revoquee") return "r\xC3\xA9voqu\xC3\xA9" "e par l'admin+" + (d.revoked ? " le " + dateTimeFr(d.revoked) : std::string());
+    // 1.52.0 : en attente du code, annulee
+    if (d.pendingAt(localNow))
+        return "en attente du code (valable jusqu'\xC3\xA0 " + clockOrDate(d.localTime(d.validUntil, localNow), localNow) + ")";
+    if (d.state == "en_attente" || d.state == "annulee" || d.cancelled)
+        return std::string("annul\xC3\xA9" "e (") + (d.reason == "code_faux" ? "5 codes faux" : "le code n'a pas \xC3\xA9t\xC3\xA9 tap\xC3\xA9 \xC3\xA0 temps") + ")";
     if (d.activeAt(localNow)) {
         const Seconds left = d.remaining(localNow);
         // l'heure de la fin, en heure de ce PC : le service l'a donnee a son heure (l'ecart corrige)
@@ -118,6 +165,36 @@ std::string derogationText(const Derogation& d, Seconds localNow) {
     }
     if (d.serviceNow(localNow) < d.start) return "pas encore commenc\xC3\xA9" "e";
     return "termin\xC3\xA9" "e le " + dateTimeFr(d.end - (d.serviceNow(localNow) - localNow));
+}
+
+// ============================================================================================ 1.52.0 : le code
+std::string derogationCode(const licensing::SigningKey& editorKey, const std::string& id) {
+    const auto sig = editorKey.sign(std::string(kCodePrefix) + id);   // Ed25519 : deterministe
+    const auto h = crypto::sha256(sig.data(), sig.size());
+    std::uint64_t v = 0;
+    for (int i = 0; i < 8; ++i) v = (v << 8) | static_cast<std::uint64_t>(h[static_cast<std::size_t>(i)]);
+    char b[16];
+    std::snprintf(b, sizeof b, "%08llu", static_cast<unsigned long long>(v % 100000000ULL));
+    return b;
+}
+
+std::string derogationCodeHash(const std::string& id, const std::string& code) { return crypto::sha256Hex(std::string(kCodePrefix) + id + "\n" + code); }
+
+std::string formatDerogationCode(const std::string& code) { return code.size() == 8 ? code.substr(0, 4) + " " + code.substr(4) : code; }
+
+std::string normalizeDerogationCode(const std::string& typed) {
+    std::string out;
+    for (const char c : typed) {
+        if (c >= '0' && c <= '9') out += c;
+        else if (c != ' ' && c != '-' && c != '.' && c != '\t' && c != '_') return {};
+        if (out.size() > 8) return {};
+    }
+    return out.size() == 8 ? out : std::string();
+}
+
+std::string Workspace::derogationCode(const std::string& id) const {
+    if (role_ != Role::Plus || !signing_ || id.size() != 32) return {};
+    return gui::derogationCode(*signing_, id);
 }
 
 // ============================================================================================ gerer le service
@@ -130,6 +207,11 @@ bool Workspace::mayManageService() const {
 std::string Workspace::whyNotService() const {
     if (mayManageService()) return {};
     if (role_ == Role::Admin && derogation_.forKey(adminKey_.keyHex) && derogation_.exists()) {
+        if (derogation_.pendingAt(now()))   // 1.52.0
+            return "Ta d\xC3\xA9rogation attend son code : tape le code que l'admin+ voit sur son PC (Mon compte).";
+        if (derogation_.state == "annulee" || derogation_.state == "en_attente" || derogation_.cancelled)
+            return "Ta d\xC3\xA9rogation est annul\xC3\xA9" "e (" + std::string(derogation_.reason == "code_faux" ? "5 codes faux" : "le code n'a pas \xC3\xA9t\xC3\xA9 tap\xC3\xA9 \xC3\xA0 temps") +
+                   ") : l'admin+ seul g\xC3\xA8re le service (demande-lui une nouvelle d\xC3\xA9rogation).";
         if (derogation_.revoked || derogation_.state == "revoquee")
             return "Ta d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB a \xC3\xA9t\xC3\xA9 r\xC3\xA9voqu\xC3\xA9" "e : l'admin+ seul g\xC3\xA8re le service.";
         return "Ta d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB est termin\xC3\xA9" "e : l'admin+ seul g\xC3\xA8re le service (demande-lui une nouvelle d\xC3\xA9rogation).";
@@ -154,66 +236,83 @@ void Workspace::adoptDerogation(const online::AdminWatch& w) {
     d.revoked = static_cast<Seconds>(w.derogationRevoked);
     d.state = w.derogationState;
     d.uses = static_cast<int>(w.derogationUses);
+    // 1.52.0 : le format 2
+    d.format = static_cast<int>(w.derogationFormat > 0 ? w.derogationFormat : 1);
+    d.right = w.derogationRight;
+    d.duration = static_cast<Seconds>(w.derogationDuration);
+    d.validUntil = static_cast<Seconds>(w.derogationValidUntil);
+    d.cancelled = static_cast<Seconds>(w.derogationCancelled);
+    d.triesLeft = static_cast<int>(w.derogationTriesLeft);
+    d.reason = w.derogationReason;
     // la verification du document se garde d'une lecture complete de la meme derogation
     d.signatureOk = derogation_.id == d.id && derogation_.signatureOk;
     derogation_ = d;
 }
 
-OpResult Workspace::grantDerogation(const std::string& adminKeyHex, int hours, Derogation* out) const {
+OpResult Workspace::grantDerogation(const std::string& adminKeyHex, Seconds duration, Derogation* out) const {
     std::string why;
     detail::Caller caller;
     if (!detail::loadCaller(folder_, caller, &why)) return OpResult::fail(why);
-    if (detail::callerDenied(caller, {})) return OpResult::fail("seul l'admin+ accorde une d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB");
-    if (std::find(std::begin(kDerogationHours), std::end(kDerogationHours), hours) == std::end(kDerogationHours))
-        return OpResult::fail("une d\xC3\xA9rogation dure 1 h, 4 h, 24 h ou 72 h : jamais plus, jamais \xC2\xAB permanente \xC2\xBB");
+    if (detail::callerDenied(caller, {})) return OpResult::fail("seul l'admin+ accorde une d\xC3\xA9rogation");
+    if (duration < kDerogationMinSeconds || duration > kDerogationMaxSeconds)
+        return OpResult::fail("une d\xC3\xA9rogation dure de 10 min \xC3\xA0 72 h : jamais plus, jamais \xC2\xAB permanente \xC2\xBB");
     const adm::Admin* a = caller.admins ? caller.admins->byKey(adminKeyHex) : nullptr;
     if (!a) return OpResult::fail("cet admin n'est pas dans la liste des admins en place");
     if (!a->active()) return OpResult::fail(a->name + " est retir\xC3\xA9 : il ne peut rien recevoir");
     std::unique_ptr<online::Client> c;
     if (!online::openClient(folder_, *caller.key, detail::optionsFor(caller, now()), c, &why)) return OpResult::fail(why);
-    // L'heure du service (le debut doit etre la sienne, a 10 minutes pres).
-    const Seconds start = c->serviceNow();
+    // 1.52.0 : le format 2 - emise a l'heure du service (a 10 minutes pres) ; le code se tape dans l'heure ; la duree
+    // commence quand il le tape.
+    const Seconds issued = c->serviceNow();
     unsigned char rnd[16];
     crypto::randomBytes(rnd, sizeof rnd);
     const std::string id = crypto::hex(rnd, sizeof rnd);
     Value doc = Value::object();
-    doc.set("format", 1);
+    doc.set("format", 2);
     doc.set("id", id);
-    doc.set("droit", "service");
+    doc.set("droit", "tout");
     doc.set("admin", a->key);
     doc.set("nom", a->name.substr(0, 60));
-    doc.set("debut", static_cast<std::int64_t>(start));
-    doc.set("fin", static_cast<std::int64_t>(start + static_cast<Seconds>(hours) * 3600));
-    doc.set("emise", static_cast<std::int64_t>(start));
+    doc.set("duree", static_cast<std::int64_t>(duration));
+    doc.set("valable", static_cast<std::int64_t>(issued + kDerogationCodeSeconds));
+    doc.set("emise", static_cast<std::int64_t>(issued));
     const std::string text = core::json::write(doc, false);
     const auto sig = caller.key->sign(std::string(kPrefix) + text);
     Value body = Value::object();
     body.set("derogation", text);
     body.set("signature", crypto::hex(sig));
+    // le code n'est jamais garde ni envoye : seulement son empreinte, a cote du document (jamais dedans)
+    body.set("code", derogationCodeHash(id, gui::derogationCode(*caller.key, id)));
     const online::Reply r = c->call("PUT", "/admin/derogation", core::json::write(body, false));
-    if (const std::string old = serviceTooOld(r); !old.empty()) return OpResult::fail(old);
+    if (const std::string old = serviceTooOldForCode(r); !old.empty()) return OpResult::fail(old);
     if (r.status != 201 || !r.error.empty() || !r.json.isObject()) return OpResult::fail(c->explain(r, "accorder la d\xC3\xA9rogation"));
-    Derogation d = fromJson(r.json.at("derogation"), static_cast<Seconds>(r.json.integer("heure", start)), now());
+    Derogation d = fromJson(r.json.at("derogation"), static_cast<Seconds>(r.json.integer("heure", issued)), now());
     d.signatureOk = true;
     if (out) *out = d;
-    const std::string until = dateTimeFr(d.end - (d.serverNow - d.readAt));
+    const std::string until = clockOrDate(d.localTime(d.validUntil, now()), now());
+    const std::string howLong = durationText(duration);
     Value det = Value::object();
     det.set("admin", a->key);
     det.set("nom", a->name);
-    det.set("heures", hours);
+    det.set("format", 2);
+    det.set("droit", "tout");
+    det.set("duree", static_cast<std::int64_t>(duration));
+    det.set("valable", static_cast<std::int64_t>(d.validUntil));
     det.set("derogation", id);
-    det.set("fin", static_cast<std::int64_t>(d.end));
     (void)detail::queueJournal(folder_, *caller.key, now(), "derogation_accorder", a->id,
-                               "a accord\xC3\xA9 \xC3\xA0 " + a->name + " la d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB pour " + std::to_string(hours) + " h",
+                               "a accord\xC3\xA9 \xC3\xA0 " + a->name + " une d\xC3\xA9rogation (tout, " + howLong + "), \xC3\xA0 activer par son code avant " + until,
                                core::json::write(det, false), {}, {}, nullptr);
     (void)detail::flushJournalWith(folder_, *c);
-    OpResult res = OpResult::done("D\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB accord\xC3\xA9" "e \xC3\xA0 " + a->name + " pour " + std::to_string(hours) +
-                                  " h : jusqu'au " + until + ".");
-    if (!r.json.str("remplacee").empty()) res.details.push_back("Elle remplace la d\xC3\xA9rogation qui courait encore.");
-    res.details.push_back("Le service la tient \xC3\xA0 son heure : \xC3\xA0 la fin, elle s'arr\xC3\xAAte d'elle-m\xC3\xAAme ; R\xC3\xA9voquer l'arr\xC3\xAAte avant.");
+    OpResult res = OpResult::done("D\xC3\xA9rogation accord\xC3\xA9" "e \xC3\xA0 " + a->name + " pour " + howLong + " : elle commence quand il tape le code (valable jusqu'\xC3\xA0 " +
+                                  until + ").");
+    if (!r.json.str("remplacee").empty()) res.details.push_back("Elle remplace la d\xC3\xA9rogation qui attendait son code ou courait encore.");
+    res.details.push_back("Donne-lui le code de vive voix (au t\xC3\xA9l\xC3\xA9phone) : il le tape dans XPG Admin. Ce PC le montre tant qu'il attend (Service en ligne, "
+                          "Administrateurs) ; 5 codes faux l'annulent.");
+    res.details.push_back("Il voit tout comme toi pendant " + howLong + ", sauf ce qui reste \xC3\xA0 ta cl\xC3\xA9 (les admins, les invitations, les versions \xC3\xA0 publier, la boutique, "
+                          "Stripe, la sauvegarde, la restauration) ; le service la tient \xC3\xA0 son heure, R\xC3\xA9voquer l'arr\xC3\xAAte avant.");
     res.details.push_back("Pour mettre le service en ligne, " + a->name + " se connecte \xC3\xA0 Cloudflare avec SON compte (invite-le comme membre de ton compte "
                           "Cloudflare) : jamais un jeton partag\xC3\xA9.");
-    res.details.push_back("Chaque fois qu'il s'en sert, le journal le dit et tu es pr\xC3\xA9venu.");
+    res.details.push_back("Quand il tape le code, et chaque fois qu'il s'en sert, le journal le dit et tu es pr\xC3\xA9venu.");
     res.output = id;
     return res;
 }
@@ -230,9 +329,11 @@ OpResult Workspace::revokeDerogation(Derogation* out) const {
     if (g.status != 200 || !g.error.empty() || !g.json.isObject()) return OpResult::fail(c->explain(g, "lire la d\xC3\xA9rogation en place"));
     const Value& cur = g.json.at("derogation");
     if (!cur.isObject() || cur.str("id").empty()) return OpResult::fail("aucune d\xC3\xA9rogation en place : rien \xC3\xA0 r\xC3\xA9voquer");
-    if (cur.str("etat") != "active" && cur.str("etat") != "a_venir") {
+    const std::string st = cur.str("etat");
+    if (st != "active" && st != "a_venir" && st != "en_attente") {   // 1.52.0 : en attente du code aussi
         if (out) *out = fromJson(cur, static_cast<Seconds>(g.json.integer("heure")), now());
-        return OpResult::fail("la d\xC3\xA9rogation de " + cur.str("nom") + " ne court plus (" + (cur.str("etat") == "revoquee" ? std::string("d\xC3\xA9j\xC3\xA0 r\xC3\xA9voqu\xC3\xA9" "e") : std::string("termin\xC3\xA9" "e")) + ")");
+        return OpResult::fail("la d\xC3\xA9rogation de " + cur.str("nom") + " ne court plus (" +
+                              (st == "revoquee" ? std::string("d\xC3\xA9j\xC3\xA0 r\xC3\xA9voqu\xC3\xA9" "e") : st == "annulee" ? std::string("annul\xC3\xA9" "e") : std::string("termin\xC3\xA9" "e")) + ")");
     }
     Value body = Value::object();
     body.set("id", cur.str("id"));
@@ -244,15 +345,19 @@ OpResult Workspace::revokeDerogation(Derogation* out) const {
     det.set("admin", d.adminKey);
     det.set("nom", d.adminName);
     det.set("derogation", d.id);
-    det.set("restait", static_cast<std::int64_t>(std::max<Seconds>(0, d.end - d.serverNow)));
+    det.set("restait", static_cast<std::int64_t>(st == "en_attente" ? 0 : std::max<Seconds>(0, d.end - d.serverNow)));
+    if (st == "en_attente") det.set("en_attente", true);
     std::string adminId = d.adminKey;
     if (caller.admins)
         if (const adm::Admin* a = caller.admins->byKey(d.adminKey)) adminId = a->id;
     (void)detail::queueJournal(folder_, *caller.key, now(), "derogation_revoquer", adminId,
-                               "a r\xC3\xA9voqu\xC3\xA9 la d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB de " + d.adminName, core::json::write(det, false), {}, {}, nullptr);
+                               std::string(d.everything() ? "a r\xC3\xA9voqu\xC3\xA9 la d\xC3\xA9rogation de " : "a r\xC3\xA9voqu\xC3\xA9 la d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB de ") +
+                                   d.adminName + (st == "en_attente" ? std::string(" (son code pas encore tap\xC3\xA9)") : std::string()),
+                               core::json::write(det, false), {}, {}, nullptr);
     (void)detail::flushJournalWith(folder_, *c);
-    OpResult res = OpResult::done("D\xC3\xA9rogation de " + d.adminName + " r\xC3\xA9voqu\xC3\xA9" "e : l'admin+ seul g\xC3\xA8re de nouveau le service.");
-    res.details.push_back("Son Admin repasse en lecture seule au prochain regard (15 s au plus) ; le service refuse d\xC3\xA9j\xC3\xA0 ses gestes.");
+    OpResult res = OpResult::done("D\xC3\xA9rogation de " + d.adminName + " r\xC3\xA9voqu\xC3\xA9" "e" + (st == "en_attente" ? std::string(" : son code ne sert plus.") : std::string(" : l'admin+ seul g\xC3\xA8re de nouveau le service.")));
+    res.details.push_back(d.everything() ? "Son XPG Admin repasse \xC3\xA0 la gestion seule au prochain regard (15 s au plus) ; le service refuse d\xC3\xA9j\xC3\xA0 ce qu'elle ouvrait."
+                                         : "Son Admin repasse en lecture seule au prochain regard (15 s au plus) ; le service refuse d\xC3\xA9j\xC3\xA0 ses gestes.");
     return res;
 }
 
@@ -269,14 +374,69 @@ OpResult Workspace::readDerogation(Derogation& out) const {
     if (r.status != 200 || !r.error.empty() || !r.json.isObject()) return OpResult::fail(c->explain(r, "lire la d\xC3\xA9rogation"));
     const Value& d = r.json.at("derogation");
     out = fromJson(d, static_cast<Seconds>(r.json.integer("heure")), now());
-    if (!d.isObject() || out.id.empty()) return OpResult::done("Aucune d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB en cours.");
+    if (!d.isObject() || out.id.empty()) return OpResult::done("Aucune d\xC3\xA9rogation en cours.");
     std::vector<licensing::crypto::PublicKey> editors = caller.editorKeys;
     if (caller.role == Role::Plus) editors.push_back(caller.key->publicKey());
     out.signatureOk = documentOk(d, editors, out);
     if (!out.signatureOk)
         return OpResult::fail("la d\xC3\xA9rogation rendue par le service n'est pas sign\xC3\xA9" "e par une cl\xC3\xA9 de l'\xC3\xA9" "diteur que ce poste conna\xC3\xAEt : elle est ignor\xC3\xA9" "e");
-    OpResult res = OpResult::done("D\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB de " + out.adminName + " : " + derogationText(out, now()) + ".");
+    OpResult res = OpResult::done(std::string(out.everything() ? "D\xC3\xA9rogation de " : "D\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB de ") + out.adminName + " : " +
+                                  derogationText(out, now()) + ".");
+    if (out.everything()) res.details.push_back("Dur\xC3\xA9" "e choisie : " + durationText(out.duration) + (out.pendingAt(now()) ? " ; essais qui restent : " + std::to_string(out.triesLeft) : std::string()) + ".");
     res.details.push_back("Sign\xC3\xA9" "e par la cl\xC3\xA9 de l'\xC3\xA9" "diteur ; utilis\xC3\xA9" "e " + std::to_string(out.uses) + " fois.");
+    return res;
+}
+
+// 1.52.0 : un admin tape le code que l'admin+ voit sur son PC.
+OpResult Workspace::activateDerogation(const std::string& idIn, const std::string& typedCode, Derogation* out) const {
+    const std::string code = normalizeDerogationCode(typedCode);
+    if (code.empty()) return OpResult::fail("le code fait 8 chiffres : celui que l'admin+ voit sur son PC (les espaces ne comptent pas)");
+    std::string why;
+    detail::Caller caller;
+    if (!detail::loadCaller(folder_, caller, &why)) return OpResult::fail(why);
+    if (caller.role != Role::Admin) return OpResult::fail("seul l'admin qui re\xC3\xA7oit la d\xC3\xA9rogation tape son code");
+    std::unique_ptr<online::Client> c;
+    if (!online::openClient(folder_, *caller.key, detail::optionsFor(caller, now()), c, &why)) return OpResult::fail(why);
+    std::vector<licensing::crypto::PublicKey> editors = caller.editorKeys;
+    // relire la sienne (son etat, ses essais) : apres un refus, et quand l'identifiant n'est pas connu
+    const auto reread = [&](Derogation& into) {
+        const online::Reply g = c->call("GET", "/admin/derogation");
+        if (g.status != 200 || !g.error.empty() || !g.json.isObject()) return false;
+        const Value& v = g.json.at("derogation");
+        into = fromJson(v, static_cast<Seconds>(g.json.integer("heure")), now());
+        into.signatureOk = v.isObject() && documentOk(v, editors, into);
+        return true;
+    };
+    std::string id = idIn;
+    if (id.empty()) {
+        Derogation cur;
+        if (!reread(cur) || !cur.exists()) return OpResult::fail("aucune d\xC3\xA9rogation \xC3\xA0 ton nom : l'admin+ ne t'en a pas envoy\xC3\xA9 (ou le service ne r\xC3\xA9pond pas)");
+        id = cur.id;
+    }
+    Value body = Value::object();
+    body.set("id", id);
+    body.set("code", code);
+    const online::Reply r = c->call("POST", "/admin/derogation/activer", core::json::write(body, false));
+    if (const std::string old = serviceTooOldForCode(r); !old.empty()) return OpResult::fail(old);
+    if (r.error.empty() && r.status >= 400 && r.status < 500 && !r.message().empty()) {
+        if (out) {
+            Derogation cur;
+            if (reread(cur)) *out = cur;
+        }
+        return OpResult::fail(r.message());   // << Code faux : il te reste 4 essais. >>, trop tard, annulee, revoquee
+    }
+    if (r.status != 200 || !r.error.empty() || !r.json.isObject()) return OpResult::fail(c->explain(r, "activer ta d\xC3\xA9rogation"));
+    const Value& v = r.json.at("derogation");
+    Derogation d = fromJson(v, static_cast<Seconds>(r.json.integer("heure")), now());
+    d.signatureOk = v.isObject() && documentOk(v, editors, d);
+    if (!d.signatureOk)
+        return OpResult::fail("la d\xC3\xA9rogation rendue par le service n'est pas sign\xC3\xA9" "e par une cl\xC3\xA9 de l'\xC3\xA9" "diteur que ce poste conna\xC3\xAEt : elle est ignor\xC3\xA9" "e");
+    if (out) *out = d;
+    const Seconds endLocal = d.localTime(d.end, now());
+    OpResult res = OpResult::done("D\xC3\xA9rogation active : tu vois tout comme l'admin+ pendant " + durationText(d.duration > 0 ? d.duration : d.end - d.start) +
+                                  " (jusqu'\xC3\xA0 " + clockOrDate(endLocal, now()) + ").");
+    res.details.push_back("Le service la tient \xC3\xA0 son heure : \xC3\xA0 la fin, ou si l'admin+ la r\xC3\xA9voque, XPG Admin repasse \xC3\xA0 la gestion seule.");
+    res.details.push_back("Chaque geste qu'elle ouvre est \xC3\xA9" "crit au journal des admins ; l'admin+ est pr\xC3\xA9venu.");
     return res;
 }
 

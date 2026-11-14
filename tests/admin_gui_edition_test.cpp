@@ -85,6 +85,8 @@ void pinEditor(const fs::path& folder, const lic::SigningKey& editor) {
 
 } // namespace
 
+#include "admin_gui_edition152.inl"   // 1.52.0 : ce que voit un admin dans XPG Admin (la gestion ; la derogation ouvre tout)
+
 int main(int argc, char** argv) {
     const std::string source = argc > 1 ? argv[1] : ".";
     installMetrics();
@@ -153,32 +155,34 @@ int main(int argc, char** argv) {
             rig.shell->navigate(id);
             check(rig.shell->currentPageId() != id, std::string("un lien vers ") + id + " : refuse");
         }
-        check(rig.shell->lastMessage() && has(rig.shell->lastMessage()->result.message, "n'est pas dans XPG Admin"),
-              "le refus est dit : << ... n'est pas dans XPG Admin >> (" + (rig.shell->lastMessage() ? rig.shell->lastMessage()->result.message : std::string()) + ")");
+        check(rig.shell->lastMessage() && has(rig.shell->lastMessage()->result.message, "s'ouvre avec une d\xC3\xA9rogation de l'admin+"),
+              "le refus est dit : << ... s'ouvre avec une derogation de l'admin+ >> (1.52.0) (" +
+                  (rig.shell->lastMessage() ? rig.shell->lastMessage()->result.message : std::string()) + ")");
         rig.shell->navigate("tableau");
         t = rig.paint();
         check(!shown(rig.root(), "tableau.creer-cle") && !shown(rig.root(), "tableau.restaurer") && shown(rig.root(), "tableau.devenir-admin"),
               "le tableau de bord : le chemin de l'admin seulement (ni Creer ni Restaurer)");
         check(!has(t, "Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur") && has(t, "code d'invitation"), "ni << Creer la cle de l'editeur >> ; l'invitation est dite");
+        // 1.52.0 : Administrateurs s'ouvre avec une derogation ; la carte du code d'invitation est dans Mon compte
         rig.shell->navigate("admins");
-        t = rig.paint();
-        check(!shown(rig.root(), "admins.creer-cle") && !shown(rig.root(), "admins.restaurer") && !shown(rig.root(), "admins.ajouter") &&
-                  shown(rig.root(), "admins.invitation.code") && shown(rig.root(), "admins.invitation.valider") && has(t, "Ton code d'invitation"),
-              "Administrateurs : la carte du code d'invitation, ni Creer ni Restaurer ni Ajouter un admin");
-        check(!has(t, "Demander \xC3\xA0 devenir admin") && !has(t, "Demandes d'admin") && !has(t, "empreinte") && !has(t, "6 chiffres"),
-              "1.51.0 : ni demande d'admin, ni empreinte a lire, ni 6 chiffres");
-        check(!has(t, "Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur"), "Administrateurs : pas la carte de la cle de l'editeur");
+        check(rig.shell->currentPageId() != "admins", "1.52.0 : Administrateurs n'est pas dans le menu de la gestion (un lien : refuse)");
         rig.shell->navigate("compte");
-        (void)rig.paint();
-        check(!shown(rig.root(), "compte.creer-cle") && shown(rig.root(), "compte.devenir-admin"), "Mon compte : << Mon code d'invitation... >>, pas la cle de l'editeur");
-        rig.shell->navigate("securite");
         t = rig.paint();
-        check(!shown(rig.root(), "securite.creer") && !shown(rig.root(), "securite.restaurer") && !shown(rig.root(), "securite.restauration") &&
+        check(!shown(rig.root(), "compte.creer-cle") && shown(rig.root(), "compte.invitation.code") && shown(rig.root(), "compte.invitation.valider") &&
+                  has(t, "Ton code d'invitation"),
+              "Mon compte : la carte du code d'invitation (1.52.0), pas la cle de l'editeur");
+        check(!has(t, "Demander \xC3\xA0 devenir admin") && !has(t, "Demandes d'admin") && !has(t, "6 chiffres") && !has(t, "Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur"),
+              "1.51.0 : ni demande d'admin, ni 6 chiffres ; ni la cle de l'editeur");
+        // les pages elles-memes (ouvertes sous derogation) : ce que XPG Admin n'offre jamais
+        HostRig hr(fx);
+        auto sec = gui::makeSecurityPage(hr.host());
+        t = draw(*sec);
+        check(!shown(*sec, "securite.creer") && !shown(*sec, "securite.restaurer") && !shown(*sec, "securite.restauration") &&
                   has(t, "XPG Admin n'utilise jamais la cl\xC3\xA9 de l'\xC3\xA9" "diteur"),
-              "Parametres de securite : ni creer, ni restaurer la cle, ni la sauvegarde complete ; dit");
-        rig.shell->navigate("service");
-        (void)rig.paint();
-        check(!shown(rig.root(), "service.certifier"), "Service en ligne : pas de << Certifier la cle du service >>");
+              "Parametres de securite (la page) : ni creer, ni restaurer la cle, ni la sauvegarde complete ; dit");
+        auto svc = gui::makeServicePage(hr.host());
+        (void)draw(*svc);
+        check(!shown(*svc, "service.certifier"), "Service en ligne (la page) : pas de << Certifier la cle du service >>");
     }
     la::setEdition(la::Edition::Plus);
     fx.ws->reload();
@@ -216,14 +220,18 @@ int main(int argc, char** argv) {
         ShellRig rig(cf.admin);
         (void)rig.paint();
         for (const char* id : kPlusPages) check(!shown(rig.root(), std::string("nav.") + id), std::string("le menu de Camille n'a pas ") + id);
-        check(shown(rig.root(), "nav.admins") && shown(rig.root(), "nav.compte") && shown(rig.root(), "nav.licences"), "il garde Administrateurs, Mon compte, Licences");
+        check(!shown(rig.root(), "nav.admins") && shown(rig.root(), "nav.compte") && shown(rig.root(), "nav.licences"),
+              "1.52.0 : Mon compte, Licences ; plus Administrateurs (une derogation l'ouvre)");
         rig.shell->navigate("admins");
         (void)rig.paint();
-        check(!shown(rig.root(), "admins.ajouter"), "Administrateurs : pas << Ajouter un admin >>");
+        check(rig.shell->currentPageId() != "admins" && !shown(rig.root(), "admins.ajouter"), "Administrateurs : refuse sans derogation");
         rig.shell->navigate("service");
         (void)rig.paint();
-        check(!shown(rig.root(), "service.certifier"), "Service en ligne : pas de << Certifier >>");
+        check(rig.shell->currentPageId() != "service" && !shown(rig.root(), "service.certifier"), "Service en ligne : refuse sans derogation");
         la::setEdition(la::Edition::Plus);
     }
+    fx.ws->reload();
+    v152::run(source, fx);   // 1.52.0
+    la::setEdition(la::Edition::Plus);
     return finish();
 }

@@ -1705,7 +1705,8 @@ OpResult Workspace::versions(VersionsView& out) const {
     std::string why;
     detail::Caller caller;
     if (!detail::loadCaller(folder_, caller, &why)) return OpResult::fail(why);
-    if (const auto deny = detail::callerDenied(caller, {})) return *deny;
+    // 1.52.0 : un admin sous derogation << tout >> les lit aussi (le service en est l'arbitre : 403 sans derogation)
+    if (const auto deny = detail::callerDenied(caller, {}); deny && caller.role != Role::Admin) return *deny;
     std::unique_ptr<online::Client> c;
     if (!online::openClient(folder_, *caller.key, detail::optionsFor(caller, now()), c, &why)) return OpResult::fail(why);
     if (!readVersions(*c, caller, folder_, out, &why)) return OpResult::fail(why);

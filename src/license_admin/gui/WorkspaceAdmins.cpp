@@ -1057,7 +1057,8 @@ OpResult Workspace::joinState(std::string& state) const {
     const online::Reply r = c->call("GET", "/v1/admins/inscription");
     if (r.error.empty() && r.status == 404) {
         state = "aucune";
-        return OpResult::fail("le service n'a pas d'inscription pour ta cl\xC3\xA9 : tape le code d'invitation que t'envoie l'admin+ (Administrateurs)");
+        return OpResult::fail(std::string("le service n'a pas d'inscription pour ta cl\xC3\xA9 : tape le code d'invitation que t'envoie l'admin+ (") +
+                              (license_admin::classique() ? "Mon compte" : "Administrateurs") + ")");   // 1.52.0 : XPG Admin, Mon compte
     }
     if (r.status != 200 || !r.error.empty() || !r.json.isObject()) return OpResult::fail(c->explain(r, "lire o\xC3\xB9 en est ton inscription d'admin"));
     state = r.json.str("etat");
@@ -1184,7 +1185,8 @@ OpResult Workspace::refreshAdminList(AdminRefresh* outRefresh) const {
                 std::string id, w;
                 if (receiveSyncKeyWith(*c, folder_, *caller.key, &id, &w)) {
                     res.syncKeyReceived = true;
-                    out.details.push_back("Cl\xC3\xA9 de synchro re\xC3\xA7ue par le trousseau : " + id + " (Service en ligne \xE2\x80\xBA Recevoir l'archive).");
+                    out.details.push_back("Cl\xC3\xA9 de synchro re\xC3\xA7ue par le trousseau : " + id +   // 1.52.0 : XPG Admin, Mon compte > Ce PC
+                                          (license_admin::classique() ? " (Mon compte \xE2\x80\xBA Ce PC \xE2\x80\xBA L'archive en ligne)." : " (Service en ligne \xE2\x80\xBA Recevoir l'archive)."));
                 } else {
                     out.details.push_back("Cl\xC3\xA9 de synchro : " + w + ".");
                 }
@@ -1281,7 +1283,10 @@ OpResult Workspace::refreshAdminState(const online::AdminWatch* etat, AdminRefre
         if (!a.ok) out.details.push_back(a.message);
         for (const auto& d : a.details) out.details.push_back(d);
     }
-    if (caller.role == Role::Plus && etat->journal > static_cast<std::int64_t>(readJournalState(folder_).last)) {
+    // 1.52.0 : un admin dont la derogation << tout >> court (le regard le dit) releve aussi le journal des admins
+    const bool derogationAll = caller.role == Role::Admin && etat->derogationState == "active" && etat->derogationRight == "tout" &&
+                               caller.key && etat->derogationAdmin == caller.key->publicKeyHex();
+    if ((caller.role == Role::Plus || derogationAll) && etat->journal > static_cast<std::int64_t>(readJournalState(folder_).last)) {
         int added = 0;
         const OpResult j = fetchJournal(&added);
         res.journalNew = added;
@@ -1864,7 +1869,8 @@ OpResult Workspace::fetchJournal(int* added) const {
     std::string why;
     detail::Caller caller;
     if (!detail::loadCaller(folder_, caller, &why)) return OpResult::fail(why);
-    if (const auto deny = detail::callerDenied(caller, {})) return *deny;
+    // 1.52.0 : un admin sous derogation << tout >> le releve aussi (le service en est l'arbitre : 403 sans derogation)
+    if (const auto deny = detail::callerDenied(caller, {}); deny && caller.role != Role::Admin) return *deny;
     std::unique_ptr<online::Client> c;
     if (!online::openClient(folder_, *caller.key, detail::optionsFor(caller, now()), c, &why)) return OpResult::fail(why);
     JournalState st = readJournalState(folder_);

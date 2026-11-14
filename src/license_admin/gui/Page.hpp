@@ -140,6 +140,10 @@ PagePtr makeStatsPage(ShellHost host);     // 1.47.0 : "statistiques" (planches 
 PagePtr makeClientCardPage(ShellHost host);   // 1.47.0 : "client", Clients > un client et ses courbes (planche 10 ; PageClientCard.cpp)
 PagePtr makeChartsGalleryPage(ShellHost host);   // 1.47.0 : cachee (--page graphes-essai)
 PagePtr makeAccountPage(ShellHost host);         // 1.47.0 : "compte", Mon compte (Securite ; PageAccount.cpp)
+// 1.52.0 : "poste", Mon compte > Ce PC - XPG Admin sans derogation : ce que ce PC regle lui-meme (l'adresse du service, la
+// connexion signee, l'archive recue par le trousseau, le mail au client) ; la page Service en ligne dans son mode << poste >>
+// (PageService.cpp), sans rien de ce qui gere le service (ClassicView.hpp).
+PagePtr makePcPage(ShellHost host);
 
 // 1.44.0 : CE QU'UNE PAGE DEMANDE A UNE AUTRE de montrer en arrivant (<< Voir son journal >> : le journal filtre sur cet
 // admin ; << Ses droits >> : cet admin choisi dans Droits ; << Voir la licence >> du journal : la licence choisie) - la page
@@ -212,9 +216,13 @@ menu::MenuPtr makeStripeDialog(ShellHost host, std::function<void()> done = {});
 // et l'etape suivante (nodejs.org ; << Se connecter a Cloudflare... >> : npx wrangler login ; les dernieres lignes).
 // `done` (facultatif) : a chaque fin (la page se rafraichit).
 menu::MenuPtr makeDeployDialog(ShellHost host, std::function<void()> done = {});
-// 1.47.0 : la derogation << Gerer le service >> (l'admin+ ; DerogationDialog.cpp) - a un admin, 1, 4, 24 ou 72 h ; `adminKey`
+// 1.47.0 : la derogation << Gerer le service >> (l'admin+ ; DerogationDialog.cpp) ; 1.52.0 : << tout >>, de 10 min a 72 h,
+// activee par un code (montre ici apres l'envoi) ; `adminKey`
 // (facultatif) : l'admin choisi d'avance ; `done` : apres Accorder, Revoquer ou Fermer.
 menu::MenuPtr makeDerogationDialog(ShellHost host, std::string adminKey = {}, std::function<void()> done = {});
+// 1.52.0 : XPG Admin - taper le code de la derogation recue (DerogationDialog.cpp ; la coquille l'ouvre d'elle-meme une
+// fois par derogation, la pastille << Derogation recue >> et Mon compte aussi) ; `done` : a la fermeture.
+menu::MenuPtr makeDerogationCodeDialog(ShellHost host, std::function<void()> done = {});
 // 1.49.0 : << Repartir de zero >> (l'admin+ ; ResetDialog.cpp, docs/ADMINS.md par. 13) - ce qui est efface et garde, la
 // sauvegarde faite d'abord, le mot REPARTIR ; `done` : a la fermeture. XPG Admin (l'edition classique) : nullptr.
 menu::MenuPtr makeStartOverDialog(ShellHost host, std::function<void()> done = {});

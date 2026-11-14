@@ -258,6 +258,10 @@ struct AdminWatch {
     bool                     derogationSaid{false};
     std::string              derogationId, derogationAdmin, derogationName, derogationState, derogationBy;
     std::int64_t             derogationStart{0}, derogationEnd{0}, derogationRevoked{0}, derogationUses{0};
+    // 1.52.0 : le format 2 (<< tout >>, active par un code) - la duree, l'heure limite du code, les essais qui restent,
+    // annulee (quand, pourquoi : code_faux, code_perime). Jamais le code ni son empreinte (le service ne les rend pas).
+    std::int64_t             derogationFormat{1}, derogationDuration{0}, derogationValidUntil{0}, derogationTriesLeft{0}, derogationCancelled{0};
+    std::string              derogationRight, derogationReason;
     std::int64_t             serverTime{0};   // l'heure du service (heure)
 };
 // 1.44.0 : lire la reponse de GET /admin/etat (ses compteurs et, en 1.44.0, le role et les droits de qui appelle).

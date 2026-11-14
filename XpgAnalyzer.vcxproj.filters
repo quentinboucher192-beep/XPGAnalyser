@@ -4045,10 +4045,16 @@
     <ClInclude Include="src\license_admin\Stats.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>
+    <ClInclude Include="src\license_admin\gui\AccountInvite.hpp">
+      <Filter>license_admin\gui</Filter>
+    </ClInclude>
     <ClInclude Include="src\license_admin\gui\AdminsBoard.hpp">
       <Filter>license_admin\gui</Filter>
     </ClInclude>
     <ClInclude Include="src\license_admin\gui\AdminsKit.hpp">
+      <Filter>license_admin\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\license_admin\gui\ClassicView.hpp">
       <Filter>license_admin\gui</Filter>
     </ClInclude>
     <ClInclude Include="src\license_admin\gui\Derogation.hpp">
