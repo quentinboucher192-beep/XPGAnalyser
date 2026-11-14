@@ -1477,7 +1477,7 @@ bool Shell::autoWatch() {
                              } else if (ws_->role() == Role::Admin && manageAfter && !manageBefore) {
                                  flash(d.everything() ? "D\xC3\xA9rogation active : tu vois tout comme l'admin+ (" + derogationText(d, now) + ")."
                                                       : "D\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB accord\xC3\xA9" "e par l'admin+ : " + derogationText(d, now) +
-                                                            " (Service en ligne).",
+                                                            (license_admin::classique() ? " (Mon compte)." : " (Service en ligne)."),   // XPG Admin : Mon compte
                                        Tone::Warning);
                              } else if (ws_->role() == Role::Admin && manageBefore && !manageAfter) {
                                  const std::string how = d.state == "revoquee" ? "r\xC3\xA9voqu\xC3\xA9" "e par l'admin+" : "termin\xC3\xA9" "e";

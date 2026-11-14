@@ -4045,6 +4045,9 @@
     <ClInclude Include="src\license_admin\Stats.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>
+    <ClInclude Include="src\license_admin\gui\AccountDerogation.hpp">
+      <Filter>license_admin\gui</Filter>
+    </ClInclude>
     <ClInclude Include="src\license_admin\gui\AccountInvite.hpp">
       <Filter>license_admin\gui</Filter>
     </ClInclude>
