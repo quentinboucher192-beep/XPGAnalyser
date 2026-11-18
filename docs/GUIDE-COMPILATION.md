@@ -1,7 +1,7 @@
 <a id="haut-de-page"></a> <!-- nav -->
 # Compiler API Studio et IHM Studio
 
-<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [TESTS.md](TESTS.md) · [CONFIG-INI.md](CONFIG-INI.md) · [DEPANNAGE.md](DEPANNAGE.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [TESTS.md](TESTS.md) · [CONFIG-INI.md](CONFIG-INI.md) · [DEPANNAGE.md](DEPANNAGE.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Ce guide couvre les trois façons de construire la suite à partir du dépôt (version 1.22.0) et la fabrication de l'installateur. Les commandes viennent des scripts du dépôt (`CMakeLists.txt`, `outils/`). Retour au [README](../README.md).
 
@@ -246,4 +246,4 @@ La version doit être identique dans quatre fichiers (`src/core/Version.hpp`, ra
 
 <a id="bas-de-page"></a> <!-- nav -->
 
-<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [TESTS.md](TESTS.md) · [CONFIG-INI.md](CONFIG-INI.md) · [DEPANNAGE.md](DEPANNAGE.md)</sub> <!-- nav -->
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [TESTS.md](TESTS.md) · [CONFIG-INI.md](CONFIG-INI.md) · [DEPANNAGE.md](DEPANNAGE.md)</sub> <!-- nav -->

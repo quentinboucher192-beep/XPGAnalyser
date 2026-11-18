@@ -1,7 +1,7 @@
 <a id="haut-de-page"></a> <!-- nav -->
 # Dépannage
 
-<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [GUIDE-INSTALLATION.md](GUIDE-INSTALLATION.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Retour au [README](../README.md). Compilation : [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) ; installation : [GUIDE-INSTALLATION.md](GUIDE-INSTALLATION.md).
 
@@ -75,4 +75,4 @@ Voir `GUIDE-COMPILATION.md` § 7. Pour la maintenance :
 
 <a id="bas-de-page"></a> <!-- nav -->
 
-<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [GUIDE-INSTALLATION.md](GUIDE-INSTALLATION.md)</sub> <!-- nav -->
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md)</sub> <!-- nav -->

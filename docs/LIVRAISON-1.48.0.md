@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # 1.48.0 : une seule boutique avec un panier (Licence, Options, Panier) ; chaque article validé dans l'Admin
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Fait à partir de : « la gestion des paiements des options fonctionne pas comme les paiements de licence, ça arrive dans
 les demandes (ça ne doit pas), on doit avoir un bouton ACHETER comme dans les licences / … plusieurs onglets 'Licence'
@@ -28,6 +31,8 @@ paie on a un récap, les demandes en ligne doivent fonctionner aussi mais on doi
   raison), qu'il soit payé ou demandé. « Livrer seul les commandes payées » livre toujours seul les articles payés.
   La barre de filtres, le clic droit dans le même ordre, le volet de droite, Rembourser (la commande payée).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 1. Ce qu'il te reste à faire
 
 1. Installer **l'Admin 1.48.0** (par-dessus la 1.47.0), puis les **Studios 1.48.0**.
@@ -35,6 +40,8 @@ paie on a un récap, les demandes en ligne doivent fonctionner aussi mais on doi
    panier a besoin du service 1.48.0.
 3. Refaire un achat d'essai depuis un Studio : une licence + une option dans le panier, Payer, la carte de test de
    Stripe (4242 4242 4242 4242), puis les deux articles dans Commandes et demandes.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 2. Les essais
 
@@ -58,6 +65,8 @@ paie on a un récap, les demandes en ligne doivent fonctionner aussi mais on doi
 - Corrigé en route : cinq essais attendaient encore le service en 1.47.0 et l'ancien nom « Commandes » dans la barre
   de l'Admin.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. Installer
 
 **Les Studios** : lance `API-IHM-Studio-Setup-1.48.0.exe` (dans le zip) par-dessus la 1.47.0. Tes projets, tes
@@ -77,6 +86,8 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 |---|---|---|
 | `XPG-License-Admin-Setup-1.48.0-EDITEUR.exe` | `FDED0DAD8F29415E3088B439C36BF9F758F7426FE0C824A8CDD003EC13A1C448` | 8 736 629 octets |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 4. Limites
 
 - **Le vrai Stripe n'a pas été appelé** : un faux Stripe sur ce poste (plusieurs articles par page de paiement). Ton
@@ -91,3 +102,9 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 - Sur les captures, le bas de l'Admin dit encore 1.47.0 : elles ont été prises juste avant le passage du numéro de
   version.
 - **Rien sur un vrai Windows** : sous Wine seulement.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->

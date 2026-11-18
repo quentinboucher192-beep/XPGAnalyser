@@ -1,7 +1,7 @@
 <a id="haut-de-page"></a> <!-- nav -->
 # Captures d'écran de la documentation
 
-<sub>[⬅ README](../../README.md) · [Documentation](../../README.md#documentation) · [API-STUDIO.md](../API-STUDIO.md) · [IHM-STUDIO.md](../IHM-STUDIO.md) · [ASSISTANT-IA.md](../ASSISTANT-IA.md) · [GUIDE-INSTALLATION.md](../GUIDE-INSTALLATION.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+<sub>[⬅ README](../../README.md) · [Documentation](../../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 **Ce dossier ne contient encore aucune capture.** Le dépôt ne contient pas de capture d'écran du logiciel (vérifié pour la 1.21.3) :
 
@@ -49,4 +49,4 @@ Quand une capture est ajoutée, la référencer depuis le document indiqué avec
 
 <a id="bas-de-page"></a> <!-- nav -->
 
-<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../../README.md) · [Documentation](../../README.md#documentation) · [API-STUDIO.md](../API-STUDIO.md) · [IHM-STUDIO.md](../IHM-STUDIO.md) · [ASSISTANT-IA.md](../ASSISTANT-IA.md) · [GUIDE-INSTALLATION.md](../GUIDE-INSTALLATION.md)</sub> <!-- nav -->
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../../README.md) · [Documentation](../../README.md#documentation)</sub> <!-- nav -->

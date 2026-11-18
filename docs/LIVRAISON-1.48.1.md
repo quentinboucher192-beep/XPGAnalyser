@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # 1.48.1 : les limites de la 1.48 corrigées, des statistiques justes après chaque changement, Supprimer et Actualiser partout
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Fait à partir de : « corrige les limites sauf essai complet sous windows », « dans les studios, dans notifications
 ajouter un bouton 'actualiser' », « quand je supprime des clients, des pc, des demandes, des admins, des licences, des
@@ -59,12 +62,16 @@ session si quelqu'un revient au menu général ça le fait pas quitter ».
   session continuait derrière.
 - **Mes achats** : un article remboursé seul est marqué « remboursée », les autres restent tels quels.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 1. Ce qu'il te reste à faire
 
 1. Installer **l'Admin 1.48.1** (par-dessus la 1.48.0), puis les **Studios 1.48.1**.
 2. **Service en ligne › Déployer le service** (la 1.48.1) : le remboursement d'un article, Réévaluer, les suppressions
    côté service en ont besoin.
 3. Une fois : **Statistiques › Réévaluer** — la fenêtre te montre ce qui était incohérent chez toi et l'a corrigé.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 2. Les essais
 
@@ -95,6 +102,8 @@ session si quelqu'un revient au menu général ça le fait pas quitter ».
   une réinstallation ; ses pages, de Bienvenue au Récapitulatif (`1481_9_…page-1` à `page-5`, jamais l'installation).
 - Corrigé en route : les pages de l'installateur n'avançaient pas en 1.48.0 (la touche Entrée n'allait pas à la fenêtre).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. Installer
 
 **Les Studios** : lance `API-IHM-Studio-Setup-1.48.1.exe` (dans le zip) par-dessus la 1.48.0. Tes projets, tes
@@ -114,6 +123,8 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 |---|---|---|
 | `XPG-License-Admin-Setup-1.48.1-EDITEUR.exe` | `7AA53B439322D26B2759BEC9B2B5F274ADE0894D6B9F366FF2C92FEE12A96D24` | 8 837 641 octets |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 4. Limites
 
 - **Pas d'essai complet sous Wine** (comme tu l'as dit) : les parcours sont essayés sous Linux contre le vrai service
@@ -132,3 +143,9 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 - Un PC supprimé l'est dans l'Admin seulement (il revient s'il redemande une licence) ; le fil « activité récente » du
   tableau de bord et la corbeille des clients gardent l'histoire.
 - **Rien sur un vrai Windows** : sous Wine seulement.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->

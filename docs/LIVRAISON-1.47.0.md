@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # API Studio, IHM Studio et l'Admin 1.47.0 : les statistiques des admins et de l'admin+, les courbes, le globe, les listes (filtrer, clic droit, déplier), Mon compte, les demandes d'admin en liste, le service qui voyage avec l'Admin
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Faite à partir de la maquette 1.47.0 que tu as validée (« je valide la maquette, intègre-la dans la 1.47 ») et de tes
 retours : « j'ai besoin de beaucoup beaucoup plus de statistiques sur les admin et admin+ (plus de déballage, clic droit
@@ -92,6 +95,8 @@ d'admin)
 - **Demander ma licence** : une erreur de paiement passe à la ligne dans sa bande au lieu d'être coupée.
 - **Acheter** suit la réduction en cours (le correctif 1.46.1, côté service).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 1. Ce qu'il te reste à faire
 
 1. Installer **l'Admin 1.47.0** (par-dessus la 1.46.1 ou la 1.46.0), puis les **Studios 1.47.0**.
@@ -99,6 +104,8 @@ d'admin)
    fait en 1.46.1.
 3. Les statistiques se remplissent dès le premier jour (ce qui est avant la 1.47 est reconstitué depuis les tables du
    service, la page le dit).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 2. Les essais
 
@@ -146,6 +153,8 @@ d'admin)
 - Corrigé en route : un caractère (⇅) que la police de Windows n'a pas ; la liste des fichiers du projet Visual Studio ;
   dans mon essai, le disque plein puis l'écran virtuel arrêté (la chaîne a été relancée sans rien reconstruire).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. Installer
 
 **Les Studios** : lance `API-IHM-Studio-Setup-1.47.0.exe` (dans le zip) par-dessus la 1.46.0. Tes projets, tes
@@ -165,6 +174,8 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 |---|---|---|
 | `XPG-License-Admin-Setup-1.47.0-EDITEUR.exe` | `718729D209DCFB88A14B23148196C5EAD52670852575D431843817304FCE0BE8` | 8 719 288 octets |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 4. Limites
 
 - **Rien n'a été essayé sur un vrai Windows** : sous Linux et sous Wine. **Le vrai Stripe et le vrai Cloudflare n'ont pas
@@ -179,3 +190,9 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
   des admins y est). Un refus pour droit manquant n'est pas encore inscrit au journal (dis-moi si tu le veux).
 - **Les clics sur les courbes** : une barre de plusieurs jours filtre « depuis le … » ; Échéances ouvre les licences
   actives. Pas encore d'« Écrire aux clients… ».
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->

@@ -1,7 +1,7 @@
 <a id="haut-de-page"></a> <!-- nav -->
 # Architecture technique
 
-<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [TESTS.md](TESTS.md) · [FORMATS.md](FORMATS.md) · [ASSISTANT-IA.md](ASSISTANT-IA.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Ce document décrit l'architecture du code tel qu'il est dans le dépôt (version 1.35.0). Chaque affirmation renvoie à un fichier ou à une cible de compilation que l'on peut ouvrir. Le point d'entrée général de la documentation est le [README](../README.md).
 
@@ -389,4 +389,4 @@ Voir [TESTS.md](TESTS.md).
 
 <a id="bas-de-page"></a> <!-- nav -->
 
-<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [TESTS.md](TESTS.md) · [FORMATS.md](FORMATS.md) · [ASSISTANT-IA.md](ASSISTANT-IA.md)</sub> <!-- nav -->
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md)</sub> <!-- nav -->

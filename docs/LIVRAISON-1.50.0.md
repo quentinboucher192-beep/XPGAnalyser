@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # 1.50.0 : les méthodes des types IHM comme les fonctions, « Étirer », POINTER TO, « Dupliquer » pour 500 marques, les tableaux partout, les scripts C/C++, répondre dans le chat
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Fait à partir de ta liste (12/11) et des quatre maquettes que tu as validées (tes réponses : « Elle s'écrira »
 FUNCTION ; « Étirer » : une solution efficace ; POINTER TO, un vrai pointeur ; « Dupliquer » : i = la 1re profondeur,
@@ -93,6 +96,8 @@ BOOL et pas à d'autres »)
 - **Copier** (Ctrl+C, le clic droit) ; « Copier avec l'auteur et l'heure » (« 14:32 Léa Essai : … »).
 - Un Studio plus ancien dans la même session reçoit la citation en première ligne du message.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 0 bis. Dans l'Admin
 
 - **L'installateur XPG Admin** : la page « Code d'invitation » ne se chevauche plus (la consigne entière, l'étiquette
@@ -101,12 +106,16 @@ BOOL et pas à d'autres »)
 - « Repartir de zéro » est proposé au premier lancement d'un Admin+ 1.49 **ou plus récent** (si tu passes directement à
   la 1.50, tu le vois quand même, une seule fois).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 1. Ce qu'il te reste à faire
 
 1. Installer **l'Admin+ 1.50.0** (par-dessus la 1.49.0), puis les **Studios 1.50.0**.
 2. **Service en ligne › Déployer le service** (la 1.50.0 ; rien de nouveau côté service, il suit le numéro).
 3. **Versions** : publier la 1.50.0 avec ses trois fichiers (Studios, Admin+, XPG Admin).
 4. Ouvrir un projet qui a des types IHM avec des méthodes : la conversion se fait seule (tu peux vérifier les onglets).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 2. Les essais
 
@@ -151,6 +160,8 @@ BOOL et pas à d'autres »)
   n'existe pas » et grise Dupliquer — c'est le blocage voulu, pas une panne ; le Studio livré (`1500_00`) ; lancé avec une adresse locale où rien ne répond :
   **ton service n'a pas été appelé**.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. Installer
 
 **Les Studios** : lance `API-IHM-Studio-Setup-1.50.0.exe` (dans le zip) par-dessus la 1.49.0. Tes projets, tes
@@ -176,6 +187,8 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 |---|---|---|
 | `XPG-Admin-Setup-1.50.0.exe` | `3594DEFDDC5BECD5BA5B169A5EFED2B8ECA20B8A019BB903B8DDD85804E88312` | 8 168 878 octets |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 4. Limites
 
 - **Méthodes** : pas encore d'« Essayer » ni de surcharges pour une méthode ; renommer un paramètre d'une méthode
@@ -194,3 +207,9 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 - **Les scripts C/C++** : une partie du C/C++ (ci-dessus), traduite et exécutée par le Studio, pas un vrai compilateur ;
   le pas à pas ne les suit pas encore (ils tournent sans, le Studio le dit).
 - **Rien sur un vrai Windows** : sous Wine seulement.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->

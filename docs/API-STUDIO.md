@@ -1,7 +1,7 @@
 <a id="haut-de-page"></a> <!-- nav -->
 # API Studio
 
-<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [IHM-STUDIO.md](IHM-STUDIO.md) · [FORMATS.md](FORMATS.md) · [README.md](images/README.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [IHM-STUDIO.md](IHM-STUDIO.md) · [README.md](images/README.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Référence fonctionnelle d'**API Studio** (exécutable `API-Studio.exe`, édition `core::Edition::Api`), version 1.35.0. Chaque section indique où se trouve la fonctionnalité dans le logiciel, comment elle fonctionne, et le code qui l'implémente. Le mode d'emploi pas à pas est dans l'aide F1 de l'application. Retour au [README](../README.md).
 
@@ -272,4 +272,4 @@ Vérifiées dans le code de ce commit :
 
 <a id="bas-de-page"></a> <!-- nav -->
 
-<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [IHM-STUDIO.md](IHM-STUDIO.md) · [FORMATS.md](FORMATS.md) · [README.md](images/README.md)</sub> <!-- nav -->
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [IHM-STUDIO.md](IHM-STUDIO.md) · [README.md](images/README.md)</sub> <!-- nav -->

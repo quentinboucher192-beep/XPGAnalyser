@@ -1,7 +1,7 @@
 <a id="haut-de-page"></a> <!-- nav -->
 # Licences — conception (préparées en 1.29.0, branchées en 1.30.0)
 
-<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [DEPLOIEMENT.md](DEPLOIEMENT.md) · [SERVICE-LICENCES.md](SERVICE-LICENCES.md) · [BOUTIQUE.md](BOUTIQUE.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [BOUTIQUE.md](BOUTIQUE.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Ce document décrit les licences : le format des fichiers signés, le registre des éditions et fonctionnalités, l'identité d'un PC, la vérification hors ligne et ses états (dont **« Non activées »** : un programme sans clé d'éditeur n'est jamais bloqué), l'activation par fichier, les deux fichiers de clés et l'option CMake de la clé d'essai, ce que lit l'écran Licence (registre, PC liés, historique), l'outil de l'éditeur (livré à part, avec son registre des activations), l'installateur et le contrôle du paquet. Il reprend la maquette validée (onglets Studio, Admin, Client, Architecture) et les décisions prises avec toi :
 - **version 1 sans service en ligne** : licences signées, vérifiées hors ligne, activation **par fichier** ;
@@ -616,4 +616,4 @@ Sous Linux : **239** contrôles (1.29.0 : 154). Sous Wine (exe MinGW) en 1.29.0 
 
 <a id="bas-de-page"></a> <!-- nav -->
 
-<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [DEPLOIEMENT.md](DEPLOIEMENT.md) · [SERVICE-LICENCES.md](SERVICE-LICENCES.md) · [BOUTIQUE.md](BOUTIQUE.md)</sub> <!-- nav -->
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [BOUTIQUE.md](BOUTIQUE.md)</sub> <!-- nav -->

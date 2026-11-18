@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # 1.51.0 : un pointeur vers un objet (et Get()), la colonne du cycle seulement en OnCycle, les types IHM des symboles, le LADDER et le SFC dans API Studio, devenir admin par le seul code d'invitation
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Fait à partir de tes demandes du 13/11 : le pointeur `ObjPtr := Vue_Accueil.Carte_1;` refusé (« ObjPtr n'existe pas »,
 « chemin incomplet »), « afficher l'onglet des cycles que si je suis dans le onCycle », « que les symboles puissent
@@ -104,6 +107,8 @@ parties 2 et 3 / ajoute un système de recherche pour chercher le PC plus effica
 - La page « Demandes d'admin » n'existe plus (menu, badge, compteurs, alertes, console). Les anciennes demandes faites
   avec un code sont signées par l'Admin+ au prochain contact ; celles sans code sont fermées (« mets à jour »).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 1. Ce qu'il te reste à faire
 
 1. Installer **l'Admin+ 1.51.0** (par-dessus la 1.50.1), puis les **Studios 1.51.0**.
@@ -111,6 +116,8 @@ parties 2 et 3 / ajoute un système de recherche pour chercher le PC plus effica
    par son code). Tant qu'il n'est pas redéployé, un XPG Admin 1.51.0 ne peut pas devenir admin.
 3. **Versions** : publier la 1.51.0 avec ses trois fichiers (Studios, Admin+, XPG Admin).
 4. Quand tu invites quelqu'un : laisse ton Admin+ ouvert (il le signe en moins de 15 s) ou ouvre-le plus tard.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 2. Les essais
 
@@ -173,6 +180,8 @@ parties 2 et 3 / ajoute un système de recherche pour chercher le PC plus effica
   L'écran virtuel de Wine s'est arrêté pendant la chaîne (après l'installation de XPG Admin) : relancé, puis toutes les
   captures refaites.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. Installer
 
 **Les Studios** : lance `API-IHM-Studio-Setup-1.51.0.exe` (dans le zip) par-dessus la 1.50.1. Tes projets, tes
@@ -198,6 +207,8 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 |---|---|---|
 | `XPG-Admin-Setup-1.51.0.exe` | `0FD91E00D33F95CAA8B1E3C441DD7C471D4B0435DB1D4035475807A3BF8EE875` | 8 115 678 octets |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 4. Limites
 
 - **Le pointeur vers un objet** : pas vers un objet à l'intérieur d'une instance de symbole (`Vue.Instance.Fond`) ; un
@@ -221,3 +232,9 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 - **Devenir admin** : l'installateur ne vérifie que la forme du code (il n'a pas de réseau) : le code est vérifié au
   premier lancement ; la signature attend que ton Admin+ soit ouvert ; il faut le service redéployé (§ 1).
 - **Rien sur un vrai Windows** : sous Wine seulement.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->

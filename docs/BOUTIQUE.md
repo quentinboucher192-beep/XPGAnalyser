@@ -1,7 +1,7 @@
 <a id="haut-de-page"></a> <!-- nav -->
 # La boutique et les commandes (1.46.0) : le contrat
 
-<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [LICENCES.md](LICENCES.md) · [SERVICE-LICENCES.md](SERVICE-LICENCES.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [SERVICE-LICENCES.md](SERVICE-LICENCES.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 > **Construit en 1.46.0** (le service, l'Admin, ses essais). Ce qui a été précisé en construisant, par rapport à la
 > première version de ce contrat, est dit au § 8 ; le texte ci-dessous en tient déjà compte.
@@ -504,4 +504,4 @@ demande sans paiement** (le même objet, sans Stripe) ; **chaque ligne se valide
 
 <a id="bas-de-page"></a> <!-- nav -->
 
-<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [LICENCES.md](LICENCES.md) · [SERVICE-LICENCES.md](SERVICE-LICENCES.md)</sub> <!-- nav -->
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [SERVICE-LICENCES.md](SERVICE-LICENCES.md)</sub> <!-- nav -->

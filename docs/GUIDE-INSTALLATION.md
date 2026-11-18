@@ -1,7 +1,7 @@
 <a id="haut-de-page"></a> <!-- nav -->
 # Installer, mettre à jour, réparer, désinstaller API IHM Studio
 
-<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [FORMATS.md](FORMATS.md) · [CONFIG-INI.md](CONFIG-INI.md) · [README.md](images/README.md) · [DEPANNAGE.md](DEPANNAGE.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [FORMATS.md](FORMATS.md) · [README.md](images/README.md) · [DEPANNAGE.md](DEPANNAGE.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Pour l'utilisateur, sous Windows. Un seul fichier : **`API-IHM-Studio-Setup-<version>.exe`** (pour cette version : `API-IHM-Studio-Setup-1.22.0.exe`). Il installe API Studio et/ou IHM Studio et apporte tout ce dont ils ont besoin, sans Internet : `SDL3.dll`, `pdfium.dll` (lecteur PDF) et, pour une version compilée avec MSVC, le runtime Visual C++ placé à côté des exécutables. Retour au [README](../README.md).
 
@@ -161,4 +161,4 @@ Tout cela n'a été essayé que sous Wine (voir `RAPPORT-ANALYSE.md`, § 10, et 
 
 <a id="bas-de-page"></a> <!-- nav -->
 
-<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [FORMATS.md](FORMATS.md) · [CONFIG-INI.md](CONFIG-INI.md) · [README.md](images/README.md) · [DEPANNAGE.md](DEPANNAGE.md)</sub> <!-- nav -->
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [FORMATS.md](FORMATS.md) · [README.md](images/README.md) · [DEPANNAGE.md](DEPANNAGE.md)</sub> <!-- nav -->

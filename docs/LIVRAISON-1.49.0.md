@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # 1.49.0 : trois programmes (Studios, Admin+, XPG Admin), l'ajout d'un admin par deux codes, repartir de zéro
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Fait à partir de : « le .exe de l'admin+ reste tel quel mais accessible que à l'admin+, il faut un .exe pour les admin
 classiques transmis lors d'un ajout d'admin, à son installation ça fait la coordination avec l'admin+ avec les codes à
@@ -56,6 +59,8 @@ l'Admin+ 1.49 ; XPG Admin ne l'a jamais). Pas d'effacement automatique : c'est t
 - Après une restauration : publie une fois la liste des admins (n'importe quel changement) pour que les Studios qui
   ont vu la liste vide acceptent de nouveau les licences signées par un admin (docs/ADMINS.md § 13).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 1. Ce qu'il te reste à faire
 
 1. Installer **l'Admin+ 1.49.0** (par-dessus la 1.48.1), puis les **Studios 1.49.0**.
@@ -66,6 +71,8 @@ l'Admin+ 1.49 ; XPG Admin ne l'a jamais). Pas d'effacement automatique : c'est t
 4. Si tu veux repartir de zéro : **Service en ligne › Repartir de zéro…** (ou le bandeau du premier lancement).
 5. Tes admins actuels recevront XPG Admin à la prochaine mise à jour, sans refaire de demande (s'ils ne sont pas effacés
    par « Repartir de zéro »).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 2. Les essais
 
@@ -94,6 +101,8 @@ l'Admin+ 1.49 ; XPG Admin ne l'a jamais). Pas d'effacement automatique : c'est t
   lancement de XPG Admin (`1490_05`) ; le Studio livré (`1490_00`), lancé avec une adresse locale où rien ne répond :
   **ton service n'a pas été appelé**.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. Installer
 
 **Les Studios** : lance `API-IHM-Studio-Setup-1.49.0.exe` (dans le zip) par-dessus la 1.48.1. Tes projets, tes
@@ -119,6 +128,8 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 |---|---|---|
 | `XPG-Admin-Setup-1.49.0.exe` | `9AD62080F41A30E1559DB617B62F12D5056D3C1AF8AA7AF45AD45839EADDB96D` | 8 170 174 octets |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 4. Limites
 
 - **Pas d'essai complet sous Wine** : les parcours sont essayés sous Linux contre le vrai service lancé sur ce poste ;
@@ -129,3 +140,9 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
   contre le vrai service), pas par un essai de l'interface ; les captures les montrent.
 - Ton Studio, s'il est encore en 1.48, se verra proposer une fois XPG Admin au lieu de l'Admin+ ; en 1.49, c'est l'Admin+.
 - **Rien sur un vrai Windows** : sous Wine seulement.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->

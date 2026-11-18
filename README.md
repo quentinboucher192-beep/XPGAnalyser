@@ -16,25 +16,25 @@ Suite logicielle de bureau, écrite en C++20 avec une interface maison sur SDL3,
 
 Autour des deux Studios, le dépôt contient aussi **les licences** : la fenêtre Licence des Studios, l'outil de l'éditeur **XPG License Manager Admin** (jamais livré aux clients) et le **service des licences**, un Worker Cloudflare que l'éditeur met en ligne sur son propre compte (demandes et activation des licences, notifications, mises à jour, sessions par Internet, boutique en ligne avec Stripe).
 
-Ce document est le point d'entrée de la documentation. Il décrit le code présent dans ce dépôt (**version 1.46.0**) et cite les fichiers qui justifient ses affirmations. Les détails sont dans [`docs/`](#documentation).
+Ce document est le point d'entrée de la documentation. Il décrit le code présent dans ce dépôt (**version 1.52.0**) et cite les fichiers qui justifient ses affirmations. Les détails sont dans [`docs/`](#documentation).
 
-> **1.47.0 en préparation, non livrée.** La branche contient déjà du travail en cours pour la 1.47.0 (statistiques, courbes et globe de l'Admin, filtres des listes…). Ce travail n'est pas livré et n'est pas décrit ici, hormis sa conception citée au [§ 12](#documentation) ([docs/STATISTIQUES.md](docs/STATISTIQUES.md)) ; les fichiers de version du dépôt restent à 1.46.0.
+> **De la 1.47.0 à la 1.52.0** : les nouveautés de ces six versions sont résumées au [§ 2.8](#nouveautes) (statistiques et globe de l'Admin, boutique avec panier, trois exécutables, méthodes et pointeurs des scripts IHM, LADDER et SFC dans API Studio, XPG Admin et la dérogation par code) ; les sections suivantes décrivent l'état de la 1.46.0 quand elles ne le disent pas. Les captures du logiciel sont au [§ 9](#captures).
 
 | | |
 |---|---|
-| Version | 1.46.0 (`src/core/Version.hpp`, `CMakeLists.txt`, `resources/windows/xpg_analyzer.rc`, `outils/config.ini`), livrée le 10/11/2026 ([note de livraison](docs/LIVRAISON-1.46.0.md)) |
-| Applications | `API-Studio.exe` et `IHM-Studio.exe`, deux exécutables construits à partir des mêmes sources ; pour l'éditeur seul, `XPG-License-Manager-Admin.exe` et sa console `XPG-License-Admin.exe` ([§ 1](#autres-programmes)) |
+| Version | 1.52.0 (`src/core/Version.hpp`, `CMakeLists.txt`, `resources/windows/xpg_analyzer.rc`, `outils/config.ini`), livrée le 14/11/2026 ([note de livraison](docs/LIVRAISON-1.52.0.md)) |
+| Applications | `API-Studio.exe` et `IHM-Studio.exe`, deux exécutables construits à partir des mêmes sources ; pour l'éditeur seul, l'**Admin+** `XPG-License-Manager-Admin.exe` et sa console `XPG-License-Admin.exe` ; pour ses admins, **XPG Admin** `XPG-Admin.exe` (1.49.0) ([§ 1](#autres-programmes)) |
 | Service | `service/` : le service des licences, un Worker Cloudflare en JavaScript avec ses Durable Objects SQLite ([§ 2.7](#service)) |
-| Langage | C++20 ; environ 804 000 lignes dans `src/` (1 334 fichiers `.cpp`/`.hpp`/`.h`) et 196 000 dans `tests/` ; JavaScript pour le service (environ 5 100 lignes dans `service/src/`, 3 600 dans `service/test/`) |
+| Langage | C++20 ; environ 874 000 lignes dans `src/` (1 434 fichiers `.cpp`/`.hpp`/`.h`/`.inl`) et 217 000 dans `tests/` ; JavaScript pour le service (environ 8 900 lignes dans `service/src/`, 6 400 dans `service/test/`) |
 | Plates-formes livrées | Windows 10 (1809) et 11, x64 ; construction et essais automatiques sous Linux ([détail](#plates-formes)) |
 | Format des projets IHM | 33 (`hmi::kFormatVersion`, `src/hmi/HmiStore.hpp`) |
-| Essais | 175 suites CTest, toutes réussies sous Linux pour la 1.46.0 ([détail](#tests)) |
+| Essais | 200 suites CTest, toutes réussies sous Linux pour la 1.52.0 ; le service : 268 essais sur 268 ([détail](#tests)) |
 
 ## Sommaire
 
 1. [Présentation générale](#presentation)
 2. [Fonctionnalités](#fonctionnalites)
-   - [API Studio](#api-studio) · [IHM Studio](#ihm-studio) · [Fonctions communes](#communes) · [Assistant IA](#assistant-resume) · [Licences et achats](#licence-studios) · [L'Admin de l'éditeur](#admin-editeur) · [Le service des licences](#service)
+   - [API Studio](#api-studio) · [IHM Studio](#ihm-studio) · [Fonctions communes](#communes) · [Assistant IA](#assistant-resume) · [Licences et achats](#licence-studios) · [L'Admin de l'éditeur](#admin-editeur) · [Le service des licences](#service) · [Nouveautés 1.47.0 à 1.52.0](#nouveautes)
 3. [Architecture technique](#architecture)
 4. [Organisation du dépôt](#depot)
 5. [Installation et utilisation](#installation)
@@ -228,7 +228,7 @@ Les Studios livrés portent la clé publique de l'éditeur et l'adresse de son s
 Code : `src/app/Licence*.cpp` (la fenêtre et ses vues), `src/app/LicenceService.cpp` (le client du service, sur un fil de travail), `src/app/LicenceShop*.cpp` (la boutique), `src/licensing/` (vérification et magasin du PC).
 
 <a id="admin-editeur"></a>
-### 2.6 L'Admin de l'éditeur : XPG License Manager Admin — [docs/ADMINS.md](docs/ADMINS.md), [docs/LICENCES.md](docs/LICENCES.md)
+### 2.6 L'Admin de l'éditeur (Admin+) et XPG Admin — [docs/ADMINS.md](docs/ADMINS.md), [docs/LICENCES.md](docs/LICENCES.md)
 
 Application à fenêtres de l'éditeur et de ses admins, avec une console qui fait les mêmes gestes ; elle signe avec une clé Ed25519 qui ne quitte pas son PC (dossier `%LOCALAPPDATA%\XPG\LicenseAdmin`). Elle est livrée à part, par son propre installateur ([§ 5](#installer-admin)).
 
@@ -243,6 +243,7 @@ Application à fenêtres de l'éditeur et de ses admins, avec une console qui fa
 | Sauvegarde et secours | (1.44.0) Chaque jour, une sauvegarde du contenu exact du service et du poste, chiffrée par une phrase de passe (Argon2id, XChaCha20-Poly1305) ; **Restaurer une sauvegarde…** sur ce PC ou un autre, vers le même service ou un nouveau ; jusqu'à 3 **adresses de secours** que les Studios essaient si la première ne répond plus. |
 | Déployer le service | (1.45.0) Service en ligne › **Déployer le service** lance le kit installé avec l'Admin (Node.js, wrangler, l'envoi à Cloudflare, la vérification) étape par étape, secrets cachés, puis relit la version en ligne ; un service trop ancien est signalé (avis, pastille, bandeau). |
 | Boutique et Commandes | (1.46.0) **Brancher Stripe…** : la clé secrète collée dans un champ masqué ; l'Admin crée chez Stripe l'adresse de notification, puis passe la clé et son secret au service sur Cloudflare, et nulle part ailleurs. Vendre en ligne, Livrer seul les commandes payées, le catalogue (montants TTC). Commandes : Délivrer maintenant, Revoir, Rembourser (admin+ ; la licence n'est pas révoquée d'office). **La livraison** : l'Admin ouvert (ou à sa prochaine ouverture) signe lui-même la licence d'une commande payée, une seule fois même avec deux Admin ouverts. |
+| Trois exécutables, la dérogation | (1.49.0 à 1.52.0) L'**Admin+** (`XPG-License-Manager-Admin.exe`, le PC qui a la clé de l'éditeur) et **XPG Admin** (`XPG-Admin.exe`, pour les admins, reçu avec une invitation) sont le même code. Devenir admin : le code d'invitation tapé à l'installation suffit (1.51.0). **XPG Admin ne montre que la gestion** (1.52.0) ; Paramètres de sécurité, Service en ligne, Administrateurs, le Journal, les Droits et les Versions ne s'ouvrent qu'avec une **dérogation** : l'admin+ l'envoie pour la durée qu'il choisit, l'admin est prévenu et tape le code de 8 chiffres que l'admin+ voit sur son PC ([docs/ADMINS.md](docs/ADMINS.md)). Depuis la 1.48.1, les demandes de licence sont dans **Commandes et demandes**. |
 | La console | `XPG-License-Admin` : 57 commandes en 1.46.0, par familles — la clé et les signatures (`creer-cle`, `signer-licence`, `signer-registre`…), le service (`service-config`, `service-certifier`, `service-deployer`…), l'archive (`archive-synchroniser`…), le courriel (`mail-config`…), les admins (`admin-accepter`, `admin-droits`…), les versions et fichiers (`version-publier`, `fichier-envoyer`), la sauvegarde (`sauvegarder`, `restaurer`), la boutique (`boutique-etat`, `stripe-brancher --cle-variable NOM`, `commandes`, `commande-livrer`…). |
 
 Code : `src/license_admin/` (`Admin`, `ServiceClient`, `ArchiveSync`, `KeyBackup`, `Mail`, `ServiceDeploy`, `Shop`, `AdminMain.cpp`) et `src/license_admin/gui/` (les pages, `Workspace*.cpp`).
@@ -254,6 +255,20 @@ Code : `src/license_admin/` (`Admin`, `ServiceClient`, `ArchiveSync`, `KeyBackup
 - **Ce qu'il fait** : depuis la 1.35.0, il remplace GitHub pour tout : demandes des clients, activation par code, licences flottantes, heure signée, Découverte, synchro chiffrée de l'archive de l'éditeur. Puis : les admins et leur journal, les messages et fichiers, les versions publiées, la sauvegarde et la restauration (1.44.0, `admins.js`, `fichiers.js`, `sauvegarde.js`) ; le relais des sessions (1.44.0) ; la boutique, les commandes et les événements de Stripe (1.46.0, `boutique.js`).
 - **La confiance** : la clé de l'éditeur reste hors ligne ; le service a sa propre clé, créée par lui et certifiée par l'éditeur pour un an ; un Studio ne croit un document du service que s'il est signé par une clé certifiée pour l'adresse compilée. Du code d'activation, le service ne garde que l'empreinte ; les secrets de Stripe sont des secrets du Worker.
 - **La mise en ligne** est faite par l'éditeur, sur son compte : Admin › Service en ligne › **Déployer le service**, ou `outils/service/deployer.bat` / `deployer.sh` (`outils/service/LISEZ-MOI-SERVICE.txt`). Pour les essais, `outils/service/lancer-local.sh` lance le vrai Worker sur le poste (`workerd`, hors ligne).
+
+<a id="nouveautes"></a>
+### 2.8 Nouveautés de la 1.47.0 à la 1.52.0
+
+| Version | Ce qui change | Note |
+|---|---|---|
+| 1.47.0 | **Admin** : les statistiques (courbes, comparaisons, le globe des PC activés), les filtres des listes et « Mes filtres », un clic droit cohérent partout, **Mon compte** (qui je suis, ma clé, mes pouvoirs) ; Gérer le service devient l'affaire de l'admin+ seul, avec une **dérogation** courte pour un admin ; le kit du service voyage avec l'installateur de l'Admin. **IHM Studio** : le panneau Session se redimensionne. | [docs/LIVRAISON-1.47.0.md](docs/LIVRAISON-1.47.0.md), [docs/STATISTIQUES.md](docs/STATISTIQUES.md) |
+| 1.48.0, 1.48.1 | **Une seule boutique, avec un panier** (Licence, Options, Panier) dans la fenêtre Licence ; côté Admin, **Commandes et demandes** dans une page (chaque article validé à part, rembourser un article). | [docs/LIVRAISON-1.48.0.md](docs/LIVRAISON-1.48.0.md), [docs/LIVRAISON-1.48.1.md](docs/LIVRAISON-1.48.1.md) |
+| 1.49.0 | **Trois exécutables** : les Studios, l'**Admin+** (l'éditeur, sa clé) et **XPG Admin** (les admins, reçu avec une invitation) ; l'invitation par code ; **Repartir de zéro** (avec sauvegarde et confirmation). | [docs/LIVRAISON-1.49.0.md](docs/LIVRAISON-1.49.0.md) |
+| 1.50.0, 1.50.1 | **IHM Studio** : les méthodes des types IHM (Essayer, surcharges, virtuelles), **Étirer** jusqu'aux marges de la vue, `POINTER TO`, Dupliquer jusqu'à 512 repères, les tableaux à N dimensions, les **scripts C/C++** et leur débogage pas à pas, le chat de l'Assistant IA (répondre, réduire, copier) ; les installateurs à 125 et 150 %. | [docs/LIVRAISON-1.50.0.md](docs/LIVRAISON-1.50.0.md), [docs/LIVRAISON-1.50.1.md](docs/LIVRAISON-1.50.1.md) |
+| 1.51.0 | **IHM Studio** : un pointeur vers un objet d'une vue (`ObjPtr := Vue.Objet;`, `Get()`), la colonne du cycle seulement en OnCycle, les **types IHM d'un symbole**. **API Studio** : le **LADDER** et le **SFC** (lecture et écriture à l'identique, éditeur graphique, simulation). **Admin** : plus de demande d'admin, le code d'invitation fait l'admin. | [docs/LIVRAISON-1.51.0.md](docs/LIVRAISON-1.51.0.md) |
+| 1.52.0 | **XPG Admin ne montre que la gestion** ; la **dérogation** donne tout ce qui ne demande pas la clé de l'éditeur : l'admin+ l'envoie pour la durée qu'il choisit (10 min à 72 h), l'admin est prévenu et tape le **code de 8 chiffres** que l'admin+ voit sur son PC. | [docs/LIVRAISON-1.52.0.md](docs/LIVRAISON-1.52.0.md), [docs/ADMINS.md](docs/ADMINS.md) |
+
+Les essais de chaque version sont dans sa note de livraison ; les exécutables Windows n'ont été vérifiés que **sous Wine**.
 
 <sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
@@ -375,7 +390,7 @@ flowchart LR
 ├── aide/                     fiches d'aide en texte des blocs et macros de la bibliothèque
 ├── bac/                      projet modèle livré à côté de l'exécutable (didacticiels, essais)
 ├── projets/                  projet d'exemple d'avant la 1.12, programme et IHM ensemble (essai hmidecl)
-└── dist/                     empreinte SHA-256 du dernier installateur des Studios fabriqué (1.46.0)
+└── dist/                     empreinte SHA-256 du dernier installateur des Studios fabriqué (1.52.0)
 ```
 
 | Dossier `src/` | Rôle | Bibliothèque CMake |
@@ -408,8 +423,8 @@ Remarques sur la racine : `build.sh` et `runtests.sh` sont des scripts historiqu
 
 | Plate-forme | État |
 |---|---|
-| **Windows 10 (1809, 10.0.17763) et 11, x64** | Plate-forme des exécutables livrés (`MinVersion`, `ArchitecturesAllowed=x64compatible` dans `installateur/XPGAnalyser.iss` et `installateur/XPG-License-Admin.iss`). Les exécutables et les installateurs des dernières versions ont été vérifiés **sous Wine, pas sur un vrai Windows** (notes de livraison 1.21.x à 1.46.0). |
-| **Linux x64** | Construction des bibliothèques, des essais et du mode `--cli` (essais : 175 suites réussies pour la 1.46.0) ; le service des licences y tourne dans `workerd` pour les essais. L'interface graphique sous Linux exige SDL3 ; elle n'est pas livrée et n'est pas vérifiée pour les versions actuelles. Le code comporte des branches Linux (réglages XDG, libcurl, libpcap, démarrage du poste par `~/.config/autostart`). |
+| **Windows 10 (1809, 10.0.17763) et 11, x64** | Plate-forme des exécutables livrés (`MinVersion`, `ArchitecturesAllowed=x64compatible` dans `installateur/XPGAnalyser.iss` et `installateur/XPG-License-Admin.iss`). Les exécutables et les installateurs des dernières versions ont été vérifiés **sous Wine, pas sur un vrai Windows** (notes de livraison 1.21.x à 1.52.0). |
+| **Linux x64** | Construction des bibliothèques, des essais et du mode `--cli` (essais : 200 suites réussies pour la 1.52.0) ; le service des licences y tourne dans `workerd` pour les essais. L'interface graphique sous Linux exige SDL3 ; elle n'est pas livrée et n'est pas vérifiée pour les versions actuelles. Le code comporte des branches Linux (réglages XDG, libcurl, libpcap, démarrage du poste par `~/.config/autostart`). |
 | macOS | Non pris en charge par la construction ni les scripts (seuls des chemins de polices macOS figurent dans `FontAtlas.cpp`). |
 
 ### Installer les Studios (Windows)
@@ -455,7 +470,7 @@ Options lues par `src/main.cpp` :
 | Option | Effet |
 |---|---|
 | `<fichier>` | Ouvre le projet, l'archive ou l'export donné (transmis à l'instance déjà ouverte s'il y en a une). |
-| `--version` | Écrit le nom et la version (`API Studio 1.46.0` ou `IHM Studio 1.46.0`) et s'arrête. |
+| `--version` | Écrit le nom et la version (`API Studio 1.52.0` ou `IHM Studio 1.52.0`) et s'arrête. |
 | `--cli <fichier.XPG> [autres]` | API Studio : analyse sans fenêtre ; code 0 sans constat d'erreur, 1 sinon, 2 si la lecture échoue. |
 | `--poste <dossier>` ou `--ihm <dossier>` | IHM Studio : ouvre le projet en poste d'exploitation. |
 | `--dossiers-scripts`, `--autoriser-dossier-scripts <dossier>`, `--retirer-dossier-scripts <dossier>`, `--acces-web-sur-ce-poste oui\|non` | IHM Studio (1.32.0) : sans fenêtre, les réglages de ce poste qu'un projet ne change pas - les dossiers autorisés aux scripts de l'IHM et l'accès web permis - pour le compte Windows qui lance la commande (un poste d'exploitation sans l'éditeur) ; IHM Studio et le poste fermés. Code 0 fait, 1 refusé, 2 pas IHM Studio. |
@@ -594,7 +609,7 @@ Référence complète : [docs/FORMATS.md](docs/FORMATS.md) ; documents des licen
 | `.xpgreq`, `.xpglic`, `.xpgreg`, `.xpgrev` | Demande d'activation d'un PC, licence, registre des offres, liste de révocation (documents signés, vérifiés hors ligne) | les deux Studios ; l'Admin |
 | `.xpgsauve` | Sauvegarde de secours de l'Admin (le service et le poste), chiffrée par une phrase de passe | l'Admin |
 
-- **Format interne des projets IHM** : 33 (`hmi::kFormatVersion`), écrit au plus petit format suffisant ; un outil plus ancien refuse un format plus récent. Les versions 1.22.0 à 1.46.0 ne changent pas ce format : les missions IA sont des fichiers à part (`IA/missions/` des réglages), et le journal d'une session est un fichier CSV à part dans le projet.
+- **Format interne des projets IHM** : 33 (`hmi::kFormatVersion`), écrit au plus petit format suffisant ; un outil plus ancien refuse un format plus récent. Les versions 1.22.0 à 1.52.0 ne changent pas ce format : les missions IA sont des fichiers à part (`IA/missions/` des réglages), et le journal d'une session est un fichier CSV à part dans le projet.
 - **Sauvegardes** : sauvegarde de la version installée avant mise à jour (3 gardées), réserve de réparation (`Reserve\<version>`), reprise après arrêt brutal, sauvegardes de la mémoire de l'Assistant, version « Avant restauration » ; côté éditeur, la sauvegarde de secours quotidienne de l'Admin (30 gardées, `docs/ADMINS.md`, § 9).
 - **Données de l'Assistant** : dossier `IA/` (conversations, pièces jointes, `parametres.json` sans clé, `notifications.json`, `cles/` protégées par DPAPI sous Windows…) — [docs/ASSISTANT-IA.md](docs/ASSISTANT-IA.md#donnees).
 
@@ -644,10 +659,10 @@ Les emplacements prévus pour la documentation, le contenu attendu de chaque cap
 
 Détail : [docs/TESTS.md](docs/TESTS.md) (son inventaire suite par suite est celui de la 1.35.0).
 
-- **175 suites CTest pour la 1.46.0** (décompte d'une configuration CMake de la version livrée) : 173 essais C++ enregistrés par `xpg_add_test` (certains exécutables servent à deux essais), l'essai `service_worker` (les essais du Worker sous Node.js, `npm test` : 176 sur 176 en 1.46.0) et l'essai Python `vcxproj`. Répartition : Assistant IA (31), IHM (43), automate (34), socle et application (29), licences, service et Admin (30), sessions (2), déploiement réseau (5), outillage (1). Vingt-deux autres suites sont déclarées mais sautées car leur source n'est pas dans le dépôt.
+- **200 suites CTest pour la 1.52.0, toutes réussies** (une configuration CMake de la version livrée, passée par paquets de 12 programmes d'essai) : les essais C++ enregistrés par `xpg_add_test` (certains exécutables servent à deux essais), l'essai `service_worker` (les essais du Worker sous Node.js, `npm test` : 268 sur 268 en 1.52.0) et l'essai Python `vcxproj`. D'autres suites sont déclarées mais sautées car leur source n'est pas dans le dépôt. (En 1.46.0 : 175 suites, `npm test` 176 sur 176.)
 - Les essais n'ouvrent pas de fenêtre (les pages de l'Admin et la fenêtre Licence sont dessinées sans SDL) ; réseau et IA sont remplacés par des faux injectables ; **le service des licences est le vrai** Worker, lancé sur le poste dans `workerd` (`outils/service/lancer-local.sh`), contre lequel tournent les Studios et l'Admin ; Stripe, le serveur de courriel, la connexion Microsoft et wrangler sont des faux (`tests/outils/faux_stripe.mjs`, `smtp_essai.py`, `oauth_essai.py`, faux kit de `admindeploy`).
 - Les suites qui lancent le service ou un faux serveur (`service_local`, `service_worker`, `service_studios`, `service_boutique`, `service_fichiers`, `adminservice`, `adminsadmin`, `adminsfichiers`, `adminboutique`, `adminmail`, `sessionrelais`) se déclarent sautées (« SAUTE : ») quand un prérequis manque, Node.js 22 et `npm ci` dans `service/` pour le service (`CMakeLists.txt`).
-- **Plates-formes réellement essayées** : Linux (CTest, 175 suites réussies pour la 1.46.0) ; les exécutables Windows ont été vérifiés **sous Wine, pas sur un vrai Windows** : `--version`, `--cli` sur le projet d'essai, installations silencieuses par-dessus la version précédente (Studios et Admin), et pour les licences, de bout en bout, un Studio compilé avec la clé d'essai et l'Admin contre le vrai service lancé sur le poste (notes de livraison 1.35.0 à 1.46.0).
+- **Plates-formes réellement essayées** : Linux (CTest, 200 suites réussies pour la 1.52.0) ; les exécutables Windows ont été vérifiés **sous Wine, pas sur un vrai Windows** : `--version`, `--cli` sur le projet d'essai, installations silencieuses par-dessus la version précédente (Studios et Admin), et pour les licences, de bout en bout, un Studio compilé avec la clé d'essai et l'Admin contre le vrai service lancé sur le poste (notes de livraison 1.35.0 à 1.52.0).
 - `build.sh` et `runtests.sh` sont historiques (le premier se déclare « plus tenu à jour ») : la référence est CMake/CTest.
 - Des essais réussis ne prouvent pas l'absence de défauts ; l'interface graphique réelle, les services d'IA réels, Windows hors Wine, le vrai Cloudflare, le vrai Stripe, les vraies boîtes de courriel, plusieurs vrais PC et les automates physiques ne sont pas couverts par les essais automatiques. Quelques suites contre le service local (`adminguidemandes`, `service_studios`) ont échoué une fois sous forte charge puis réussi à chaque autre passage, sans cause trouvée (notes 1.35.0, 1.36.0, 1.39.0).
 
@@ -658,23 +673,24 @@ Détail : [docs/TESTS.md](docs/TESTS.md) (son inventaire suite par suite est cel
 <a id="limitations"></a>
 ## 11. Limitations connues
 
-Relevées dans le code et les notes de livraison jusqu'à la 1.46.0 :
+Relevées dans le code et les notes de livraison jusqu'à la 1.52.0 :
 
 - **Import** : `.XEF`/`.ZEF` reconnus mais non lus (import en échec) ; `.XDB` non implémenté ; `.STU` refusé.
-- **Programme** : sections LD, FBD, SFC conservées et lisibles, ni modifiables ni simulées ; la simulation couvre un sous-ensemble du ST et refuse le reste avec un diagnostic.
+- **Programme** : sections FBD conservées et lisibles, ni modifiables ni simulées ; depuis la 1.51.0, le LADDER et le SFC se modifient et se simulent, mais le LD dans le corps d'un DFB ne s'exécute pas, une macro-étape se simule comme une étape simple, et la relecture par Control Expert d'une section modifiée n'a pas été vérifiée (pas de Control Expert pour les essais) ; la simulation couvre un sous-ensemble du ST et refuse le reste avec un diagnostic.
 - **Sécurité des projets** : LOCK bloque l'ouverture dans l'application mais ne chiffre pas le dossier ; la clé maîtresse dérivée d'une adresse MAC n'est pas une frontière de sécurité.
-- **IHM** : communication Modbus TCP seulement (et surveillance « joignable » d'un appareil Ethernet) ; scripts C/C++ jamais exécutés ; courriel sans TLS ; accès web en HTTP ; vidéo MP4/WMV/MOV sous Windows seulement ; bases de données externes par chaîne de connexion non connectées.
+- **IHM** : communication Modbus TCP seulement (et surveillance « joignable » d'un appareil Ethernet) ; scripts C/C++ : depuis la 1.50.0, un sous-ensemble traduit et exécuté (le reste est refusé à sa ligne) ; courriel sans TLS ; accès web en HTTP ; vidéo MP4/WMV/MOV sous Windows seulement ; bases de données externes par chaîne de connexion non connectées.
 - **Assistant IA** : IHM Studio seulement ; voir [§ 8](#assistant) et [docs/ASSISTANT-IA.md](docs/ASSISTANT-IA.md#limites). Missions IA essayées avec un faux fournisseur, jamais avec une vraie IA ([docs/LIVRAISON-1.22.0.md](docs/LIVRAISON-1.22.0.md)).
 - **Sessions** : IHM Studio seulement, 8 personnes au plus ; deux équipiers qui changent en même temps la même ligne du reste du projet (variables, scripts généraux, réglages) : l'état de l'hôte l'emporte ; retirer quelqu'un ne vaut que pour la session en cours ; le journal garde les 2 000 derniers changements ; une coupure brutale peut perdre les tout derniers gestes d'un équipier ; jamais essayées sur deux vrais PC ni entre deux vrais bureaux (notes 1.43.0 à 1.45.0).
 - **Licences** : sans Internet, une licence en ligne vaut jusqu'à la fin de son bail ; une copie complète et ancienne des traces du compteur, remise avec l'horloge reculée, n'est pas détectable hors ligne ; la Découverte freine l'essai répété sans l'empêcher (réinstaller Windows la recommence) ; `API-Studio.exe --cli` n'est pas bloqué par la licence ; un poste d'exploitation déjà en marche quand sa licence tombe continue jusqu'à son prochain démarrage (notes 1.35.0, 1.35.1, 1.39.0).
 - **Service des licences** : les essais ne l'ont jamais appelé chez Cloudflare (le vrai Worker, lancé sur le poste) ; le vrai déploiement depuis le bouton **Déployer le service** reste à voir chez l'éditeur (essai `admindeploy` avec un faux kit ; sous Wine, sans Node.js, le dialogue s'arrête à « Node.js n'est pas installé ») ; le plan gratuit de Cloudflare suffit pour quelques centaines de PC, et son acceptation du limiteur par adresse n'a pas été vérifiée ; qui entre dans le compte Cloudflare de l'éditeur peut lire la clé du service (notes 1.35.0, 1.45.0).
 - **Boutique** : **le vrai Stripe n'a jamais été appelé** (un faux Stripe local ; Brancher Stripe essayé sous Linux seulement, avec un faux wrangler) ; une commande payée n'est livrée que lorsqu'un Admin qui en a le droit est ouvert ; la TVA n'est pas calculée (montants TTC saisis par l'éditeur, pas de Stripe Tax) ; une option « D'autres dates… » ne s'achète pas en ligne ; rembourser ne révoque pas la licence ; dans le catalogue, l'écart signalé compare le montant au prix affiché sans sa réduction (un simple avertissement) (`docs/LIVRAISON-1.46.0.md`, § 4).
 - **Admins et courriel** : un admin = un PC (sa clé n'en sort pas) ; les Studios 1.43 et avant refusent une licence signée par un admin et un registre à adresses de secours ; la sauvegarde de secours ne contient ni le mot de passe du courriel ni la connexion Microsoft, ni les fichiers envoyés ; Gmail et Microsoft n'ont pas été appelés par les essais (serveurs locaux d'essai) (notes 1.37.0, 1.38.0, 1.44.0).
+- **XPG Admin et la dérogation** (1.49.0 à 1.52.0) : sous dérogation, ce qui doit être signé par la clé de l'éditeur reste à l'admin+ (ajouter ou retirer un admin, les droits, publier une version, la sauvegarde complète, rembourser) ; un XPG Admin plus ancien que la 1.52.0 montre encore les pages réservées, en lecture ; le code d'une dérogation vaut 1 h ; le clignotement de la barre des tâches n'a pas été vu (Wine) (`docs/LIVRAISON-1.52.0.md`, § 4).
 - **Plates-formes** : pas d'exécutable graphique Linux livré ; rien n'a été essayé sur un vrai Windows (Wine seulement), ni sur plusieurs vrais PC ; installateurs sans signature de code Windows.
-- **Fabrication Windows MSVC** : aucune compilation MSVC n'est rapportée par les notes de livraison de la 1.22.0 à la 1.46.0 (la version du `.rc`, restée à 1.12.0, a été alignée en 1.22.0).
-- **Dépôt** : `SDL3.dll`/`SDL3.lib`, PDFium et les modules Node.js du service (`service/node_modules`) ne sont pas versionnés ; 22 suites d'essais déclarées n'ont pas leur source.
+- **Fabrication Windows MSVC** : aucune compilation MSVC n'est rapportée par les notes de livraison de la 1.22.0 à la 1.52.0 (la version du `.rc`, restée à 1.12.0, a été alignée en 1.22.0).
+- **Dépôt** : `SDL3.dll`/`SDL3.lib`, PDFium et les modules Node.js du service (`service/node_modules`) ne sont pas versionnés ; des suites d'essais déclarées n'ont pas leur source.
 
-Aucune feuille de route n'est publiée dans ce dépôt ; seule la conception de la 1.47.0 en cours y figure ([§ 12](#documentation)).
+Aucune feuille de route n'est publiée dans ce dépôt.
 
 <sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
@@ -693,9 +709,9 @@ Aucune feuille de route n'est publiée dans ce dépôt ; seule la conception de 
 | [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md) | Déploiement réseau (1.28.0, 1.29.0) : le paquet signé, le protocole, l'appairage, l'agent, l'envoi, l'installation, le poste lancé et arrêté, le retour en arrière |
 | [docs/LICENCES.md](docs/LICENCES.md) | Licences : documents signés, éditions et registre, activation par fichier, la fenêtre Licence et les verrous (1.30.0), l'outil de l'éditeur jamais livré et son application (1.30.0 à 1.33.0), le côté PC du service : licence en ligne, bail et compteur, flottante, Découverte (1.35.0), la licence perdue en direct (1.39.0), l'Admin en direct (1.40.0), le contrôle du paquet et l'installateur |
 | [docs/SERVICE-LICENCES.md](docs/SERVICE-LICENCES.md) | Le service des licences, contrat entre le Worker, les Studios et l'Admin : clés et certificat, appels signés, bail, routes, limites, relais des sessions (1.44.0), boutique (1.46.0), code d'activation, Découverte, demande en ligne (1.36.0, 1.37.0) |
-| [docs/ADMINS.md](docs/ADMINS.md) | Plusieurs admins (1.44.0) : rôles, les 13 droits et les profils, la liste signée des admins, devenir admin, le journal, les fichiers, les versions, la sauvegarde de secours, les adresses de secours. Quelques passages marqués 1.47.0 (Mon compte, Demandes d'admin) décrivent le travail en cours |
+| [docs/ADMINS.md](docs/ADMINS.md) | Plusieurs admins (1.44.0) : rôles, les 13 droits et les profils, la liste signée des admins, devenir admin, le journal, les fichiers, les versions, la sauvegarde de secours, les adresses de secours ; Gérer le service et la dérogation (1.47.0 ; 1.52.0 : tout, activée par un code vu chez l'admin+, durée au choix) ; trois exécutables et l'invitation par code (1.49.0, 1.51.0) ; ce que voit XPG Admin (1.52.0) |
 | [docs/BOUTIQUE.md](docs/BOUTIQUE.md) | La boutique et les commandes (1.46.0) : le principe, les secrets de Stripe, le catalogue, les commandes, la livraison par l'Admin, ses pages, le Studio |
-| [docs/STATISTIQUES.md](docs/STATISTIQUES.md) | **1.47.0, en cours, non livrée** : les statistiques, les courbes et le globe de l'Admin |
+| [docs/STATISTIQUES.md](docs/STATISTIQUES.md) | Les statistiques, les courbes et le globe de l'Admin (1.47.0) |
 | [docs/FORMATS.md](docs/FORMATS.md) | Formats, données, emplacements, migrations |
 | [docs/TESTS.md](docs/TESTS.md) | Essais et qualité |
 | [docs/GUIDE-COMPILATION.md](docs/GUIDE-COMPILATION.md) | Compilation Linux, MinGW, Windows ; installateur ; outils |
@@ -703,13 +719,13 @@ Aucune feuille de route n'est publiée dans ce dépôt ; seule la conception de 
 | [docs/CONFIG-INI.md](docs/CONFIG-INI.md) | `outils/config.ini`, `installation.ini`, `XPGAnalyser.ini` |
 | [docs/DEPANNAGE.md](docs/DEPANNAGE.md) | Dépannage |
 | [docs/images/README.md](docs/images/README.md) | Captures à ajouter |
-| `docs/maquettes/<version>/LISEZ-MOI.md` | Maquettes validées avant construction : 1.40.0 (le nouveau design), 1.42.0 (offres, options, achats, sessions), 1.43.0 (plusieurs admins, journal, fichiers, mises à jour), 1.47.0 (statistiques, en cours) |
+| `docs/maquettes/<version>/LISEZ-MOI.md` | Maquettes validées avant construction : 1.40.0 (le nouveau design), 1.42.0 (offres, options, achats, sessions), 1.43.0 (plusieurs admins, journal, fichiers, mises à jour), 1.47.0 (statistiques), 1.50.0 (méthodes des types IHM, Étirer, `POINTER TO`, Dupliquer) |
 | `outils/mingw/LISEZ-MOI-EDITEUR.txt`, `outils/service/LISEZ-MOI-SERVICE.txt` | Modes d'emploi livrés à l'éditeur avec l'Admin : l'application, la console, la mise en ligne du service |
 | Aide F1 (dans le logiciel) | Mode d'emploi écran par écran ; source `tools/guide-ihm/guide-ihm.txt` |
 
-Les références fonctionnelles disent dans leur en-tête la version qu'elles décrivent (1.22.0 pour `IHM-STUDIO.md`, `FORMATS.md`, `GUIDE-COMPILATION.md` ; 1.35.0 pour `API-STUDIO.md`, `ASSISTANT-IA.md`, `ARCHITECTURE.md`) ; les nouveautés de la 1.36.0 à la 1.46.0 sont dans les documents de conception ci-dessus et dans les notes de livraison.
+Les références fonctionnelles disent dans leur en-tête la version qu'elles décrivent (1.22.0 pour `IHM-STUDIO.md`, `FORMATS.md`, `GUIDE-COMPILATION.md` ; 1.35.0 pour `API-STUDIO.md`, `ASSISTANT-IA.md`, `ARCHITECTURE.md`) ; les nouveautés de la 1.36.0 à la 1.52.0 sont dans les documents de conception ci-dessus, dans les notes de livraison et, pour la 1.47.0 à la 1.52.0, résumées au [§ 2.8](#nouveautes).
 
-Documents historiques, conservés tels quels : notes de livraison `docs/LIVRAISON-<version>.md` (de la 1.11.3 à la 1.46.0 ; la plus récente est [docs/LIVRAISON-1.46.0.md](docs/LIVRAISON-1.46.0.md) ; l'audit fait avant les missions IA : [docs/AUDIT-MISSIONS-1.22.0.md](docs/AUDIT-MISSIONS-1.22.0.md)), audit de conception de l'Assistant IA ([docs/ASSISTANT-IA-AUDIT.md](docs/ASSISTANT-IA-AUDIT.md)), audit de la bibliothèque d'objets ([docs/AUDIT-BIBLIOTHEQUE-OBJETS.md](docs/AUDIT-BIBLIOTHEQUE-OBJETS.md)), rapports ([docs/RAPPORT-ANALYSE.md](docs/RAPPORT-ANALYSE.md), [docs/RAPPORT-FINAL-IHM-SIMULATION.md](docs/RAPPORT-FINAL-IHM-SIMULATION.md), [docs/REFONTE-SCRIPTS-ANALYSE.md](docs/REFONTE-SCRIPTS-ANALYSE.md)), notes de travail `docs/NOTES-*.md`, maquettes HTML plus anciennes `docs/maquettes/maquette-*.html`, classeur d'accompagnement (`docs/automation.xlsx`, `docs/automation.xlsm`, `docs/Automation.bas`, `docs/make_workbook.py`, `docs/GUIDE.txt`). Ces documents décrivent l'état du logiciel à leur date.
+Documents historiques, conservés tels quels : notes de livraison `docs/LIVRAISON-<version>.md` (de la 1.11.3 à la 1.52.0 ; la plus récente est [docs/LIVRAISON-1.52.0.md](docs/LIVRAISON-1.52.0.md), celle de la boutique [docs/LIVRAISON-1.46.0.md](docs/LIVRAISON-1.46.0.md) ; l'audit fait avant les missions IA : [docs/AUDIT-MISSIONS-1.22.0.md](docs/AUDIT-MISSIONS-1.22.0.md)), audit de conception de l'Assistant IA ([docs/ASSISTANT-IA-AUDIT.md](docs/ASSISTANT-IA-AUDIT.md)), audit de la bibliothèque d'objets ([docs/AUDIT-BIBLIOTHEQUE-OBJETS.md](docs/AUDIT-BIBLIOTHEQUE-OBJETS.md)), rapports ([docs/RAPPORT-ANALYSE.md](docs/RAPPORT-ANALYSE.md), [docs/RAPPORT-FINAL-IHM-SIMULATION.md](docs/RAPPORT-FINAL-IHM-SIMULATION.md), [docs/REFONTE-SCRIPTS-ANALYSE.md](docs/REFONTE-SCRIPTS-ANALYSE.md)), notes de travail `docs/NOTES-*.md`, maquettes HTML plus anciennes `docs/maquettes/maquette-*.html`, classeur d'accompagnement (`docs/automation.xlsx`, `docs/automation.xlsm`, `docs/Automation.bas`, `docs/make_workbook.py`, `docs/GUIDE.txt`). Ces documents décrivent l'état du logiciel à leur date.
 
 <sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 

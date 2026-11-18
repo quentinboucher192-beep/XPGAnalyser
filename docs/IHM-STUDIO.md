@@ -1,7 +1,7 @@
 <a id="haut-de-page"></a> <!-- nav -->
 # IHM Studio
 
-<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [API-STUDIO.md](API-STUDIO.md) · [FORMATS.md](FORMATS.md) · [ASSISTANT-IA.md](ASSISTANT-IA.md) · [README.md](images/README.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [README.md](images/README.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Référence fonctionnelle d'**IHM Studio** (exécutable `IHM-Studio.exe`, édition `core::Edition::Ihm`), version 1.22.0 : conception, simulation et exploitation d'une interface homme-machine de supervision. Chaque section renvoie au code qui l'implémente ; le mode d'emploi détaillé, écran par écran, est l'aide F1 (source : `tools/guide-ihm/guide-ihm.txt`, 269 sujets d'après la note de livraison 1.21.3). L'Assistant IA a sa propre référence : [ASSISTANT-IA.md](ASSISTANT-IA.md). Retour au [README](../README.md).
 
@@ -297,4 +297,4 @@ Le code le précise : cette fonction aide à comprendre un événement ; elle n'
 
 <a id="bas-de-page"></a> <!-- nav -->
 
-<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [API-STUDIO.md](API-STUDIO.md) · [FORMATS.md](FORMATS.md) · [ASSISTANT-IA.md](ASSISTANT-IA.md) · [README.md](images/README.md)</sub> <!-- nav -->
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [README.md](images/README.md)</sub> <!-- nav -->

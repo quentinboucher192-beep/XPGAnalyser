@@ -1,7 +1,7 @@
 <a id="haut-de-page"></a> <!-- nav -->
 # Assistant IA
 
-<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [TESTS.md](TESTS.md) · [IHM-STUDIO.md](IHM-STUDIO.md) · [FORMATS.md](FORMATS.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [IHM-STUDIO.md](IHM-STUDIO.md) · [FORMATS.md](FORMATS.md) · [README.md](images/README.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Référence de l'Assistant IA d'**IHM Studio** (version 1.35.0), établie à partir du code de `src/app/ai/`. Le guide d'utilisation détaillé, avec les libellés de chaque écran, est l'aide F1 (sujets « L'Assistant IA », « Le plan d'action… », « L'IA intégrée », « Mémoire et apprentissage de l'IA » dans `tools/guide-ihm/guide-ihm.txt`). Retour au [README](../README.md).
 
@@ -402,4 +402,4 @@ Essais : 18 suites `ai*` (voir [TESTS.md](TESTS.md)). Historique de conception :
 
 <a id="bas-de-page"></a> <!-- nav -->
 
-<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [TESTS.md](TESTS.md) · [IHM-STUDIO.md](IHM-STUDIO.md) · [FORMATS.md](FORMATS.md)</sub> <!-- nav -->
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [IHM-STUDIO.md](IHM-STUDIO.md) · [FORMATS.md](FORMATS.md) · [README.md](images/README.md)</sub> <!-- nav -->

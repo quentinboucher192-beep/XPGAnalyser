@@ -1,7 +1,7 @@
 <a id="haut-de-page"></a> <!-- nav -->
 # Formats, données et emplacements
 
-<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ADMINS.md](ADMINS.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [API-STUDIO.md](API-STUDIO.md) · [IHM-STUDIO.md](IHM-STUDIO.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [API-STUDIO.md](API-STUDIO.md) · [IHM-STUDIO.md](IHM-STUDIO.md) · [GUIDE-INSTALLATION.md](GUIDE-INSTALLATION.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Référence des fichiers lus et écrits par API Studio et IHM Studio (version 1.22.0), d'après le code. Retour au [README](../README.md).
 
@@ -238,4 +238,4 @@ Les fichiers JSON de l'Assistant conservent l'ordre et les champs inconnus (`src
 
 <a id="bas-de-page"></a> <!-- nav -->
 
-<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ADMINS.md](ADMINS.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [API-STUDIO.md](API-STUDIO.md) · [IHM-STUDIO.md](IHM-STUDIO.md)</sub> <!-- nav -->
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [API-STUDIO.md](API-STUDIO.md) · [IHM-STUDIO.md](IHM-STUDIO.md) · [GUIDE-INSTALLATION.md](GUIDE-INSTALLATION.md)</sub> <!-- nav -->

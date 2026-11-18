@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # 1.52.0 : XPG Admin ne montre que la gestion ; la dérogation donne tout, elle commence quand l'admin tape le code que tu vois sur ton PC, pour la durée que tu choisis
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Fait à partir de ta demande du 14/11 : « l'admin classique ne doit pas voir les onglets 'paramètres de sécurité',
 'services', 'administrateurs' en gros il ne peut faire que de la gestion, lorsqu'il a une dérogation il voit tout comme
@@ -59,6 +62,8 @@ actif pdt une durée choisissable par l'admin+ lorsqu'il l'envoie ».
 - **La console** : `derogation-accorder --cle … --duree 2h30` (ou `--minutes`, `--heures`) affiche le code sur ton
   écran ; `derogation-etat` le remontre tant qu'il attend.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 1. Ce qu'il te reste à faire
 
 1. Installer **l'Admin+ 1.52.0** (par-dessus la 1.51.0), puis les **Studios 1.52.0**.
@@ -68,6 +73,8 @@ actif pdt une durée choisissable par l'admin+ lorsqu'il l'envoie ».
    à XPG Admin 1.52.0** : c'est lui qui cache les pages (un XPG Admin 1.51.0 les montre encore, en lecture ; le service,
    lui, refuse déjà tout ce qui ne leur est pas permis).
 4. Pour une dérogation : l'envoyer, puis lui **dire le code de vive voix** (téléphone, en personne) — jamais par mail.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 2. Les essais
 
@@ -102,6 +109,8 @@ actif pdt une durée choisissable par l'admin+ lorsqu'il l'envoie ».
   compte et la carte du code d'invitation ; `152_V2` Ce PC ; `152_V3` le refus de `--page service`. Aucun code en clair
   dans les journaux.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. Installer
 
 **Les Studios** : lance `API-IHM-Studio-Setup-1.52.0.exe` (dans le zip) par-dessus la 1.51.0. Tes projets, tes
@@ -127,6 +136,8 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 |---|---|---|
 | `XPG-Admin-Setup-1.52.0.exe` | `28C769990D247C6BB65AF28DB806D53847C48FBA56EE8EA0D36DA9E318B18715` | 8 180 859 octets |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 4. Limites
 
 - **Sous dérogation**, ce qui doit être signé par ta clé d'éditeur reste à toi (la liste au § 0) : l'admin le voit,
@@ -139,3 +150,9 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 - **Le clignotement de la barre des tâches** n'a pas d'effet visible sous Wine : non vérifié.
 - **Le code est valable 1 h** : passé ce temps, envoie une nouvelle dérogation.
 - **Rien sur un vrai Windows** : sous Wine seulement.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->
