@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # outils\config.ini, clé par clé
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [FORMATS.md](FORMATS.md) · [GUIDE-INSTALLATION.md](GUIDE-INSTALLATION.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Un seul fichier de paramètres pour toute la chaîne de fabrication. Il est lu par tous les scripts de `outils\`, par `build_installer.bat` (qui passe ses valeurs à Inno Setup) et par `outils/mingw/package_mingw.py`. `package.bat` en tire `maintenance\config.ini` pour les scripts installés avec le programme. Retour au [README](../README.md).
 
@@ -32,6 +35,8 @@ Un seul fichier de paramètres pour toute la chaîne de fabrication. Il est lu p
 | `description` | Analyse, IHM et simulation de projets Control Expert | Le commentaire des raccourcis et de la fiche. |
 | `url_support` | vide | Facultatif : le lien « Aide » de la fiche. |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## [Projet]
 
 | Clé | Rôle |
@@ -41,6 +46,8 @@ Un seul fichier de paramètres pour toute la chaîne de fabrication. Il est lu p
 | `plateforme` | `x64`, la seule possible (le SDL3 fourni est x64) : `build.bat` s'arrête sur une autre valeur. |
 | `cmake_tests` | Le dossier de construction des tests (`build\cmake-tests`). |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## [Compilateur]
 
 | Clé | Rôle |
@@ -48,6 +55,8 @@ Un seul fichier de paramètres pour toute la chaîne de fabrication. Il est lu p
 | `chaine` | `msvc` : la chaîne du projet (rapport d'analyse, § 6), la seule automatisée : `build.bat` s'arrête sur une autre valeur. |
 | `compilateur_manuel` | Le dossier d'un Visual Studio 2022 ou des Build Tools, choisi à la main (choix 3 de `install_build_tools.bat`, qui l'écrit ici). Il passe avant les autres. |
 | `msvc_version_min` | 14.30 (v143). Une version plus ancienne est signalée. |
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## [Outils]
 
@@ -64,11 +73,15 @@ Un seul fichier de paramètres pour toute la chaîne de fabrication. Il est lu p
 | `innosetup_version`, `innosetup_url` | Inno Setup 6.7.2, depuis la publication officielle (dépôt jrsoftware/issrc sur GitHub). |
 | `innosetup_editeur`, `innosetup_sha256` | Pyrsys B.V. et l'empreinte du fichier, constatées le 29/09/2026. Si tu changes de version, mets à jour les trois clés. |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## [HorsLigne]
 
 | Clé | Rôle |
 |---|---|
 | `dossier` | Le package fait par `create_offline_toolchain.bat` (qui propose de l'écrire ici). `À_RENSEIGNER` tant que tu ne t'en sers pas : ce n'est demandé que pour le choix 4. Sans Internet, Inno Setup y est aussi pris quand le compilateur est déjà là. |
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## [Installateur]
 
@@ -79,17 +92,23 @@ Un seul fichier de paramètres pour toute la chaîne de fabrication. Il est lu p
 | `anciens_dossiers` | Où chercher les anciennes versions à reprendre (séparés par `;`). L'installation du lot 8 est aussi trouvée par le registre. |
 | `certificat` | Vide : pas de signature (ta réponse du 29/09). Windows SmartScreen avertit au premier lancement. La signature n'est pas automatisée dans cette version : une valeur ici est seulement signalée par `build_installer.bat`, l'installateur n'est pas signé. |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## [Maintenance]
 
 | Clé | Rôle |
 |---|---|
 | `sauvegardes_a_garder` | 3 : les plus anciennes sauvegardes partent au-delà. |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## [Licences]
 
 | Clé | Rôle |
 |---|---|
 | `obligatoires` | `non` par défaut (1.32.0). À `oui`, le contrôle du paquet (`package_mingw.py`, `package.ps1`) refuse une construction dont `src/licensing/PublisherKey.hpp` n'a aucune clé de l'éditeur : une version livrée « Non activées » (tout ouvert, pour toujours) ne peut plus partir par erreur. À passer à `oui` dès que ta clé est dans les programmes. |
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## Les deux autres .ini (côté utilisateur)
 
@@ -104,3 +123,9 @@ Un seul fichier de paramètres pour toute la chaîne de fabrication. Il est lu p
   - Une valeur vide veut dire le défaut.
   - Il accepte les jetons `{Documents}`, `{AppData}`, `{LocalAppData}`, `{ProgramData}`, `{Programme}`, `{Donnees}`.
   - L'ancien fichier est gardé en `XPGAnalyser.ini.precedent`.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [FORMATS.md](FORMATS.md) · [GUIDE-INSTALLATION.md](GUIDE-INSTALLATION.md)</sub> <!-- nav -->

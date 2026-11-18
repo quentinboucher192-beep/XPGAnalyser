@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Assistant IA
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [TESTS.md](TESTS.md) · [IHM-STUDIO.md](IHM-STUDIO.md) · [FORMATS.md](FORMATS.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Référence de l'Assistant IA d'**IHM Studio** (version 1.35.0), établie à partir du code de `src/app/ai/`. Le guide d'utilisation détaillé, avec les libellés de chaque écran, est l'aide F1 (sujets « L'Assistant IA », « Le plan d'action… », « L'IA intégrée », « Mémoire et apprentissage de l'IA » dans `tools/guide-ihm/guide-ihm.txt`). Retour au [README](../README.md).
 
@@ -24,6 +27,8 @@ Référence de l'Assistant IA d'**IHM Studio** (version 1.35.0), établie à par
 17. [Limites connues](#limites)
 18. [Carte du code](#code)
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="principe"></a>
@@ -34,6 +39,8 @@ Référence de l'Assistant IA d'**IHM Studio** (version 1.35.0), établie à par
 - L'utilisateur décrit en français ce qu'il veut. L'Assistant répond par du texte et, s'il y a lieu, par une **proposition** : une liste d'opérations sur les vrais objets du modèle IHM.
 - **Rien ne modifie le projet sans passer par** la validation, l'aperçu (mode Prévisualisation) et une commande unique de la pile d'annulation. Un fournisseur ne touche jamais au modèle (`src/app/ai/AiProvider.hpp`).
 - L'Assistant **n'invente ni variable, ni propriété, ni genre d'objet** : une variable citée qui n'existe pas est une erreur bloquante, et l'utilisateur choisit une variable existante ou sa création (`src/app/ai/AiOperations.hpp`).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -55,6 +62,8 @@ Autres réglages notables : **Modèle** (case libre, vide par défaut : aucun mo
 
 Transport HTTPS (`src/app/ai/AiHttp.hpp`) : **WinHTTP** sous Windows (le TLS, les proxys et les certificats du système), **libcurl** chargée à la demande (`dlopen` de `libcurl.so.4`) sous Linux ; absente, l'Assistant le dit. `http://` n'est accepté que vers ce poste (`localhost`, `127.x`, `::1`), et, pour un service compatible OpenAI **sans clé**, vers une adresse IPv4 privée (10.x, 192.168.x, 172.16 à 172.31.x).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="confidentialite"></a>
@@ -74,6 +83,8 @@ Avant le premier envoi d'une conversation à une IA connectée, une ligne sous l
 
 > L'Assistant **n'entraîne ni ne réentraîne aucun modèle**. L'« apprentissage » est une mémoire locale relue et jointe aux demandes (voir § 12 ; constante `kNotRetrained`, `src/app/ai/AiKnowledge.hpp`).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="cles"></a>
@@ -92,6 +103,8 @@ Avant le premier envoi d'une conversation à une IA connectée, une ligne sous l
 - **Une clé ne part que vers les serveurs où elle a été essayée** (1.32.0, `AiKeys.cpp`, champ `serveurs` de `index.json`) : ajouter ou remplacer une clé la lie à l'adresse affichée ; « Tester » ou « Lister les modèles » ajoute le serveur essayé ; une clé d'une version précédente est liée à son premier essai réussi. Après un changement d'adresse, le premier envoi est refusé avec un message qui dit de tester la clé de nouveau. Les deux fournisseurs (Anthropic et compatibles OpenAI) font cette vérification.
 - **Adresses locales** (1.32.0) : « local » et « réseau privé » sont reconnus par un lecteur strict ; `127.1`, `0127.0.0.1`, les formes hexadécimales ou `127.exemple.com` ne sont pas locales. Les redirections ne sont jamais suivies (WinHTTP et libcurl, http et https seulement).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="conversations"></a>
@@ -103,6 +116,8 @@ Avant le premier envoi d'une conversation à une IA connectée, une ligne sous l
 - Chaque tour renvoie à l'IA le **résultat réel** de ses propositions précédentes : appliquée, refusée, en attente, annulée par Ctrl+Z, ou refusée par la validation avec la raison.
 - Un index de recherche régénérable est tenu dans `IA/index/conversations.json`.
 - **Répondre, réduire, copier** (1.50.1, les gestes de la discussion des sessions, `src/app/ai/AiChatReply.hpp`) : le survol d'un message montre « Répondre » et « Copier » (deux pictogrammes sur sa ligne d'en-tête) ; le clic droit d'un message (une demande, une réponse) : Répondre, Copier (Ctrl+C sur le message choisi d'un clic), Copier avec l'auteur et l'heure (« 14:32 Assistant : … », « hier 14:32 », « 05/11 14:32 »), **Copier le code** (sur un bloc de code : le code exact, sans les balises), Déballer / Réduire, Tout réduire ; sur une demande, « Créer une mission avec ce message » reste. **Répondre** montre « En réponse à Assistant : « début du message… » » au-dessus de la saisie (✕ ou Échap l'annule) ; la demande envoyée **porte la citation** (le champ `reponseA` du message : `id`, `auteur`, `extrait`) et sa bulle montre l'extrait au-dessus du texte (un clic : le message cité, mis en vue et choisi). **Le modèle reçoit la citation, balisée, devant le texte** : « [Citation — l'utilisateur répond à ta réponse de 14:32 :] », les douze premières lignes du message cité (800 octets au plus) préfixées de « > », puis « [Fin de la citation] » et la demande ; l'IA intégrée et la démonstration lisent le texte seul. Une autre conversation ouverte oublie la citation en attente. **Réduire** : un message de plus de cinq lignes (à la largeur du panneau) montre ses quatre premières puis « … voir tout » ; déballé, « Réduire ». **Un bloc de code n'est jamais coupé** : la coupe passe avant lui ; un message qui commence par un bloc garde son en-tête (la langue, « 42 lignes », Copier : le code entier). Le dernier échange (la dernière demande et ce qui la suit) et la réponse qui s'écrit restent déballés tant qu'on ne les réduit pas ; l'état choisi vaut pour la séance. Essais : `ai_assistant_test` (ctest `aiassistant`).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -124,6 +139,8 @@ L'IA connectée propose par l'outil `proposer_operations` (`kOperationsTool`, `A
 Refusé à la lecture : toute opération inconnue ; dans une opération `code`, une action qui porte du code (exécuter un script, appeler, calcul) ou une fonction redéfinie. Une valeur commençant par `=` est une formule, vérifiée comme dans l'inspecteur.
 
 Les suppressions côté automate (API Studio) ne sont pas à la portée de l'Assistant dans cette version (`AiDelete.hpp`).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -153,6 +170,8 @@ flowchart LR
 - **Refuser…** demande confirmation ; « Revenir sur le refus » rend la proposition de nouveau applicable.
 - **Empreinte** : une proposition garde l'empreinte de la vue ; si la vue a changé ou n'existe plus, la proposition ne s'applique jamais (« Périmée », bouton **Redemander**).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="plan"></a>
@@ -168,6 +187,8 @@ flowchart LR
 
 Une bande « Plan en cours » au-dessus de la discussion montre le plan de la proposition qui se vérifie ou s'applique (1.20.2).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="suite"></a>
@@ -179,6 +200,8 @@ Depuis la 1.21.3 (`docs/LIVRAISON-1.21.3.md`, `src/app/ai/AiPanel.cpp`) :
 - **L'IA connaît sa limite** : chaque demande lui indique sa longueur et environ combien d'opérations elle peut écrire. Une demande plus grande est découpée en plusieurs propositions : la première est complète et applicable seule, le reste est décrit dans un champ « suite ».
 - La carte affiche **« Suite prévue : … »** ; une fois la proposition appliquée, le bouton **Proposer la suite** envoie « Propose la suite : … », et la partie suivante arrive sur une nouvelle carte, à vérifier et appliquer comme la première. La suite est conservée avec la conversation.
 - **Reprise automatique** : si une proposition dépasse malgré tout la longueur pendant qu'elle s'écrit, elle est redemandée une fois en plusieurs parties ; une seconde coupure est signalée sans nouvelle tentative. Une proposition coupée n'est **jamais** appliquée, même en partie. Une réponse purement textuelle coupée n'est pas redemandée.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -198,6 +221,8 @@ Une demande trop grande pour une proposition devient une **mission** : un objet 
 - **Toute conversation** : un résumé des missions du projet est joint aux demandes ; les outils `chercher_missions` et `etat_mission` relisent les fichiers (jamais inventé).
 - **Écrans** : onglet **Missions IA** du panneau, bande **Mission IA** au-dessus de la conversation, tableau de bord au centre (onglet « Mission IA · nom »), écran de reprise.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="pieces"></a>
@@ -215,6 +240,8 @@ Formats acceptés (`attachmentFormats()`, `src/app/ai/AiStore.cpp`) : PNG, JPG/J
 - **Export Control Expert joint** (`.XPG`) : dans IHM Studio, ses variables globales et ses DDT servent à proposer des variables et des types IHM (`AiAutomate.hpp`).
 - Avec l'IA intégrée ou la démonstration, le contenu des pièces jointes n'est pas lu par une IA.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="outils"></a>
@@ -231,6 +258,8 @@ Ces outils travaillent sur une **copie** du projet prise au début de la demande
 | `lire_piece_jointe` | Texte exact de lignes d'une pièce jointe (§ 10). |
 | `lignes_classeur` | Lignes d'un classeur reconnu, par pages (§ 10). |
 | `proposer_souvenir`, `chercher_souvenirs` | Proposer de retenir une information (souvenir provisoire, à valider par l'utilisateur), chercher dans les souvenirs (§ 12). |
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -251,6 +280,8 @@ Ces outils travaillent sur une **copie** du projet prise au début de la demande
 
 **Fenêtre « Mémoire et apprentissage de l'IA »** (bouton des Paramètres, ou Ctrl+K « mémoire ») : sept onglets — Vue générale, Apprentissage, Souvenirs, Mémoire, Stockage PC, Nettoyage, Activité (`AiMemoryDialog::tabTitle`). Les mesures sont calculées sur les fichiers réels de `IA/`. « Vider le cache » ne touche que `IA/cache/` ; la suppression des données persistantes demande une case de confirmation explicite.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="notifications"></a>
@@ -262,6 +293,8 @@ Ces outils travaillent sur une **copie** du projet prise au début de la demande
 - Pastille : nombre de non lues, rouge s'il y a une erreur non lue. Filtres Toutes / Non lues, Tout marquer comme lu, Effacer les lues, menu contextuel, clavier.
 - Fichier `IA/notifications.json`, **300 notifications au plus** (les plus anciennes lues partent d'abord), lu et écrit sur un fil à part, au plus une fois par seconde.
 - Option distincte « M'avertir des réponses » : avis dans la cloche de l'application et clignotement de la fenêtre dans la barre des tâches.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -275,6 +308,8 @@ Ces outils travaillent sur une **copie** du projet prise au début de la demande
 - **Budget** facultatif par jour ou par mois : au-delà, l'envoi demande confirmation.
 - Réponses 429, 529 et 5xx : au plus deux nouvelles tentatives automatiques, avec l'attente demandée par le service ou une attente croissante (`maxRetries{2}`, `AiAnthropic.hpp`) ; les autres erreurs (clé refusée, modèle introuvable, hors ligne, délai) s'affichent en clair avec un bouton **Réessayer**.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="incidents"></a>
@@ -283,6 +318,8 @@ Ces outils travaillent sur une **copie** du projet prise au début de la demande
 Depuis la 1.20.0, IHM Studio garde un **dossier d'incident** à l'apparition d'une alarme (`src/hmi/HmiIncident.hpp`, `src/app/ai/AiIncident.hpp`) : contexte copié au moment du défaut (chaîne de dépendances, valeurs disponibles, chronologie, alarmes liées, pistes classées), capture, courte vidéo Motion-JPEG, analyses et commentaires, empreintes SHA-256. L'Assistant répond aux questions de diagnostic sur ces dossiers **sans réseau** (`AiIncidentAnswers.hpp`) : il ne présente jamais l'ordre d'apparition comme une cause et dit « non disponible » pour une valeur absente. Une analyse par l'IA connectée peut aussi être demandée.
 
 > Le code le précise : ce mécanisme aide à comprendre un événement ; ce n'est pas une surveillance de sécurité de la logique automate.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -312,6 +349,8 @@ IA/
 
 Sources : `src/app/ai/AiPaths.hpp`, `AiKeys.hpp`, `AiUsage.hpp`, `AiMemory.hpp`.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="limites"></a>
@@ -329,6 +368,8 @@ Relevées dans le code et les notes de livraison 1.21.x et 1.22.0 :
 - **Clé API sous Linux** : gardée pour la séance seulement.
 - Deux fenêtres d'IHM Studio ouvertes partagent le même journal de notifications : la dernière écriture l'emporte.
 - **Missions IA** : jamais essayées avec une vraie IA (faux fournisseur) ; la qualité du plan dépend du modèle ; deux fenêtres d'IHM Studio sur la même mission ne se synchronisent pas (la dernière écriture l'emporte) ; une mission ne travaille que sur le projet IHM.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -356,3 +397,9 @@ Relevées dans le code et les notes de livraison 1.21.x et 1.22.0 :
 | `AiNotifications`, `AiUsage`, `AiMarkdown` | Notifications, consommation, mise en forme des réponses |
 
 Essais : 18 suites `ai*` (voir [TESTS.md](TESTS.md)). Historique de conception : [ASSISTANT-IA-AUDIT.md](ASSISTANT-IA-AUDIT.md) (audit de la 1.14.2, antérieur à l'implémentation).
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [TESTS.md](TESTS.md) · [IHM-STUDIO.md](IHM-STUDIO.md) · [FORMATS.md](FORMATS.md)</sub> <!-- nav -->

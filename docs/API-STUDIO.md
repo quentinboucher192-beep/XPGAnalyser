@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # API Studio
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [IHM-STUDIO.md](IHM-STUDIO.md) · [FORMATS.md](FORMATS.md) · [README.md](images/README.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Référence fonctionnelle d'**API Studio** (exécutable `API-Studio.exe`, édition `core::Edition::Api`), version 1.35.0. Chaque section indique où se trouve la fonctionnalité dans le logiciel, comment elle fonctionne, et le code qui l'implémente. Le mode d'emploi pas à pas est dans l'aide F1 de l'application. Retour au [README](../README.md).
 
@@ -20,6 +23,8 @@ Référence fonctionnelle d'**API Studio** (exécutable `API-Studio.exe`, éditi
 14. [Ligne de commande](#cli)
 15. [Limitations](#limitations)
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="role"></a>
@@ -28,6 +33,8 @@ Référence fonctionnelle d'**API Studio** (exécutable `API-Studio.exe`, éditi
 API Studio travaille sur le **programme d'un automate Schneider Electric programmé avec EcoStruxure Control Expert** : il lit les exports d'échange de Control Expert (`.XPG` pour le programme, `.XHW` pour la configuration matérielle), les range dans un dossier de projet modifiable, les analyse, permet de les modifier et de les simuler, puis régénère des fichiers `.XPG`/`.XHW` à réimporter dans Control Expert.
 
 L'en-tête de `src/import/XpgParser.cpp` décrit le schéma lu (export Control Expert V15.3, DTD 41). API Studio ne remplace pas Control Expert : il ne lit pas le fichier de travail binaire `.STU` (refusé avec une explication, `src/import/ProjectImporter.cpp`) et ne charge rien dans un automate.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -62,6 +69,8 @@ Le code est en fichiers `.st` (un par section) et les déclarations en tableaux 
 - **Archive** `.xapi` : tout le dossier du projet dans un zip vérifié (voir [FORMATS.md](FORMATS.md)).
 - **Plusieurs fenêtres** : Ctrl+Maj+N ouvre une autre fenêtre pour un autre projet.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="import"></a>
@@ -82,6 +91,8 @@ Après l'import d'un `.XPG`, la fenêtre **« Créer un projet à partir de cet 
 
 **Ce qui n'est pas importé** : voir [§ 15](#limitations).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="ecran"></a>
@@ -91,6 +102,8 @@ Après l'import d'un `.XPG`, la fenêtre **« Créer un projet à partir de cet 
 - **Onglets** au centre ; un clic dans l'arbre ouvre l'onglet de l'élément. Ctrl+W ferme, Ctrl+Maj+T rouvre le dernier onglet fermé.
 - **Barre du haut** : Projet, Version, Annuler, Rétablir, Historique, Nouveau (section, unité, bloc DFB, type dérivé, variable, rack, module, macro), Simuler (F5), Arrêter (Maj+F5), Un cycle, Vers Control Expert, Affichage, Aide, Enregistrer, Notifications, Tâches de fond (`src/app/TopBar.cpp`).
 - **Aller à…** (Ctrl+K), filtre de l'arbre (Ctrl+Maj+F), historique de la séance (Ctrl+H), recherche de fichiers sur le PC (Ctrl+Maj+P). La table complète des raccourcis est dans `src/help/Shortcuts.cpp` et dans l'aide.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -106,6 +119,8 @@ Après l'import d'un `.XPG`, la fenêtre **« Créer un projet à partir de cet 
 - **Supprimer** retire une entité et peut la remettre à l'identique par Ctrl+Z (`src/project/DeleteCommands.hpp`).
 - Références croisées : où une variable est **écrite** et où elle est **lue** (insensible à la casse, comme le ST) — `src/project/CrossReference.hpp`.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="types"></a>
@@ -117,6 +132,8 @@ Après l'import d'un `.XPG`, la fenêtre **« Créer un projet à partir de cet 
 - L'aide d'un bloc est écrite **dans** son fichier (lignes `#! summary`, `#! usage`, `#! param`…) ; format décrit dans `src/project/FORMAT-AIDE.md`.
 - Catalogue des blocs Control Expert pour l'aide à la saisie : `resources/schneider_library.txt`.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="materiel"></a>
@@ -126,6 +143,8 @@ Après l'import d'un `.XPG`, la fenêtre **« Créer un projet à partir de cet 
 - **Catalogue matériel** `resources/plc_catalog.txt` (stations d'E/S locales Modicon M340, transcrit du catalogue de Control Expert) : il complète ce que l'export ne donne pas (nombre d'emplacements, répartition entrées/sorties, descriptions).
 - **Voies et adresses** (`src/project/IoCheck.hpp`) : chaque adresse topologique (`%I0.5.3`, `%Q0.8.4`, `%IW0.10.1`…) nommée par le programme est confrontée au module de son emplacement : absence de module, module dans le mauvais sens, voie au-delà du module ; voies employées par module.
 - **Plan mémoire** : variables situées en `%MW`, `%MD`, `%MF`, chevauchements.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -138,6 +157,8 @@ Après l'import d'un `.XPG`, la fenêtre **« Créer un projet à partir de cet 
 - **Sections LD, FBD, SFC** : conservées telles que Control Expert les a écrites et réexportées à l'identique ; elles sont **lisibles en texte** (une ligne par rangée de ladder, les blocs et broches d'un FBD, les étapes et transitions d'un SFC) mais **ne se modifient pas** dans l'outil (`src/project/GraphListing.hpp`).
 - **Comparer des sections** : deux sections choisies (Ctrl+clic), lignes alignées, mots différents repérés, équivalences de noms entre sections jumelles (`src/project/SectionCompare.hpp`).
 - **Tables d'animation** : créer (« + Nouvelle table »), renommer, y glisser des variables ; pendant la simulation, valeur en direct, forçage et écriture d'une nouvelle valeur (qui ne touchent que la simulation, pas le projet), courbe de la ligne choisie (`src/app/AnimationTablesPane.hpp`).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -160,6 +181,8 @@ Les grafcets de ce type de projet **ne sont pas des sections SFC** : chacun est 
 - **Modifier** : + Étape (une transition et une étape sous la sélection, ce qui est dessous descend), Divergence OU, Divergence ET, Saut, Réceptivité (une variable, `NOT` variable, ou une expression qui part dans une section de transition ST), Action, Étape… (nom, initiale, temps min / max, retard, commentaire), Supprimer (Suppr), glisser une étape dans une autre case ; volet **Code** : la section de transition ou d'action ST se modifie, une section LD se lit. Chaque geste réécrit le XML de la section (seuls les éléments touchés changent) et s'annule d'un Ctrl+Z. **Nouvelle section › SFC** crée un GRAFCET à une étape initiale.
 - **Simulation** (F5) : sémantique de Control Expert — étapes initiales au premier cycle, une évolution par cycle, priorité à gauche dans une divergence en OU, `Étape.x`, `Étape.t`, `Étape.tminErr`, `Étape.tmaxErr` lisibles en ST et en LD, actions selon leur qualificatif, retard d'étape ; réceptivités en ST et en LD. Sur le dessin : étapes actives et leur temps, transitions validées et vraies (1) ou fausses (0), actions en cours, supervision en défaut ; Initialiser, Activer / Désactiver l'étape choisie.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="analyse"></a>
@@ -169,6 +192,8 @@ Les grafcets de ce type de projet **ne sont pas des sections SFC** : chacun est 
 - **Constats de l'analyse** (`importer::FindingKind`, `src/import/ProjectAnalyzer.hpp`) : variable globale ou locale inutilisée, type dérivé ou DFB inutilisé, section jamais planifiée ni appelée, section vide, section sans condition d'activation, adresses en double, type non défini, E/S situées sans commentaire, section trop longue. Gravités : information, avertissement, erreur.
 - **Statistiques** du projet ouvert, recalculées après chaque commande : lignes par section et par langage, etc. (`src/project/ProjectStats.hpp`, `src/app/StatisticsPane.*`).
 - **Conditions d'activation manquantes** des projets importés avant la 1.8.0 : détectées et signalées (`src/project/ActivationConditions.hpp`).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -185,6 +210,8 @@ Les grafcets de ce type de projet **ne sont pas des sections SFC** : chacun est 
 - Seules les sections ST sont simulées ; les sections LD, FBD, IL et SFC ne sont pas compilables ici.
 - 1.51.0 : les sections **SFC** (GRAFCET natifs) sont simulées, leurs réceptivités en ST et en LD comprises (§ 9).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="macros"></a>
@@ -193,6 +220,8 @@ Les grafcets de ce type de projet **ne sont pas des sections SFC** : chacun est 
 - Une **macro** est écrite en **ST**, analysée et exécutée par le même interpréteur que la simulation ; elle pilote l'éditeur (créer une section, une variable, une instance, importer un bloc…) — `src/project/Macro.hpp`. Fichiers `.mac` dans `libs/Macros/` (31 livrées : `ImportES`, `ImporterAlarmes`, `ImporterEquipements`, `ImporterReports`, `ImporterGrafcet`, `GenererGrafcet`, `GenererModes`, `GenererSimulation`, `VerifierBibliotheque`…). Formulaires de saisie et onglet Macros (`src/app/MacrosPane.*`, `MacroFormView.*`).
 - **Classeurs** : lecture de `.xlsx`/`.xlsm` (`src/xls/`) et de CSV exportés d'Excel, avec détection de la ligne d'en-tête et du séparateur (`src/project/Table.hpp`). Les colonnes attendues de chaque format (entrées/sorties TOR et analogiques `es.di`, `es.do`, `es.ai`, `es.ao`, équipements, reports…) sont déclarées une seule fois dans `src/project/ImportSchema.hpp` et servent à la fois à vérifier le fichier, à afficher l'aide et à produire un fichier d'exemple.
 - Le dossier `docs/` contient un classeur d'accompagnement (`automation.xlsx`, `automation.xlsm`, module VBA `Automation.bas`, `make_workbook.py`, guide `GUIDE.txt`) qui tient E/S, équipements et reports dans un seul fichier.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -208,6 +237,8 @@ Les grafcets de ce type de projet **ne sont pas des sections SFC** : chacun est 
 
 L'écrivain `.XPG` respecte l'ordre imposé par la DTD 41 et écrit les sommes de contrôle des DDT à zéro (Control Expert les recalcule à l'import) ; l'aller-retour import → écriture → réimport est vérifié par l'essai `roundtrip` (`tests/roundtrip_test.cpp`).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="cli"></a>
@@ -218,6 +249,8 @@ API-Studio.exe --cli <fichier.XPG> [autres fichiers…]
 ```
 
 Analyse sans fenêtre et écrit un résumé (projet, CPU, nombres de variables, POU, sections, DDT, DFB, lignes, constats). Code de sortie : 0 sans constat de gravité « erreur », 1 sinon, 2 en cas d'échec de lecture (`runCli`, `src/main.cpp`). Les autres options communes sont dans le [README](../README.md#cli).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -234,3 +267,9 @@ Vérifiées dans le code de ce commit :
 - La simulation ne couvre que le sous-ensemble du ST listé au § 11.
 - Le verrou LOCK n'est pas un chiffrement ; la clé maîtresse de récupération est dérivée d'une adresse MAC et n'est pas une frontière de sécurité (le code le dit, `src/project/Security.hpp`).
 - L'Assistant IA n'existe pas dans API Studio.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [IHM-STUDIO.md](IHM-STUDIO.md) · [FORMATS.md](FORMATS.md) · [README.md](images/README.md)</sub> <!-- nav -->

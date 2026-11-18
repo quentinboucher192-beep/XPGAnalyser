@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Les statistiques et le globe (1.47.0) : le contrat
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 > **Construit en 1.47.0** : le service (`service/src/stats.js`, 18 essais dans `service/test/stats.test.js`) et le client
 > de l'Admin (`Stats.hpp`, `gui/WorkspaceStats.cpp`, la console ; l'essai `adminstats`) ; les pages qui les dessinent
@@ -35,6 +38,8 @@ du PC pour les montrer). Un point inconnu vaut `null` (en C++ : `NaN`).
 ville de sa **dernière** connexion (§ 8). Aucun chiffre n'ajoute de donnée personnelle à ce que l'Admin a déjà (les noms
 de clients sont ceux des licences et des commandes ; les admins sont nommés par l'identifiant de leur clé, `xpg-…`).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 2. Les versions
 
 - **Service 1.47.0, schéma 5** (`GET /v1/etat` : `version`). Le schéma 5 n'ajoute **que des tables** (§ 9) et deux
@@ -48,6 +53,8 @@ de clients sont ceux des licences et des commandes ; les admins sont nommés par
   globe. »** (`stats::kServiceRequired = "1.47.0"`, `stats::serviceTooOldText`, comme `shop::kServiceRequired`) avec le
   bouton Déployer ; les chiffres [J] (le journal) restent. Une route inconnue (404 `route`) donne la même phrase.
 - **Un Studio** n'a rien à changer : le service relève ses appels signés tels qu'ils sont.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 3. Les périodes, les pas, la comparaison
 
@@ -66,6 +73,8 @@ de clients sont ceux des licences et des commandes ; les admins sont nommés par
   (le pic des jetons) : le plus grand des jours de la période du pas.
 - `variation` (dans chaque mesure) : `(total − avant.total) / avant.total × 100`, `null` sans comparaison ou si
   `avant.total` vaut 0.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 4. `GET /admin/stats/serie` — les courbes
 
@@ -111,6 +120,8 @@ Réponse 200 :
   filtre que la mesure n'a pas (`admin=` sur `jetons_pic`…) : `{"refuse": "filtre", "filtre": "admin"}`.
 - Erreurs : 400 `champ` (une mesure inconnue, un jour illisible, trop de points, une division inconnue), 401/403 comme
   les autres routes `/admin`.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 5. Les mesures
 
@@ -193,6 +204,8 @@ divisions possibles sont entre crochets. **Droit** : ce qu'il faut à un admin (
 `ventes_commandes`, `demandes_recues`, `demandes_traitees`, `pc_vus` avec `par=version` (« la version de ses PC,
 chaque semaine »). « Qui l'a servi » : `demandes_traitees`, `licences_nouvelles` avec `par=admin`, et le journal [J].
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 6. `GET /admin/stats/mises-a-jour` — les versions (planche 09)
 
 Paramètres : `du`, `au`, `pas` (la part des PC à jour dans le temps), `jours` (la longueur des courbes d'adoption, 1 à
@@ -235,6 +248,8 @@ Paramètres : `du`, `au`, `pas` (la part des PC à jour dans le temps), `jours` 
   (`retard` : le nombre de versions publiées plus récentes), 500 au plus (`pas_a_jour_total` : combien en tout) ; `nom`,
   `client`, `licence` : de son activation la plus récente ; une clé d'admin : `admin` (son `xpg-…`).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 7. `GET /admin/stats/admins` — leurs jours et leurs heures (planches 01 à 03)
 
 Paramètres : `du`, `au`. L'admin+ reçoit tous les admins de la liste (même retirés) et les clés de l'éditeur ; un
@@ -254,6 +269,8 @@ admin, seulement lui. Réponse 200 :
 jours de connexion, de la première et de la dernière heure UTC (−1 : aucun jour). `role` : `admin+` pour une clé de
 l'éditeur. `ville`, `pays` : sa dernière connexion (§ 8). `vu`, `logiciel`, `logiciel_version` : son dernier appel
 (`logiciels`). Une période de plus de 731 jours : 400 `champ`.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 8. Le globe (planche 11)
 
@@ -315,6 +332,8 @@ minutes au plus, 500 au plus, en mémoire seulement : rien n'est écrit) ; `acti
 dernières minutes. L'Admin le regarde toutes les 5 à 10 secondes quand « En direct » est choisi, et fait pulser
 `ville`.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 9. Ce que le service relève en plus (le schéma 5)
 
 | Table | Une ligne | Écrite | Gardée |
@@ -340,6 +359,8 @@ toujours 3 lignes, jeton : 2, messages) n'écrit rien de plus, sauf le lieu d'un
 change) ; une clé qui change de version : une ligne de plus (`versions_vues`) ; les compteurs, une ligne par admin actif
 et par heure, écrite une fois par minute au plus ; le relevé, une ligne par jour. Les **ménages** (une fois par jour) effacent ce qui dépasse les durées ci-dessus.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 10. Le relevé du jour
 
 Le relevé de chaque jour UTC (les niveaux du § 5 à cet instant, sans filtre, divisés par offre, admin, type, logiciel,
@@ -356,6 +377,8 @@ encore pris — pour les essais (avec `DECALAGE_HORLOGE_ESSAI`, « aujourd'hui �
 (« Relever maintenant »). Réponse 200 `{"jour": "2026-11-10", "pris": true|false, "releve": {…}}` (`pris` faux : il
 existait déjà ; `releve` : celui du jour).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 11. La sauvegarde
 
 Les cinq tables du § 9 sont dans la sauvegarde complète (`GET /admin/sauvegarde`, ses pages) et dans la restauration
@@ -363,12 +386,16 @@ Les cinq tables du § 9 sont dans la sauvegarde complète (`GET /admin/sauvegard
 `stats_compteurs` (`jour`, `mesure`, `cle`), `versions_vues` (`cle`, `version`), `lieux` (`cle`). Ce qui n'est qu'en
 mémoire (les compteurs de la dernière minute, « actif maintenant », les connexions en direct) n'y est pas.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 12. Les droits
 
 Toutes les routes : l'admin+ (une clé de l'éditeur) ou un admin de la liste (pas retiré), comme `GET /admin/stats`.
 Un admin sans le droit `demandes` ne voit pas les ventes ni les demandes (`refuse` : `droit`), et le calque `demandes`
 du globe vaut 0 pour lui ; `GET /admin/stats/admins` ne lui rend que lui-même ; `admin_appels`/`admin_jours` aussi
 (`admin` forcé à sa clé). `POST /admin/stats/releve` : l'admin+ seulement.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 13. Dans l'Admin : `src/license_admin/Stats.hpp` (sans écran)
 
@@ -475,6 +502,8 @@ un `OpResult` (refusé : sa phrase) ; et sans réseau : `serviceKnowsStats()` (l
 `stats-admins [--du D --au D] [--json]`, `stats-releve` (l'admin+), `globe [--periode N] [--json]`,
 `globe-direct [--depuis T] [--json]`.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 14. Les planches et leurs mesures
 
 | Planche, graphique | Ce qu'il lit |
@@ -500,6 +529,8 @@ un `OpResult` (refusé : sa phrase) ; et sans réseau : `serviceKnowsStats()` (l
 | 01-04 les admins : jours de connexion, heures habituelles, version de son Admin, vu, ville | `GET /admin/stats/admins` |
 | 01-04 ce qu'il produit, ses courbes sur 12 semaines | § 5 avec `admin=<id>` (et sans, pour les autres admins en gris : `par=admin`) |
 | 01-05 actions, criticité, carte jour × heure, sécurité, qui fait quoi | **[J]** : le journal, calculé par l'Admin |
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 15. La cohérence (1.48.1)
 
@@ -604,3 +635,9 @@ pour l'envoi automatique d'une suppression (la suppression est déjà au journal
   (ses clients et licences supprimés, selon ses droits) : un poste qui a supprimé hors ligne se rattrape.
 - Un service d'avant la 1.48.1 : « Ton service en ligne est en 1.48.0 : déploie la 1.48.1 pour Réévaluer les
   statistiques. » (le reste marche ; les suppressions attendent dans `stats-a-envoyer.json`).
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->

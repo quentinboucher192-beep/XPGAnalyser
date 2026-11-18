@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # La bibliothèque d'objets de XPGAnalyser IHM : audit des paramètres (1.12.4)
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Rédigé le 11/10/2026. Il répond à cette demande du 11/10 :
 
@@ -29,6 +32,8 @@ Six examens en parallèle, un par famille d'objets plus un sur les mécanismes c
 - *Repère* : un morceau `$…$` d'un texte ou d'une formule. Il ne change pas le calcul ; il dit à **Dupliquer…** ce qui varie d'une copie à l'autre.
 - *Contenu* : l'onglet de l'inspecteur qui édite en tableau ce qu'un objet contient (cases, plumes, états, zones, pages, vues).
 - *Liste parallèle* : deux propriétés ou plus qui doivent avoir le même nombre d'éléments, dans le même ordre (par exemple `variables`, `names`, `colors`).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 1. Ce qu'il faut retenir
 
@@ -80,6 +85,8 @@ Ces défauts s'ajoutent à ceux propres à chaque objet, signalés au § 3 :
 - le compteur horaire repart de zéro au bout de 49,7 jours en TIME ;
 - le guide promet des codes QR jusqu'à la version 40, alors que le code s'arrête à la version 10 ;
 - etc.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 2. Les règles communes proposées
 
@@ -306,6 +313,8 @@ Parmi les propriétés lues par le moteur, les seules qui marchent déjà avec u
 - le format (`0,0` à la française donne un entier sur deux chiffres) ;
 - l'ordre des seuils (alarme basse < seuil bas < seuil haut < alarme haute) et les seuils hors plage ;
 - une valeur tapée sans `=` qui ressemble à une variable (`P1.Defaut` dans Défaut) : « c'est une constante ; voulais-tu `=P1.Defaut` ? ». L'alarme d'objet doit lire la même chose que le dessin (défaut D13).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 3. Objet par objet
 
@@ -1205,6 +1214,8 @@ C'est le modèle des objets à choix (Liste déroulante, Boutons radio, Liste).
 - **Réglages** : les communs seulement. Il naît de Grouper.
 - **Pas facile** : les formules de géométrie déplacent bien ses enfants. Mais **Visible, Opacité et Clignotement n'ont aucun effet** : le groupe ne dessine rien et ne les transmet pas (une instance de symbole, elle, les transmet). → Les transmettre aux enfants, comme pour le conteneur (D7).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 4. Le plan proposé
 
 Sept lots, dans cet ordre. Chacun dit comment il tient les repères.
@@ -1224,3 +1235,9 @@ Sept lots, dans cet ordre. Chacun dit comment il tient les repères.
 1. **Le lot A d'abord.** Il corrige ce qui est faux aujourd'hui (une date enregistrée en 1970, un acquittement sur la mauvaise alarme, des valeurs arrondies dans les recettes) sans rien changer à la façon de régler les objets.
 2. **Puis B et C ensemble.** Ils reposent sur le même outil (le lecteur par rôle) et suppriment les erreurs silencieuses et les repères cassés pour tous les objets d'un coup.
 3. **Ensuite, selon votre usage** : D (le confort de réglage) ou E (la taille variable, le plus demandé pour un cas pratique « 8 cuves, 8 pompes »).
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->

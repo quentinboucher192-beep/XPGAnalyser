@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Rapport d'analyse — XPGAnalyser 1.8.0
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 La chaîne de compilation, d'installation, de mise à jour, de réparation et de désinstallation (29/09/2026).
 
@@ -21,6 +24,8 @@ Ce rapport décrit le projet **tel qu'il est** (l'archive du lot API 8), puis ce
 | Compilateur utilisé | **MSVC v143** (Visual Studio 2022) chez toi : ton raccourci lance `build\Debug\XpgAnalyzer.exe`. De mon côté, l'installateur du lot 8 a été fabriqué avec MinGW-w64 (GCC), faute de Windows ici. |
 | SDK Windows | Tout SDK Windows 10/11 (10.0.x). Le code n'utilise que des API Win32 classiques : dossiers connus (shell32), registre (advapi32), réseau (ws2_32, iphlpapi), COM de base (ole32). |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 2. Les dépendances détectées
 
 | Dépendance | Version / licence | Comment | Livrée ? |
@@ -38,6 +43,8 @@ Ce rapport décrit le projet **tel qu'il est** (l'archive du lot API 8), puis ce
 
 **Absent du projet** : Qt, .NET, MFC/ATL, LLVM, toute bibliothèque précompilée autre que SDL3, et tout SDK industriel ou propriétaire. Les exports Control Expert sont lus comme des fichiers ; aucune DLL Schneider n'est chargée.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. Ressources, icônes, configuration
 
 - `resources\schneider_library.txt` (les blocs Schneider), `resources\plc_catalog.txt` (les références d'automates), `resources\logo\` (le SVG source, les PNG de 16 à 512 pixels, `xpg_analyzer.ico` de 16 à 256).
@@ -45,6 +52,8 @@ Ce rapport décrit le projet **tel qu'il est** (l'archive du lot API 8), puis ce
 - `libs\` : la bibliothèque partagée, soit 123 fichiers (`index.txt`, puis `Alarms`, `Client`, `Comm`, `Control`, `Equipment`, `IO`, `Macros`, `Measure`, `System` : les `.dfb`, `.ddt` et `.mac`). L'application **y écrit** : macros enregistrées, blocs ajoutés.
 - Ton raccourci `XpgAnalyzer.lnk` pointe vers une icône de ta machine (`…\Downloads\Designer(1).ico`). L'installateur prend l'icône intégrée à l'exe.
 - Réglages : `%APPDATA%\XpgAnalyzer\settings.txt` (`clé = valeur`), `themes\` (`.xpgtheme`), `reprise\` (la reprise après plantage), `modeles-vues\`.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 4. Où l'application écrit aujourd'hui
 
@@ -61,6 +70,8 @@ Ce rapport décrit le projet **tel qu'il est** (l'archive du lot API 8), puis ce
 Le **dossier de travail** est celui d'où l'application est lancée. Depuis le lot 8, s'il ne contient pas `resources\`, l'application se place dans le dossier de son exe. Les projets, la bibliothèque et les captures finissent donc **dans le dossier du programme**. Dans `Program Files`, un utilisateur sans droits d'administrateur ne peut pas y écrire, et le cahier des charges l'interdit. C'est la seule chose à corriger dans le logiciel pour pouvoir l'installer (§ 8).
 
 **Formats de projets utilisateur** : un dossier de projet (`project.xpgproj`, les versions, `sections\`, `tables\`, `config\`, `exports\`), les imports `.XPG` / `.XHW` / `.XDB` / `.XEF`, et les fichiers de l'application `.xpgvues`, `.xpgmodele`, `.xpglayout`, `.xpgtheme`. Rien n'en change.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 5. Les anciennes versions à reprendre
 
@@ -81,6 +92,8 @@ Le **dossier de travail** est celui d'où l'application est lancée. Depuis le l
   - sinon, c'est **ta** version : elle est gardée, et la version livrée est rangée à côté sous le nom `<nom>.livre-1.11.2`.
 - L'installation du lot 8 est désinstallée **après** la reprise. Seuls ses fichiers de programme partent (son désinstallateur garde déjà tes données).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 6. La chaîne retenue, et pourquoi
 
 | Étape | Outil | Raison |
@@ -99,6 +112,8 @@ Le **dossier de travail** est celui d'où l'application est lancée. Depuis le l
 
 **Le runtime Visual C++ sur un PC vierge** : un exe MSVC `/MD` a besoin de `vcruntime140.dll`, `vcruntime140_1.dll`, `msvcp140.dll`, etc. `package.bat` copie les DLL de `VC\Redist\MSVC\<version>\x64\Microsoft.VC143.CRT\`, présentes dans les Build Tools, **à côté de l'exe**. C'est le déploiement local, que Microsoft autorise. Il ne demande **ni droits d'administrateur ni Internet**, et marche aussi en installation « pour moi seul ». En contrepartie, ces copies ne sont pas mises à jour par Windows Update, mais chaque version de XPGAnalyser apporte les siennes.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 7. Les incompatibilités potentielles
 
 1. **L'exe de ce zip est fabriqué avec MinGW**, parce que je n'ai pas Windows : `XPGAnalyser-Setup-1.11.2.exe` a été construit ici comme au lot 8. Le tien, fabriqué par `package.bat`, sera compilé par MSVC. Le code est le même, mais l'équivalence n'est pas démontrée (arrondis d'affichage, par exemple).
@@ -112,6 +127,8 @@ Le **dossier de travail** est celui d'où l'application est lancée. Depuis le l
 9. **Stratégies de sécurité** : les scripts demandent `-ExecutionPolicy Bypass` pour **leur seul processus**, ce qui ne change rien sur la machine. Si une stratégie de groupe (GPO) impose autre chose, elle l'emporte et PowerShell refuse de lancer le script : le `.bat` s'en aperçoit (le script n'a pas démarré), nomme la stratégie et dit quoi faire, sans la contourner.
 10. **Pas de certificat** : Windows SmartScreen avertira au premier lancement de `Setup.exe` (« Informations complémentaires », puis « Exécuter quand même »). Un zip téléchargé marque ses fichiers : débloque-le avant de l'extraire (Propriétés › Débloquer). `check_environment.bat` le signale.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 8. Ce qui change dans le logiciel (le strict nécessaire)
 
 1. **Le dossier des données.** À côté de l'exe installé, un fichier `installation.ini` donne le dossier des données. Par défaut, c'est `Documents\XPGAnalyser` ; il est choisi pendant l'installation. Au démarrage, l'application en fait son dossier de travail et le prépare au premier lancement (copie de `resources\` et `libs\` livrés). Tout le reste du code (`projets\`, `libs\`, `captures\`, `resources\` relatifs) ne change pas. **Sans `installation.ini`** (ta version de développement, la version portable, les sessions rejouées), l'application fait exactement comme aujourd'hui.
@@ -119,6 +136,8 @@ Le **dossier de travail** est celui d'où l'application est lancée. Depuis le l
 3. **`--version`** : affiche `XPGAnalyser 1.11.2` et sort. Les scripts s'en servent pour vérifier que l'exe installé démarre.
 4. **Release sans console**, voir le § 7.3.
 5. **La version 1.8.0** partout : `CMakeLists.txt`, `.rc`, `src\core\Version.hpp` et `outils\config.ini`. `package.bat` vérifie qu'elles concordent.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 9. Les paramètres restant à renseigner
 
@@ -136,6 +155,8 @@ Tout est dans **`outils\config.ini`**. Ce qui manque y est marqué `À_RENSEIGNE
 | `[HorsLigne] dossier` | `À_RENSEIGNER` | seulement si tu utilises un package hors ligne |
 | La suite du cahier des charges (après « Dans » de la section 9) | — | **non reçue** : la chaîne couvre ce que la liste du début annonçait (installation, mise à jour, migration, réparation, reprise, restauration, désinstallation, documentation) |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 10. Les risques identifiés
 
 | Risque | Effet | Parade |
@@ -149,3 +170,9 @@ Tout est dans **`outils\config.ini`**. Ce qui manque y est marqué `À_RENSEIGNE
 | Conflits dans la bibliothèque | Deux versions d'un même bloc | Rien n'est écrasé sans sauvegarde : ta version reste, la livrée est rangée à côté ; le rapport de migration les liste. |
 | Dossier des données sur un lecteur réseau absent | L'application ne trouve pas ses projets | Au démarrage : repli sur `Documents\XPGAnalyser` avec un message ; `repair.bat` le signale. |
 | PC où une stratégie de groupe interdit les scripts PowerShell | Pas de sauvegarde, de reprise, de vérification ni de maintenance | L'installateur le détecte (le script n'a pas démarré), le dit et installe quand même le programme ; l'application prépare ses données au premier lancement. |
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->

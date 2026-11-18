@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Architecture technique
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [TESTS.md](TESTS.md) · [FORMATS.md](FORMATS.md) · [ASSISTANT-IA.md](ASSISTANT-IA.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Ce document décrit l'architecture du code tel qu'il est dans le dépôt (version 1.35.0). Chaque affirmation renvoie à un fichier ou à une cible de compilation que l'on peut ouvrir. Le point d'entrée général de la documentation est le [README](../README.md).
 
@@ -21,6 +24,8 @@ Ce document décrit l'architecture du code tel qu'il est dans le dépôt (versio
 13. [Architecture de l'Assistant IA](#assistant)
 14. [Système de tests](#tests)
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="un-code"></a>
@@ -39,6 +44,8 @@ Depuis la 1.12.0, la suite produit **deux exécutables indépendants** à partir
 - Le nom affiché vient de `core::productName()` (« API Studio », « IHM Studio ») ; le nom de l'ensemble, `XPG_ANALYZER_NAME`, vaut « API IHM Studio » (`src/core/Version.hpp`). Les dossiers techniques gardent leur nom d'origine (`%APPDATA%\XpgAnalyzer`, `XPGAnalyser.ini`, `Documents\XPGAnalyser`) pour ne pas perdre les réglages et les données existants.
 
 Langage : **C++20** (`CMAKE_CXX_STANDARD 20` dans `CMakeLists.txt`, `stdcpp20` dans `XpgAnalyzer.vcxproj`). `src/core/Result.hpp` utilise `std::expected` quand la bibliothèque standard le fournit (`__cpp_lib_expected`) et sinon une implémentation compatible.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -97,6 +104,8 @@ Options CMake (`CMakeLists.txt`) :
 | `XPG_WARNINGS_AS_ERRORS` | `OFF` | `-Werror` / `/WX`. |
 | `XPG_SANS_NPCAP` | `OFF` | Retire la capture réseau de l'espion Modbus (Npcap / libpcap). |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="sources"></a>
@@ -123,6 +132,8 @@ Options CMake (`CMakeLists.txt`) :
 | `src/app/tutorial` | 9 | Exécution des didacticiels | oui |
 
 Les fichiers C++ sont en ASCII ; les textes accentués de l'interface sont écrits en octets UTF-8 échappés (`"\xC3\xA9"`).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -159,6 +170,8 @@ flowchart LR
 - **Interface** : `app::App` possède le projet, la pile de commandes, la pile d'écrans, la simulation et les liaisons. Les écrans lisent les modèles et envoient des commandes ; ils ne modifient pas le modèle directement.
 - Les bibliothèques sans écran (`xpg_core`, `xpg_import`, `xpg_hmi`, `xpg_help`) sont essayées sans serveur graphique (voir [TESTS.md](TESTS.md)).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="interface"></a>
@@ -188,6 +201,8 @@ flowchart LR
 - Écrans enregistrés par `App::buildMenuFactory` (`src/app/App.cpp`) : `startup` (accueil), `analysis` (écran du projet, `MainAnalysisScreen`), `station` (poste d'exploitation), centre d'aide, etc.
 - Les fenêtres modales sont des `menu::WidgetMenu` de genre `Dialog`, déplaçables et redimensionnables (`src/ui/DialogFrame.hpp`).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="boucle"></a>
@@ -204,6 +219,8 @@ flowchart LR
 
 La simulation appartient à l'application (`src/app/SimulationHost.hpp`) et non à un écran : elle continue quand on change d'écran.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="commandes"></a>
@@ -214,6 +231,8 @@ La simulation appartient à l'application (`src/app/SimulationHost.hpp`) et non 
 - Côté IHM, les commandes sont des instantanés : `hmi::changeView` et `hmi::changeProject` gardent l'état avant/après des seuls objets touchés (`src/hmi/HmiCommands.hpp`). Une fonction qui ne change rien ne produit aucune commande.
 - `core::ActionRegistry` associe un identifiant texte (`project.save`, `ia.assistant`…) à chaque action ; les raccourcis viennent d'une seule table, `src/help/Shortcuts.cpp`.
 - L'historique de la séance (Ctrl+H) montre chaque pas avec son endroit. Il est distinct de l'historique des modifications des objets IHM, écrit à l'enregistrement (`src/hmi/HmiEditHistory.hpp`).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -226,6 +245,8 @@ La simulation appartient à l'application (`src/app/SimulationHost.hpp`) et non 
 | `core::Signal` | `src/core/Signal.hpp` | Observateur direct avec connexion RAII (un widget ne peut pas être rappelé après sa destruction). |
 | Hôtes par fonctions | ex. `app::ai::Assistant::Host` (`src/app/ai/AiAssistant.hpp`) | Un module sans écran reçoit des fonctions (document, vue active, `apply`) au lieu de pointeurs vers l'interface. |
 | Services de plate-forme | `ui::installPlatformServices` (`App::initPlatform`) | Presse-papiers, glisser-déposer, fichiers. |
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -249,6 +270,8 @@ Fils de travail présents dans le code (recherche de `std::thread`/`std::async`)
 
 Les tâches de fond visibles par l'utilisateur sont listées dans la barre du haut (`src/app/BackgroundTasks.hpp`).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="persistance"></a>
@@ -266,6 +289,8 @@ Les tâches de fond visibles par l'utilisateur sont listées dans la barre du ha
 
 Écriture sûre : `core::writeFileAtomic` (`src/core/AtomicFile.hpp`) écrit dans un fichier voisin puis renomme. Le détail des formats est dans [FORMATS.md](FORMATS.md).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="erreurs"></a>
@@ -276,6 +301,8 @@ Les tâches de fond visibles par l'utilisateur sont listées dans la barre du ha
 - **Plantage et blocage** : `core::crash::install` pose les gestionnaires (Windows : filtre d'exception, `terminate`, `SIGABRT`… ; Linux : signaux) et écrit `crashs/plantage-<date>.txt` (version, pile, historique interne `CallTrail`) dans le dossier des réglages ; un chien de garde détecte une boucle principale bloquée (`core::crash::startWatchdog(8, …)` dans `main.cpp`). « Signaler le problème » prépare un zip local ; rien n'est envoyé par le réseau (`main.cpp`, `src/help/ProblemReport.*`).
 - **Reprise après arrêt brutal** : un verrou de session dans `<réglages>/reprise`, une sauvegarde des modifications non enregistrées toutes les 2 minutes en conception (réglable par `recovery.autosaveSeconds`), l'état du poste d'exploitation toutes les 10 s (`src/app/Recovery.hpp`).
 - **Instance unique** : une instance par application et par session ; un second lancement transmet ses arguments à l'instance ouverte (`src/core/SingleInstance.hpp`). `XPG_INSTANCES_MULTIPLES=1` lève la règle.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -301,6 +328,8 @@ flowchart LR
 - `XmlReader` est un lecteur XML en flux, sans arbre DOM ni exception.
 - Les sections LD, FBD et SFC sont conservées telles que Control Expert les a écrites et réexportées à l'identique ; elles sont rendues lisibles en texte (`src/project/GraphListing.hpp`) mais ne sont ni modifiables ni simulées.
 - `ProjectAnalyzer` produit les constats : variables globales ou locales inutilisées, types dérivés et DFB inutilisés, sections non référencées, vides, sans condition, trop longues, adresses en double, types non définis, E/S situées non documentées (`FindingKind`).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -342,6 +371,8 @@ flowchart TD
 - **Missions IA (1.22.0)** : `AiMission` (le modèle et ses règles, sans disque ni réseau : états des étapes, plan, ordre, lots, suivi des propositions, progression, rapport) et `AiMissionStore` (fichiers `IA/missions/<id>.json` écrits d'un bloc avec une copie `.bak`, empreinte du projet, reprise) ; `ai::Assistant` les tient à jour à chaque événement ; `AiMissionsView`, `AiMissionStrip` et `AiMissionBoard` les montrent (onglet, bande, tableau de bord au centre). Le projet réel reste la source de vérité : une étape n'est terminée que si ce qu'elle a créé est dans le projet.
 - Le détail (fournisseurs, données envoyées, stockage, limites) est dans [ASSISTANT-IA.md](ASSISTANT-IA.md).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="tests"></a>
@@ -353,3 +384,9 @@ flowchart TD
 - Le projet Visual Studio est contrôlé par l'essai `vcxproj` (`outils/verifier_vcxproj.py`).
 
 Voir [TESTS.md](TESTS.md).
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [TESTS.md](TESTS.md) · [FORMATS.md](FORMATS.md) · [ASSISTANT-IA.md](ASSISTANT-IA.md)</sub> <!-- nav -->

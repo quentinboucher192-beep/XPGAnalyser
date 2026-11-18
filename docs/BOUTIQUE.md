@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # La boutique et les commandes (1.46.0) : le contrat
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [LICENCES.md](LICENCES.md) · [SERVICE-LICENCES.md](SERVICE-LICENCES.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 > **Construit en 1.46.0** (le service, l'Admin, ses essais). Ce qui a été précisé en construisant, par rapport à la
 > première version de ce contrat, est dit au § 8 ; le texte ci-dessous en tient déjà compte.
@@ -35,6 +38,8 @@ Ce document est le contrat entre le service des licences (`service/`), l'Admin (
 5. **Le Studio** regarde sa commande : payée → « Paiement reçu : ta licence arrive dès que l'éditeur la délivre » ;
    livrée → il s'active seul (le code scellé, comme la réponse à une demande) et une fenêtre le confirme.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 2. Les secrets de Stripe (jamais ailleurs que dans le service)
 
 - `STRIPE_SECRET_KEY` (clé secrète `sk_live_…`, `sk_test_…` ou restreinte `rk_…`) et `STRIPE_WEBHOOK_SECRET`
@@ -69,6 +74,8 @@ Ce document est le contrat entre le service des licences (`service/`), l'Admin (
 - **Brancher de nouveau** (une autre clé, un autre compte) : l'Admin efface d'abord chez Stripe les points d'arrivée qui
   ont la même adresse (`GET` puis `DELETE /v1/webhook_endpoints/<id>`), sinon chaque événement arriverait deux fois, l'un
   signé par un secret que le service n'a plus.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 3. Le catalogue de la boutique (sur le service, pas dans le registre)
 
@@ -135,6 +142,8 @@ du webhook) et qu'il y a au moins un article.
 
 **Les dates** de la boutique (`cree`, `maj`, `expire`, `paye`, `prise`, `dernier_evenement`) sont des **secondes Unix**,
 comme les routes de la 1.44.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 4. Les commandes
 
@@ -226,6 +235,8 @@ commandes, 1 000 `a_payer` à la fois, 50 Mio de scellés. **Le ménage** (une f
 secrets de Stripe (des secrets du Worker, dans aucune table). Un service 1.46 restaure une sauvegarde du schéma 3 (une
 1.44 : ses tables de la boutique restent vides) ; une sauvegarde du schéma 4 dans un service 1.44 : 409 `schema`.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 5. La livraison par l'Admin
 
 L'Admin ouvert regarde `GET /admin/etat` (toutes les 15 secondes, comme aujourd'hui) ; `commandes` a bougé : il relit
@@ -256,6 +267,8 @@ Une commande n'est livrée qu'une fois, même si deux Admin sont ouverts (le ser
 qui perd retire ce qu'il a déposé ou ne dépose qu'après avoir « pris » la commande : `POST /admin/commandes/prendre`
 `{"numero":N}` → 200 si `payee` et non prise depuis 5 minutes, 409 sinon).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 6. Les pages de l'Admin
 
 - **Boutique** (Vente en ligne) : l'état de Stripe (branché, mode test ou réel, le webhook reçu pour la dernière fois
@@ -278,6 +291,8 @@ qui perd retire ce qu'il a déposé ou ne dépose qu'après avoir « pris » la 
   /admin/boutique`), `stripe-brancher --cle-variable NOM [--dossier-kit D]` (la clé lue dans une variable
   d'environnement, jamais sur la ligne de commande ni affichée), `commandes [--etat E]`, `commande-livrer [--numero N]`,
   `commande-revoir --numero N --raison T`, `commande-rembourser --numero N` (1.48.1 : `--ligne L`, un article seul).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 7. Le Studio
 
@@ -309,6 +324,8 @@ licence, Options (« Acheter » pour la durée choisie) et Mes achats (« Mes co
   `commande-attendre ETAT [N] [SECONDES]`, `commande-annuler [N]`, `commande-fenetre [N]`, `mes-achats`.
 - L'essai : `tests/licence_boutique_test.cpp` (`service_boutique`, le vrai Worker et le faux Stripe : la commande, 409
   `en_cours`, l'annulation, le 502 de Stripe, le paiement, la livraison d'une offre et d'une option).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 8. Ce qui a été précisé en construisant (1.46.0)
 
@@ -346,6 +363,8 @@ Pour qui construit le Studio d'après ce contrat (la première version de ce doc
 15. **Les limites** : la commande 10 par heure et par adresse, 10 par jour et par PC ; la liste des commandes d'un PC
     400 par heure (le Studio la regarde toutes les 10 s pendant 30 minutes : 180 appels).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 9. La 1.46.1 (le service et l'Admin)
 
 Ce que l'éditeur a vu avec son vrai compte Stripe (en mode test) : « Stripe refuse (la page de paiement) : The
@@ -374,6 +393,8 @@ dans Stripe › Catalogue de produits ; Versions qui refusait un `.zip`.
 5. **Les versions** : l'Admin 1.46.1, le service 1.46.1 (`shop::kServiceRequired` reste 1.46.0 : la boutique marche avec
    un service 1.46.0 - qui garde le refus de Stripe tant qu'il n'est pas redéployé ; l'Admin dit « la 1.46.1 est prête
    dans l'Admin : déploie-la »). Les Studios restent en 1.46.0 (ils lisent `montant`, rien d'autre ne change pour eux).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 10. Le panier (1.48.0) : les commandes et les demandes ne font plus qu'un
 
@@ -478,3 +499,9 @@ demande sans paiement** (le même objet, sans Stripe) ; **chaque ligne se valide
 - 1.48.1 : « Rembourser… » sur une ligne (le volet, le clic droit) rembourse **cet article** (la question nomme
   l'article et son montant TTC) ; « Rembourser la commande… » toute la commande. Le journal des admins : une ligne par
   article remboursé.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [LICENCES.md](LICENCES.md) · [SERVICE-LICENCES.md](SERVICE-LICENCES.md)</sub> <!-- nav -->

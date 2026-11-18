@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Déploiement réseau — conception (1.28.0 et suivantes)
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [LICENCES.md](LICENCES.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Ce document décrit comment un projet IHM part du PC de développement vers un PC de maintenance. Il fixe le format du paquet, le protocole, l'appairage et le rôle de chaque programme. Il reprend la maquette (onglet Architecture) et les décisions prises avec toi le 06/11 :
 - **TLS : mbedTLS**, embarqué, le même code sous Windows et sous Linux ;
@@ -15,6 +18,8 @@ Retour au [README](../README.md).
 | 1.30.0 | Les licences, sans service en ligne : l'Admin qui signe, le License Manager, les éditions et fonctionnalités, l'activation par fichier ; les licences Runtime vérifiées par l'agent. |
 | ensuite | L'activation en ligne et les licences flottantes (il faut héberger le service de licences) ; l'onglet Déploiement réseau rejoint le License Manager Client. |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 2. Les programmes et les modules
 
 | Où | Quoi |
@@ -25,6 +30,8 @@ Retour au [README](../README.md).
 | `src/app/` | IHM Studio : Créer un package de déploiement, la fenêtre Déploiement réseau |
 
 `deploy/` ne dépend que de `core/`, de `xls/` (miniz, pour le zip) et des deux bibliothèques. Les dossiers où il écrit lui sont donnés en paramètre.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 3. Le paquet `.xpgdeploy`
 
@@ -61,6 +68,8 @@ app/...            le poste : les fichiers du projet utiles au poste, et le lanc
 
 **La clé d'éditeur** (`DevKey`) : une paire Ed25519 créée sur le PC du développeur à la première utilisation. La clé privée est gardée chiffrée par DPAPI (le compte Windows) ; sous Linux, dans un fichier lisible par son seul propriétaire. Elle ne quitte jamais le PC. La clé publique part avec chaque paquet et à chaque appairage.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 4. Le réseau
 
 **Ports** : TCP **47861** (l'agent), UDP **47862** (la découverte), réglables. L'agent vérifie au démarrage qu'ils sont libres ; sinon il le dit et n'écoute pas.
@@ -75,6 +84,8 @@ app/...            le poste : les fichiers du projet utiles au poste, et le lanc
 
 **La découverte** (UDP) : le Studio envoie `{"xpgd":1,"op":"DISCOVER","nonce":"…"}` en diffusion (et en direct aux adresses qu'on lui donne) ; chaque agent répond `{"xpgd":1,"op":"HERE","nonce":"…","machine":"PC-ATELIER-1","id":"M-7F21","version":"1.0.0","protos":[1],"port":47861,"fp":"<empreinte>"}`. Une réponse ne prouve rien : c'est une adresse, rien de plus, tant que la machine n'est pas appairée.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 5. L'appairage
 
 Sur le PC de maintenance, `XPG-Deployment-Agent --appairer` affiche un **code à 6 chiffres**, valable 5 minutes, utilisable une fois, 3 essais au plus. Le développeur le tape dans le Studio. 1.32.0 : lance-le **dans la session de l'opérateur**, sans « Exécuter en tant qu'administrateur » : le dossier de l'agent est celui du compte qui le lance ; lancé sous un autre compte, le code irait dans le profil de ce compte et l'appairage échouerait.
@@ -87,6 +98,8 @@ Six chiffres se devinent hors ligne si on les envoie, même hachés. Le code n'e
 4. `PAIR_FINISH` porte la confirmation du Studio (ou un abandon, si celle de l'agent est fausse). Réussi : l'agent garde l'empreinte du Studio, son nom et sa clé d'éditeur ; le Studio garde l'empreinte de l'agent, son nom, son identifiant et son adresse. Le code est consommé. Un essai est compté à `PAIR_START`, s'il y a un code en cours.
 
 Un intermédiaire qui présente ses propres certificats obtient un `G` différent de chaque côté : l'échange échoue, et il n'apprend rien qui lui permette de deviner le code hors ligne. Il n'a droit qu'à un essai par connexion, et le code s'efface après 3 échecs.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 6. L'agent
 
@@ -115,15 +128,21 @@ Une relecture de sécurité a trouvé qu'un **utilisateur local sans droits** po
 - **Le pare-feu** (l'installateur) : les règles de l'agent n'acceptent plus que le **sous-réseau local** (`remoteip=localsubnet`), réseaux domaine et privé.
 - **Les DLL** : l'agent, comme les Studios, ne charge une DLL par son nom que depuis son dossier ou System32 (`SetDefaultDllDirectories`), jamais depuis le dossier courant.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 7. Ce qui n'est pas simulé
 
 Les essais passent par de vraies sockets (TCP et UDP sur la boucle locale) et de vraies poignées de main TLS. Les essais sur deux PC de ton réseau restent à faire par toi : ils ne sont annoncés que lorsqu'ils ont eu lieu.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 8. Pourquoi l'agent tourne dans la session de l'opérateur (1.29.0)
 
 La maquette en faisait un **service Windows**. Un service tourne dans la « session 0 » de Windows, isolée : il ne peut ouvrir **aucune fenêtre** sur le bureau de l'opérateur. Il ne pourrait donc ni lancer le poste d'exploitation (une application plein écran), ni lui demander de s'arrêter proprement.
 
 En 1.29.0, l'agent est un programme sans fenêtre **démarré avec la session de l'opérateur** (la clé `Run` de l'utilisateur, comme le poste lui-même) : il lance le poste dans cette session, et lui parle par un canal local. Le pare-feu reçoit ses deux règles à l'installation (profils Domaine et Privé). Un vrai service, s'il le faut plus tard, devra être doublé d'un petit programme dans la session, qui lance le poste pour lui.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 9. L'envoi et l'installation (1.29.0)
 
@@ -183,3 +202,8 @@ Un poste lancé par la **session** (la valeur `Run` « XPG Poste d'exploitation 
 
 Profil **Poste d'exploitation**, case **Recevoir les déploiements** (décochée au départ) : la valeur `Run` « XPG Deployment Agent » (`"<programme>\XPG-Deployment-Agent.exe" --servir`, HKLM pour une installation pour tous les comptes) ; pour tous les comptes seulement, deux règles entrantes du pare-feu limitées au programme de l'agent - TCP 47861 et UDP 47862, profils **domaine et privé** (pas public) ; l'agent démarre à la fin de l'installation, dans le compte de l'opérateur. Une mise à jour l'arrête (`taskkill`) le temps de la copie. Décochée, ou à la désinstallation : la valeur et les règles posées par l'installateur partent.
 
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [LICENCES.md](LICENCES.md)</sub> <!-- nav -->

@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Formats, données et emplacements
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ADMINS.md](ADMINS.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [API-STUDIO.md](API-STUDIO.md) · [IHM-STUDIO.md](IHM-STUDIO.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Référence des fichiers lus et écrits par API Studio et IHM Studio (version 1.22.0), d'après le code. Retour au [README](../README.md).
 
@@ -14,6 +17,8 @@ Référence des fichiers lus et écrits par API Studio et IHM Studio (version 1.
 8. [Sauvegardes, réserve de réparation, reprise](#sauvegardes)
 9. [Données de l'Assistant IA](#ia)
 10. [Confidentialité des données stockées](#confidentialite)
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -67,6 +72,8 @@ La liste des fichiers « de l'application » que reconnaît la recherche de fich
 
 Formats acceptés en pièce jointe par l'Assistant IA : voir [ASSISTANT-IA.md](ASSISTANT-IA.md#pieces).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="projet"></a>
@@ -100,6 +107,8 @@ Règles d'écriture :
 
 1.51.0 : une section **LD** (ladder) reste rangée en `<section>.xml`, le `<LDSource>` de Control Expert tel quel (`src/project/Ladder.hpp`). L'éditeur de ladder d'API Studio y écrit le même XML : seuls les **réseaux** (`networkLD`) modifiés sont réécrits, aux conventions du fichier lu (fins de ligne, tabulations ; contacts, bobines, `HLink`/`emptyCell` regroupés, `shortCircuit` et `VLink` pour les liaisons verticales, `FFBBlock` dans la suite de sa rangée avec `EN`/`ENO` écrits, `control` `jumpCoil`/`retCoil`, `labelCell`, `compareBlock`/`operateBlock`, `textBox`) ; un attribut ou un élément inconnu est gardé tel quel, un réseau non touché garde ses octets. Une section LD **neuve** n'est plus le texte `(* nom *)` mais un `<LDSource nbColumns="11">` à un réseau vide. **Le format ne change pas** : une version d'avant lit, conserve et réexporte ces sections comme tout ladder de Control Expert (lecture en texte seulement).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="format-ihm"></a>
@@ -115,6 +124,8 @@ Règles d'écriture :
 - 1.51.0 : **les types IHM d'un symbole** (`HmiType::symbol`, `src/hmi/HmiSymbolTypes.hpp`) restent dans la liste des types de l'index (`ihm.txt`), sur une ligne `type_ihm` qui porte `espace=<nom du symbole>` et **`symbole=<id de la vue du symbole>`** (absent : un type du projet), suivie comme les autres de ses membres, valeurs, méthodes, opérateurs. Leur nom complet est `MonSymbole.T_Etat`. Un symbole qui en porte s'écrit au format 33 (celui des espaces de noms). **Le format ne change pas** : une version d'avant ignore `symbole=` et relit un type de l'espace de noms `MonSymbole` (rien ne se perd : les vues, les instances, les emplois `MonSymbole.T_Etat` se relisent ; sa Générer peut dire que `MonSymbole` est à la fois un espace et une vue, et le lien au symbole est perdu si elle réenregistre). À la lecture, un type dont le symbole manque (son fichier de vue absent) reste un type du projet de cet espace, avec un avertissement. Les paquets (`.xpgsymboles`, `.xpgvues`, le presse-papiers entre fenêtres) emportent les types d'un symbole avec lui ; la corbeille les met dans l'élément du symbole.
 - Le manifeste `project.xpgproj` porte son propre `formatVersion` (valeur `1`).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="archives"></a>
@@ -127,6 +138,8 @@ Règles d'écriture :
 - exclus : artefacts du build, `exports/`, `ihm/corbeille/`, fichiers temporaires, archives posées dans le dossier ; au choix : `versions/` et l'historique de marche ;
 - **ouverture** : déballage dans un dossier neuf seulement, chemins sortant du dossier refusés, contrôle de cohérence (chaque fichier présent et intact, chaque compte du manifeste retrouvé dans le projet relu) ;
 - sous Windows, l'installateur peut associer `.xihm` à IHM Studio et `.xapi` à API Studio (`HKCU` ou `HKLM\Software\Classes`, identifiants `APIIHMStudio.xihm`, `APIIHMStudio.xapi`, `installateur/XPGAnalyser.iss`).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -142,6 +155,8 @@ Règles d'écriture :
 | Corbeille du projet IHM (1.26.1 : ce que l'utilisateur supprime — vues, ressources et leurs octets, scripts, fonctions, variables, types, alarmes, recettes, styles, fichiers externes ; montrée par Projet › Corbeille, purgée après 7 jours) | `ihm/supprimes/corbeille.txt` (une ligne `element` par élément, `fin`) et `ihm/supprimes/NNNN/` (le contenu : un petit projet, `ihm.txt`, `vues/`, `ressources/`…) ; hors de `ihm.txt` (format inchangé), hors des versions | `src/hmi/HmiTrash.hpp`, `src/hmi/HmiStore.hpp` |
 | Journaux d'exploitation de l'IHM (alarmes, mesures, audit) | `ihm/historique/` | moteur `src/hmi/HmiRuntime*` |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="migrations"></a>
@@ -155,6 +170,8 @@ Règles d'écriture :
 | Projets IHM d'anciens formats | Relus par le chargeur, puis réécrits au format nécessaire à l'enregistrement. Le projet modèle `bac/Armoire_Gaz` du dépôt est au format 19 et sert à plusieurs essais (`hmitrace`, `hmimigrate`, `edition`…) | `src/hmi/HmiStore.*` |
 | Clé API d'avant 1.18 (`IA/cle.bin`) | Reprise dans le gestionnaire des clés au premier lancement | `src/app/ai/AiKeys.hpp` |
 | Connaissances de l'IA format 1 → 2 (1.21.0) | Relues comme confirmées, réécrites au format 2 après une sauvegarde de toute la mémoire | `src/app/ai/AiKnowledge.hpp` |
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -176,6 +193,8 @@ Règles d'écriture :
 - 1.51.0, l'Admin (`%LOCALAPPDATA%\XPG\LicenseAdmin`, détail : [ADMINS.md](ADMINS.md) § 4 et 12) : `invitations-admins.json` (l'Admin+) gagne `droits` (les droits choisis à l'invitation), `admis` et `admis_le` (la clé signée d'office) ; une 1.50 les ignore (et les perd si elle réécrit le fichier : l'Admin+ retombe alors sur le profil par son nom). XPG Admin écrit `inscription-admin.json` (`xpg-inscription-admin/1` : le nom, le courriel, le profil de l'invitation, son id, l'heure) à la place de `demande-admin.json` (encore lu pour le courriel). Le service : `admins_invitations` gagne `par` (la clé de l'éditeur qui a créé l'invitation) ; la table `admins_demandes` garde son nom et ses colonnes (une sauvegarde d'avant se restaure telle quelle) et porte les inscriptions par code.
 - 1.52.0, la dérogation (détail : [ADMINS.md](ADMINS.md) § 11) : le document signé par la clé de l'éditeur passe au **format 2** — `{"format":2,"id","droit":"tout","admin","nom","duree","valable","emise"}` (la durée, de 10 min à 72 h ; `valable` : l'heure limite pour taper le code, émise + 1 h), toujours précédé de `XPG-DEROGATION-1\n` ; **ni le code ni son empreinte n'y sont**. L'Admin+ envoie à côté `code` (l'empreinte du code) ; le service la garde dans la ligne `derogation` de sa table `config` (schéma 5 inchangé) et ne la rend jamais, la sauvegarde comprise (une dérogation restaurée en attente du code ne s'active plus). Le format 1 (un Admin+ d'avant) est toujours reçu. Un Admin 1.51 lit une dérogation en attente ou annulée sans planter : `debut` = `fin` (jamais « en cours ») ; un Admin+ 1.51 ne vérifie pas le document de format 2 (« ignorée »). Rien sur le poste ne change de format : le code n'est jamais écrit (l'Admin+ le retire de sa clé à chaque fois).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="sauvegardes"></a>
@@ -190,6 +209,8 @@ Règles d'écriture :
 | Sauvegardes de la mémoire de l'Assistant (10 gardées) | `IA/sauvegardes/` | `src/app/ai/AiMemoryManager.hpp` |
 | Version « Avant restauration » créée avant toute restauration de version | `versions/` du projet | `src/hmi/HmiVersions.hpp` |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="ia"></a>
@@ -201,6 +222,8 @@ Les fichiers JSON de l'Assistant conservent l'ordre et les champs inconnus (`src
 
 1.50.1 : un message de `conversations/<id>.json` peut porter **`reponseA`** {`id`, `auteur`, `extrait`} — la demande répond à ce message (« Répondre », `src/app/ai/AiChatReply.hpp`). Champ **facultatif** : un Studio 1.50.0 ou plus ancien le garde tel quel (champ inconnu) et montre la demande sans la citation ; le texte de la demande n'en contient pas de copie.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="confidentialite"></a>
@@ -210,3 +233,9 @@ Les fichiers JSON de l'Assistant conservent l'ordre et les champs inconnus (`src
 - **Mots de passe des projets et des utilisateurs de l'IHM** : empreintes salées, jamais en clair (`src/project/Security.hpp`, `src/hmi/HmiCrypto.*`). Le verrou LOCK n'est **pas** un chiffrement du dossier.
 - **Dossier de l'IHM** (Word/PDF) et export `.xia` : n'incluent ni mots de passe, ni codes, ni badges, ni clé API.
 - **Rapports de plantage et signalements** : écrits localement ; rien n'est envoyé par le réseau.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ADMINS.md](ADMINS.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [API-STUDIO.md](API-STUDIO.md) · [IHM-STUDIO.md](IHM-STUDIO.md)</sub> <!-- nav -->

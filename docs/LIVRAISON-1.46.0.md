@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # API Studio, IHM Studio et l'Admin 1.46.0 : la boutique et les commandes (Stripe), la fenêtre Licence avec un fil d'Ariane, Mon profil à part, les images en grand, les barres de défilement
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Faite à partir de tes retours sur la 1.45 : « le bouton annuler chevauche, je ne peux pas écrire dans Notes », « ces
 scrollbars ne bougent pas avec la souris », « quand on est dans les fonctionnalités zoomées on peut quand même changer
@@ -71,6 +74,8 @@ avant, sans boutique.
 - En console : `boutique-etat`, `boutique-config`, `stripe-brancher --cle-variable NOM` (la clé lue dans une variable,
   jamais affichée), `commandes`, `commande-livrer`, `commande-revoir`, `commande-rembourser`.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 1. Ce qu'il te reste à faire
 
 1. Installer **l'Admin 1.46.0** sur ton PC (par-dessus la 1.45.0), puis les **Studios 1.46.0**.
@@ -86,6 +91,8 @@ avant, sans boutique.
    quelconque), l'Admin ouvert : la commande doit passer payée puis livrée, et la licence s'activer sur le PC.
 6. Pour vendre pour de vrai : ton compte Stripe activé (c'est chez Stripe), puis **Rebrancher Stripe…** avec ta clé
    **réelle** (`sk_live_…`) ; la bande « Paiement d'essai » disparaît.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 2. Les essais
 
@@ -146,6 +153,8 @@ avant, sans boutique.
   virtuels mêlés sous Wine) et mon script a cru la commande livrée alors qu'elle était « payée, à livrer » : les deux
   corrigés, le second passage est celui décrit ci-dessus.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. Installer
 
 **Les Studios** : lance `API-IHM-Studio-Setup-1.46.0.exe` (dans le zip) par-dessus la 1.45.0. Tes projets, tes
@@ -164,6 +173,8 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 | Fichier | SHA-256 | Taille |
 |---|---|---|
 | `XPG-License-Admin-Setup-1.46.0-EDITEUR.exe` | `C4A1E7ED4A4323CAB3B756360C021A990A3AD549AAC210CB08559D34A2D44983` | 7 348 253 octets |
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 4. Limites
 
@@ -185,3 +196,9 @@ admin… lui envoie l'installateur publié dans Versions (sans ta clé).
 - **Rembourser** ne révoque pas la licence : à toi de le faire si tu le veux (la question le rappelle).
 - Sans courriel de l'éditeur réglé, la fenêtre « Ta commande est livrée » montre le code d'activation au client (comme
   pour une demande acceptée).
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->

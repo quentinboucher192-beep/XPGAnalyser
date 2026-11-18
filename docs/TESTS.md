@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Tests et qualité
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [ASSISTANT-IA.md](ASSISTANT-IA.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 État des essais automatiques du dépôt (version 1.21.3), établi à partir de `CMakeLists.txt` et du dossier `tests/`. Version 1.22.0. Retour au [README](../README.md).
 
@@ -13,6 +16,8 @@
 7. [Scripts historiques](#historiques)
 8. [Ce que les essais ne garantissent pas](#portee)
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="principe"></a>
@@ -22,6 +27,8 @@
 - Les essais **n'ouvrent pas de fenêtre** : ils lient les bibliothèques sans écran (`xpg_core`, `xpg_import`, `xpg_ui`, `xpg_help`, `xpg_hmi`), des sources de `src/app` nommées explicitement, ou `xpg_app`. Dans la configuration d'essai utilisée sous Linux, SDL est désactivé (`-DXPG_WITH_SDL=OFF`).
 - Le réseau et les fournisseurs d'IA sont remplacés par des **faux** : transport HTTP injectable (`setHttpFactory`, `src/app/ai/AiHttp.hpp`), faux fournisseur qui rejoue des flux enregistrés au format Anthropic (`tests/fixtures/ia/faux_fournisseur.py`), faux serveurs locaux. Une suite (`aireseau`) contient aussi un essai de bout en bout avec libcurl contre un serveur local.
 - La fonction `xpg_add_test_executable` **saute** un essai dont une source manque, et `xpg_add_test` n'enregistre pas un essai dont un fichier d'entrée (chemin absolu en argument) manque ; CMake l'affiche à la configuration.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -47,6 +54,8 @@ Conditions d'enregistrement :
 
 - les essais qui lisent la bibliothèque (`macros2libs`, `api2libs`, `macrospecwrite`, `simdebuglibs`) ne sont enregistrés que si `libs/` existe (`XPG_LIBS_DIR`, présent dans le dépôt) ;
 - `XPG_FIXTURE` et `XHW_FIXTURE` désignent `tests/fixtures/MAST.XPG` et `tests/fixtures/CONFIG.XHW` (modifiables à la configuration).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -79,6 +88,8 @@ ctest --test-dir build-linux -R '^ai' --output-on-failure
 
 `outils\test_build.bat` compile l'application avec MSBuild, puis les essais avec CMake + Ninja et MSVC (sans SDL, dans `build\cmake-tests`), et lance `ctest` (options `/filtre:<regex>`, `/propre`, `/sans-application`) — voir [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md). Aucune note de livraison récente ne rapporte une exécution de ce script sur Windows.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="categories"></a>
@@ -104,6 +115,8 @@ Quelques suites significatives :
 - `aisandbox` : processus enfant borné du bac à sable ;
 - `hmidocviewer` : visionneuse PDF (exige PDFium Linux).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="donnees"></a>
@@ -122,6 +135,8 @@ Quelques suites significatives :
 | `libs/` | Bibliothèque livrée, lue par les suites `*libs` |
 | `tools/tutoriels/` | Textes des didacticiels (suite `tutorial`) |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="plates-formes"></a>
@@ -133,6 +148,8 @@ D'après les notes de livraison (`docs/LIVRAISON-1.21.0.md` à `docs/LIVRAISON-1
 - **Windows** : les deux exécutables Windows, compilés sous Linux avec MinGW-w64, ont été **vérifiés sous Wine, pas sur un vrai Windows** : `--version`, `API-Studio.exe --cli MAST.XPG` (même résultat qu'avant : 891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB), installation silencieuse de `API-IHM-Studio-Setup-1.21.3.exe` par-dessus la 1.21.1 (clé API d'essai conservée, associations présentes), et bac à sable de l'exécutable installé (`IHM-Studio.exe --bac-a-sable`).
 - **Assistant IA avec une vraie IA** : non essayé dans les sessions de la 1.21.3 et de la 1.22.0 (aucune clé disponible) ; les essais utilisent un faux fournisseur et un faux transport.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="historiques"></a>
@@ -140,6 +157,8 @@ D'après les notes de livraison (`docs/LIVRAISON-1.21.0.md` à `docs/LIVRAISON-1
 
 - `build.sh` : construction sans CMake des premiers lots ; son en-tête indique qu'il **n'est plus tenu à jour** (ni `src/hmi`, ni `src/help`, ni l'application).
 - `runtests.sh` : lance les essais produits par `build.sh` dans `build/` ; il cite des essais absents du dépôt et des chemins propres à une autre machine. Ni l'un ni l'autre ne sont la référence : utiliser CMake et CTest.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -150,3 +169,9 @@ D'après les notes de livraison (`docs/LIVRAISON-1.21.0.md` à `docs/LIVRAISON-1
 - Les essais n'ouvrent pas l'interface graphique réelle ; le rendu SDL et l'interaction ne sont pas couverts par CTest.
 - Les essais de communication utilisent des serveurs et des équipements simulés ; aucun automate physique n'est en jeu.
 - Les services d'IA réels, le comportement de Windows hors Wine et l'installateur sur un vrai Windows ne sont pas couverts par les essais automatiques de ce dépôt.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [ASSISTANT-IA.md](ASSISTANT-IA.md)</sub> <!-- nav -->

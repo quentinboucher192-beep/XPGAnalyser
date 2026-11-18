@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Les sessions : travailler à plusieurs sur le même projet (1.43.0, réseau du bureau ; 1.44.0, par Internet ; 1.45.0, retirer, partir, le journal)
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 La maquette validée est `docs/maquettes/1.42.0/` (planches 07 à 11). Ce document dit comment c'est fait : `src/session/` (le protocole, le lien, les changements ; sans écran, `session_test`) et `src/app/SessionService`, `SessionDialogs`, `SessionMarks` (IHM Studio).
 
@@ -13,10 +16,14 @@ La maquette validée est `docs/maquettes/1.42.0/` (planches 07 à 11). Ce docume
 - **1.45.0** (§ 8) : l'hôte **retire** un équipier ; qui **part** revient à l'accueil (l'hôte qui arrête coupe tout le monde) ; **l'équipier ne garde rien** (sa copie est effacée) ; l'onglet **« Session »** du panneau du bas, les membres dans l'arbre du projet et dans l'explorateur d'objets ; le **journal** de la session (qui a changé quoi, quand).
 - **Plus tard** : API Studio en session (ses commandes d'édition annulent par troncature : à reprendre d'abord), « Regarder seulement » changé en direct, la reprise après une coupure longue.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 2. La licence
 
 - **Démarrer** une session demande la fonctionnalité `multi_user` (« Travail à plusieurs ») : l'offre ENTERPRISE, ou l'option « Travail à plusieurs ».
 - **Rejoindre** demande seulement sa propre licence d'IHM Studio.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 3. Le réseau
 
@@ -26,6 +33,8 @@ La maquette validée est `docs/maquettes/1.42.0/` (planches 07 à 11). Ce docume
 | Le lien | TCP **47863**, **TLS 1.3** (la bibliothèque du déploiement réseau : mbedTLS), les deux côtés présentent leur certificat (le certificat du Studio, `Deploiement/studio.cer`, créé une fois sur chaque PC). L'équipier épingle l'empreinte annoncée par l'hôte ; l'hôte voit celle de l'équipier (son identifiant « M-7F21 », dans la fenêtre « Léa veut entrer »). |
 | Le code | Avec « Il faut le code » : 6 chiffres (montrés « 482 913 »), nouveaux à chaque session ; **jamais transmis**, même haché : un échange CPace (celui de l'appairage du déploiement, lié aux deux empreintes TLS) prouve que les deux le connaissent. L'échange est aussi lié à la session (SHA-256 de « XPG-SESSION-v1\|identifiant ») : un code de session ne sert ni à un appairage de déploiement, ni à une autre session. Un intermédiaire qui présente ses propres certificats fait échouer l'échange sans rien apprendre du code. 3 essais par équipier (son empreinte) : l'essai compte dès que l'hôte répond. |
 | Les trames | Celles du déploiement : longueur, en-tête JSON, données ; 2 Mio au plus (le projet part en morceaux de 1 Mio). |
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 4. Les messages
 
@@ -54,11 +63,15 @@ La maquette validée est `docs/maquettes/1.42.0/` (planches 07 à 11). Ce docume
 
 **Le reste du projet** (`ihm.txt`, les scripts, les ressources…) passe en **différences de lignes avec leur contexte** : deux équipiers qui ajoutent chacun une variable ne s'écrasent pas. Deux ajouts au même endroit peuvent se ranger dans un ordre différent chez l'un et l'autre : les empreintes le voient, l'équipier reprend le fichier de l'hôte. Une vue neuve passe entière avec l'index qui la cite ; une vue retirée par un équipier part dans la corbeille de l'hôte.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 5. Ce qui reste local
 
 - La pile d'annulation : Ctrl+Z annule ses gestes (le changement part aux autres comme un geste de plus). En session (`hmi::Document::shared`), annuler ne remet que les objets que le geste a touchés, par-dessus l'état courant : ce qu'un équipier a fait depuis reste ; le reste du projet est reporté ligne par ligne (`session::mergeShell`).
 - L'enregistrement : seul l'hôte enregistre le projet. 1.45.0 : **l'équipier ne garde rien** (§ 8) - sa copie est effacée quand il part ; il n'en fait pas d'autre pendant la session.
 - La simulation, les essais, le poste d'exploitation : chacun les siens.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 6. Dans IHM Studio
 
@@ -70,6 +83,8 @@ La maquette validée est `docs/maquettes/1.42.0/` (planches 07 à 11). Ce docume
 - **La discussion** (1.50.0, l'onglet « Session » et la fenêtre de la session : la même liste) : **Répondre** à un message (le survol : deux pictogrammes en haut à droite ; le clic droit) montre « En réponse à Léa : « début du message… » » au-dessus du champ (✕ ou Échap l'annule) ; la réponse montre l'extrait cité au-dessus de son texte, un clic dessus met le message cité en vue et le choisit. **Réduire / Déballer** : un message de plus de cinq lignes (à la largeur du moment) montre ses quatre premières lignes puis « … voir tout » ; déballé, « Réduire » ; le clic droit : Déballer / Réduire, « Tout réduire ». **Copier** (le survol, le clic droit, Ctrl+C sur le message choisi) : le texte seul ; « Copier avec l'auteur et l'heure » : « 14:32 Léa Essai : bonjour ». Tout reste dans son cadre à toute taille (`session_ui_test`).
 - **Les essais** : `session_test` (le protocole, le miroir, Ctrl+Z en session, un vrai lien TLS sur la boucle locale) ; `session_relay_test` (ctest `sessionrelais`, 1.44.0 : par Internet, § 7) ; les commandes de script `session-*` ; l'essai de bout en bout sous Wine (deux IHM Studio, une licence ENTERPRISE d'essai). `XPG_DOSSIER_COMMUN` impose le dossier commun (deux Studios côte à côte, chacun le sien).
 - **De bout en bout, deux vrais Studio** (1.50.1, ctest `sessione2e`, `tests/session_e2e.py`) : deux processus IHM-Studio sur ce PC, chacun son dossier commun (`XPG_DOSSIER_COMMUN`), son identité et sa licence, rejouent un script **sans écran** (`XPG_SANS_ECRAN=1` : la construction Linux n'a pas SDL ; `app/HeadlessRenderer.hpp` — la vraie police mesure, rien ne se dessine, le presse-papiers en mémoire ; une image tous les 1/60 s). L'hôte crée un projet fictif, démarre la session (« j'accepte chaque entrée » : aucun code ; `port=0` un port libre, `decouverte=N` un port UDP libre), fait entrer l'équipier ; l'équipier écrit un message de neuf lignes ; l'hôte le voit réduit et **y répond** par l'onglet Session (« Répondre », la barre, le champ) ; l'équipier voit **la citation** au-dessus de la réponse (un clic : son message choisi), son message **réduit**, le déballe, « Tout réduire », le **copie** (Copier, avec l'auteur et l'heure, Ctrl+C) et relit le presse-papiers, puis part. Chaque Studio a 240 s (tué au-delà, par son PID), les dossiers temporaires sont effacés, le journal est vérifié : aucun code de session. Sauté sans l'exécutable. Les commandes de script (`app/ScriptChat.hpp`) : `session-ecrire "texte"` (`\n` : à la ligne), `session-repondre N "texte"`, `session-cite N "début"`, `session-reduit N oui|non`, `session-reduire N|tout`, `session-deballer N`, `session-copier N [auteur|ctrl+c]`, `session-presse-papiers ["texte"]`, `session-discussion` (N : le N-ième message de la discussion) ; `session-demarrer … port=N decouverte=N`, `session-rejoindre ADRESSE decouverte=N`. 1.50.1 : `session-demarrer` ne dit plus le code au journal (il reste dans `code-session.txt` des captures).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 7. Par Internet (1.44.0)
 
@@ -88,6 +103,8 @@ Pour un équipier à distance, la session passe par le **relais du service XPG**
 **Ce qui reste comme au bureau** : tout le reste (le projet qui arrive, les changements objet par objet, les réservations, la discussion, l'hôte qui fait foi, l'enregistrement chez l'hôte). La session par Internet n'est pas annoncée sur le réseau du bureau.
 
 **Les commandes de script** (l'essai de bout en bout) : `session-demarrer "Nom" internet [modifier|regarder]` (attend que la session soit ouverte sur le relais, puis écrit le code, « K7Q4-M2XP-T9 », dans `code-session.txt` du dossier des captures), `session-attendre ouverte` (l'hôte : ouverte sur le relais), `session-rejoindre internet @fichier` (le code de `code-session.txt` ; ou `@<chemin>`, ou le code lui-même). Le relais : celui du service des licences du Studio (`XPG_SERVICE` dans une construction d'essai : le service local, `outils/service/lancer-local.sh`). Les commandes du réseau du bureau restent les mêmes.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 8. Retirer, partir, le journal (1.45.0)
 
@@ -108,3 +125,9 @@ Le client : « pouvoir virer qlq dans une session », « quand quelqu'un quitte 
 **Les commandes de script** (l'essai de bout en bout) : `session-retirer N` (l'hôte retire le membre N : « [script] session-retirer 1 : Léa retiré(e) »), `session-quitter` (l'équipier part), `session-attendre accueil` (revenu à l'accueil, la copie fermée et effacée : « [script] session-attendre accueil : oui (copie effacée : <dossier>) »), `session-attendre journal "texte"` (une ligne du journal le contient), `session-journal` (« [script] session-journal : N entrée(s) » puis une ligne par entrée ; l'hôte, à la fin : le fichier enregistré), `session-onglet` (l'onglet « Session » du panneau du bas : « [script] session-onglet : N ligne(s) · M message(s) · K au journal ») ; `session-attendre fin` reste.
 
 **Les essais** : `session_test` (le journal : un objet déplacé, ajouté, modifié, supprimé, une ressource d'un équipier qui arrive chez l'hôte et les autres, une variable, la fusion, la borne, le CSV enregistré ; la copie effacée au départ et purgée au lancement ; de vrais liens : retirer, partir, arrêter ; le service trop vieux), `hmi_editor_test` (l'onglet « Session » n'existe que pendant une session, son non lu, écrire ; le nœud « Session » de l'arbre ; « tenu par Léa » ; les refus de l'équipier).
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->

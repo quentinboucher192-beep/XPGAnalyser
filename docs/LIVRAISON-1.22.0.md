@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # API Studio et IHM Studio 1.22.0 : les missions IA persistantes
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ASSISTANT-IA.md](ASSISTANT-IA.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Livrée le 01/11/2026. Elle suit la 1.21.3 (`docs/LIVRAISON-1.21.3.md`). L'audit de l'existant fait avant toute modification est dans `docs/AUDIT-MISSIONS-1.22.0.md`.
 
@@ -32,6 +35,8 @@ Tout se passe dans **IHM Studio**, dans le panneau de l'Assistant IA (aide F1 : 
 
 ### Depuis une autre conversation
 « Où en est la station de pompage ? », « Reprends la mission d'hier » : l'IA cherche dans les missions **enregistrées** (outils `chercher_missions`, `etat_mission`) et répond avec leur état réel, jamais de mémoire ; une mission introuvable, elle le dit.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 
 ## 2. L'architecture
@@ -90,6 +95,8 @@ Tout se passe dans **IHM Studio**, dans le panneau de l'Assistant IA (aide F1 : 
 - La progression (la règle affichée) : chaque étape pèse son estimation d'opérations (au moins 1) ; les étapes ignorées ou annulées sortent du calcul ; planification 100 % dès que le plan existe ; génération = les étapes qui ont une proposition ; validation = vérifiée ou appliquée ; application = appliquée ; **globale = terminée**, c'est-à-dire appliquée et vérifiée dans le projet.
 - La mission n'est **terminée** que si toutes ses étapes obligatoires le sont **et** que l'audit global du projet (`hmi::audit::run`, le même que « Vérifie tout mon projet ») a été fait sans erreur bloquante. Sans audit : « non vérifiable », jamais « vérifié ».
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. Les essais
 
 **119 suites d'essais sous Linux** (116 en 1.21.3, plus les trois des missions), lancées par CTest sur le code livré : voir le résultat final ci-dessous. Pour cette livraison :
@@ -107,6 +114,8 @@ Deux défauts trouvés par les essais pendant la livraison, corrigés : un carac
 
 **Résultat final : 119 suites sur 119 réussies** (CTest, Linux, sur le code exact de cet installateur).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 4. Les scénarios demandés
 
 | Scénario | Où il est joué | Ce qui est vérifié |
@@ -117,6 +126,8 @@ Deux défauts trouvés par les essais pendant la livraison, corrigés : un carac
 | **D** — mission reprise depuis une autre conversation | `ai_missions_e2e_test` [D], `ai_missions_test` (recherche) | une nouvelle conversation : les outils `chercher_missions` et `etat_mission` exécutés depuis la vraie requête, la mission exacte citée avec son état réel ; une mission inconnue : « aucune mission » ; la reprise de la mission depuis cette conversation |
 
 Aussi : une étape en erreur (sa dépendante bloquée, l'indépendante terminée, la mission jamais « terminée », puis Corriger) ; un autre projet ouvert puis le bon rouvert ; pause (la réponse vraiment arrêtée, l'application refusée), reprise, annulation ; le plan revu qui garde le travail fait ; un fichier incomplet repris de sa copie ; un format 0 migré ; un format plus récent jamais réécrit ; l'historique borné.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 5. Installer
 
@@ -133,6 +144,8 @@ Fichiers livrés :
 
 Vérifié **sous Wine (pas sur un vrai Windows)**, en silencieux, par-dessus la 1.21.3 livrée : installation réussie ; une clé API d'essai gardée à l'identique ; les deux exécutables installés identiques à ceux construits ; `--version` répond « API Studio 1.22.0 » et « IHM Studio 1.22.0 » ; `API-Studio.exe --cli` relit le projet d'essai (891 variables, 29 POU, 75 sections, 28 DDT, 8 DFB) ; le bac à sable de l'exécutable Windows (analyse, compilation, exécution, un cas réussi et un cas faux exprès) ; les associations `.xihm` et `.xapi` ; la copie de secours de la 1.21.3 gardée. L'interface (dont celle des missions) n'a pas été ouverte dans une fenêtre.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 6. Limites (la liste précise)
 
 - **IHM Studio seulement** : les missions vivent là où vit l'Assistant ; API Studio n'en a pas, et une mission ne travaille que sur le projet IHM (pas le programme de l'automate).
@@ -148,12 +161,16 @@ Vérifié **sous Wine (pas sur un vrai Windows)**, en silencieux, par-dessus la 
 - `editMissionPlan` (ajouter, ignorer, renommer une étape à la main) et `attachMission` (rattacher une conversation) existent dans l'Assistant mais **n'ont pas encore de bouton** dans l'interface : on passe par l'IA (« ajoute une étape… ») ou par l'actualisation du plan.
 - Une **compilation Visual Studio (MSVC)** n'a pas été faite : seule la chaîne CMake (Linux, MinGW) est construite et essayée.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 7. Choix faits, et écarts à la demande
 
 - **Captures d'écran** : la demande les liste dans les livrables ; ta consigne permanente (« supprime les futures captures d'écrans ») les a retirées pour livrer plus tôt. Je l'ai suivie : aucune séance de captures sous Wine. Les écrans sont vérifiés par `ai_missions_ui_test`, qui les dessine hors écran et contrôle leur contenu. Dis-le si tu veux une passe de captures pour cette version.
 - **Branches** : rien n'est fusionné dans une autre branche ; seule la branche de travail de la session est poussée, comme d'habitude.
 - **Fichiers d'aide** : une section ajoutée à l'aide F1 (« Les missions IA ») et six notes de version ; aucune autre aide n'est modifiée.
 - **Version Visual Studio** : le fichier `resources/windows/xpg_analyzer.rc` était resté à 1.12.0 (trouvé par la mission de documentation) ; il est aligné sur 1.22.0, sans quoi `build.bat` refusait de construire.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 8. La documentation de référence (mission README)
 
@@ -166,3 +183,9 @@ Faite en parallèle, documentation seulement (aucun code, aucun format, aucune c
 - **Non vérifiable (dit comme tel dans les documents)** : un vrai Windows (seulement Wine) ; une compilation MSVC ; l'interface graphique sous Linux pour les versions actuelles ; l'Assistant avec une vraie IA ; les versions d'outils sont « constatées » dans l'environnement de construction.
 - **Constats laissés tels quels** (hors périmètre) : `.XEF`/`.ZEF` reconnus mais non lus, `.XDB` non implémenté ; `SDL3.dll`/`.lib` et PDFium non versionnés ; 22 suites d'essais déclarées sans leur source, 3 sources d'essai non référencées ; `build.sh` et `runtests.sh` historiques ; l'aide F1 annonce six onglets pour la fenêtre Mémoire, il y en a sept.
 - **Reste à faire** : les 18 captures listées ; un essai réel sous Windows et avec une vraie IA.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ASSISTANT-IA.md](ASSISTANT-IA.md)</sub> <!-- nav -->

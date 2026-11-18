@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # IHM Studio
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [API-STUDIO.md](API-STUDIO.md) · [FORMATS.md](FORMATS.md) · [ASSISTANT-IA.md](ASSISTANT-IA.md) · [README.md](images/README.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Référence fonctionnelle d'**IHM Studio** (exécutable `IHM-Studio.exe`, édition `core::Edition::Ihm`), version 1.22.0 : conception, simulation et exploitation d'une interface homme-machine de supervision. Chaque section renvoie au code qui l'implémente ; le mode d'emploi détaillé, écran par écran, est l'aide F1 (source : `tools/guide-ihm/guide-ihm.txt`, 269 sujets d'après la note de livraison 1.21.3). L'Assistant IA a sa propre référence : [ASSISTANT-IA.md](ASSISTANT-IA.md). Retour au [README](../README.md).
 
@@ -25,6 +28,8 @@ Référence fonctionnelle d'**IHM Studio** (exécutable `IHM-Studio.exe`, éditi
 19. [Échanges, documentation et historique](#echanges)
 20. [Limitations](#limitations)
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="role"></a>
@@ -35,6 +40,8 @@ IHM Studio conçoit les écrans d'exploitation d'une installation (vues, synopti
 Depuis la 1.12.0, IHM Studio **ne contient pas le programme de l'automate** : ses variables sont les siennes (variables IHM), liées aux adresses de ses équipements ; l'automate est un équipement Modbus TCP comme un autre (`docs/LIVRAISON-1.12.0.md`, `src/project/ProjectStore.hpp`). Le préfixe `API.` des variables de l'automate n'existe que dans l'édition qui a l'automate.
 
 Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèle ne sait rien de l'écran ») ; l'éditeur et les volets sont dans `src/app/hmi/`.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -47,6 +54,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - **Enregistrer** (Ctrl+S) : écriture atomique, index écrit en dernier, chaque fichier terminé par `fin` ; une vue retirée de l'index part dans `ihm/corbeille/`.
 - **États** DEV, FINISH, LOCK et **versions** du projet : comme dans API Studio ([API-STUDIO.md](API-STUDIO.md#projets)). Le poste d'exploitation n'ouvre qu'un projet FINISH.
 - **Reprise après arrêt brutal** : voir le [README](../README.md#communes).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -64,6 +73,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - **Modèles de vues** (galerie) et **paquets** d'export de vues, symboles, types, fonctions, scripts (`.xpgvues`, `.xpgsymboles`, `.xpgtypes`, `.xpgfonctions`, `.xpgscripts`…).
 - Toute modification est une commande annulable (Ctrl+Z / Ctrl+Y, historique Ctrl+H).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="objets"></a>
@@ -74,6 +85,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - Exemples : cuve, silo, trémie, pompe, moteur, vanne et vanne 3 voies, tuyauterie, variateur, instrument ISA, disjoncteur… (synoptique) ; bouton, bouton à impulsion, interrupteur, curseur, champ de saisie, liste déroulante, programmateur horaire… (commandes) ; voyant, jauge, bargraphe, afficheur numérique, afficheur 7 segments, tableau, code QR… (affichage) ; courbe, courbe XY, graphique en barres, camembert, radar, histogramme, chronogramme (graphiques) ; bandeau, compteur, historique et statistiques d'alarmes ; gestion et éditeur de recettes, compteurs de production ; **Réglage PID** ; conteneurs, onglets, barre de navigation, fil d'Ariane ; état de la communication, diagnostic automate ; vidéo, visionneuse de documents, image animée, GIF animé, explorateur de fichiers ; enregistreur, lecteur d'enregistrements ; connexion, gestion des utilisateurs.
 - Un rôle par propriété (nombre, booléen, couleur, formule, texte, durée…) : `src/hmi/HmiRoles.hpp`.
 - Bibliothèque d'images embarquée, dessinée en SVG depuis `tools/images/images.txt` (`tools/images/generer_images.py`), et **Mes images** de l'utilisateur (`<réglages>/images/`).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -86,6 +99,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - **Raccourcis clavier d'une vue** (format de projet 24), **constantes et fonctions d'une vue** (format 26).
 - **Variables d'instance** `Vue.Objet.Propriété` lisibles dans les scripts ; variables système `SYS.` (`src/hmi/HmiRuntimeSystem.*`).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="vues"></a>
@@ -97,6 +112,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - **Navigation** : vue de démarrage, vue parente, vues de démarrage par groupe d'utilisateurs, objets de navigation.
 - Rangement en **dossiers** (vues, popups, modèles, symboles, scripts, types, styles, ressources) par glisser-déposer.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="variables"></a>
@@ -106,6 +123,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - **Types IHM** (`src/hmi/HmiTypes.*`, `HmiTypeRegistry.*`) : structures, tableaux (y compris à N dimensions), **énumérations** (avec conversions vers/depuis le texte), **types objets** (méthodes, membres privés, héritage, interfaces), types rappel, **génériques** (`T_Pile<T>`), **unités de mesure** dans les types et contrôle strict optionnel (`src/hmi/HmiUnits.hpp`), **espaces de noms et bibliothèques** reliées. Chacune de ces capacités correspond à un numéro de format de projet (voir [FORMATS.md](FORMATS.md#format-ihm)).
 - Import et export des membres d'un type avec Excel.
 - Visualisation graphique des variables.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -119,6 +138,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - **Débogueur des scripts IHM** : points d'arrêt, pas à pas, pile, variables locales (`src/hmi/HmiRuntimeDebug.*`).
 - **Journal** `IHM_LOG` et console (Ctrl+J : panneau du bas).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="alarmes"></a>
@@ -130,6 +151,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - **Historiques et courbes** ; **rapports périodiques** (`src/hmi/HmiReports.hpp`).
 - Données d'exploitation dans `ihm/historique/` (alarmes, mesures, audit).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="securite"></a>
@@ -138,6 +161,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - Utilisateurs, groupes et permissions (par exemple **Piloter**, **Administrer**), menu de connexion, objets de connexion et de gestion des utilisateurs.
 - **Politique des mots de passe**, verrouillage, **badge** (`src/hmi/HmiPolicy.hpp`) ; mots de passe stockés en empreinte salée (`src/hmi/HmiCrypto.*`).
 - **Signature électronique** d'une commande (`src/hmi/HmiSignature.hpp`) et **journal d'audit**.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -152,6 +177,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - **Esclaves Modbus simulés (jumeaux)** : un équipement virtuel pour essayer sans matériel, valeurs animées ou forcées (`src/hmi/HmiTwin.hpp`, `HmiZones.*`).
 - Sous Windows, l'installateur peut ajouter une règle de pare-feu entrante pour `IHM-Studio.exe` (installation pour tous les comptes).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="ressources"></a>
@@ -162,6 +189,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - **Visionneuse de documents** : PDF par PDFium chargé à la demande (`pdfium.dll` à côté de l'exécutable, ou `XPG_PDFIUM`) ; sans PDFium, la visionneuse le dit (`third_party/pdfium/ORIGINE.txt`).
 - **Fichiers externes** (`src/hmi/HmiExternal.hpp`) : Excel (`.xlsx`/`.xlsm`), CSV, TXT, JSON, XML, **SQLite** (lu directement dans le fichier, sans pilote). Une « base externe » par chaîne de connexion est seulement décrite : la connexion demande un pilote que l'outil n'embarque pas.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="langues"></a>
@@ -171,6 +200,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - **Unités et formats** des variables.
 - **Styles nommés** réutilisés par les objets.
 - Taille, couleurs, thème de l'IHM ; sélecteur de thème en marche.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -183,6 +214,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - **Vérification globale du projet**, analyse et optimisation des adresses (`src/hmi/HmiAudit.hpp`) ; **graphe des relations** (qui utilise quoi, orphelins) (`src/hmi/HmiRelations.*`).
 - **Essais de réception** décrits dans le projet.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="simulation"></a>
@@ -193,6 +226,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - Rémanence de simulation (les valeurs reprennent d'une séance à l'autre, `src/hmi/HmiSimData.*`), page Simulation des paramètres système.
 - La simulation de l'automate (programme ST) n'existe que dans API Studio.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="poste"></a>
@@ -201,6 +236,8 @@ Le modèle IHM ne dépend pas de l'écran (`src/hmi/HmiModel.hpp` : « le modèl
 - **Poste d'exploitation** : l'IHM seule, en plein écran, sans l'éditeur — `IHM-Studio.exe --poste <dossier du projet>` (ou `--ihm`), bouton de l'accueil, ou installation dédiée (profil « Poste d'exploitation » de l'installateur). Kiosque, mot de passe de sortie (Ctrl+Alt+Q), écrans secondaires, démarrage avec la session (valeur « XPG Poste d'exploitation » de la clé `Run` sous Windows ; fichier `xpg-poste.desktop` dans `~/.config/autostart` sous Linux — `src/app/hmi/HmiStationLaunch.*`), lanceur `lancer-poste.cmd` écrit dans le dossier du projet. Projet FINISH exigé. État sauvegardé toutes les 10 s pour la reprise (`src/app/screens/StationScreen.*`, `src/app/Recovery.hpp`).
 - **Accès web** (`src/hmi/HmiWeb.hpp`) : serveur HTTP intégré (port 8080 par défaut d'après l'aide) qui diffuse **l'image JPEG** de la vue en marche ; comptes de l'IHM, lecture seule par défaut, clics transmis seulement si l'accès le permet et que l'utilisateur a la permission Piloter. Rien d'autre ne sort (ni fichier, ni projet). Le serveur est en HTTP, sans TLS.
 - L'export de l'IHM en **page web autonome** a été **retiré en 1.13.0** (aide F1, sujet « page-web »).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -218,6 +255,8 @@ IHM-Studio.exe --quitter-relecture
 
 Codes de sortie : 0 fait, 1 option mal écrite, 2 aucune IHM en marche, 3 nom introuvable, 4 mot de passe faux, 5 refusé par la configuration, 6 occupée, 7 erreur de fichier (`src/main.cpp`).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="incidents"></a>
@@ -226,6 +265,8 @@ Codes de sortie : 0 fait, 1 option mal écrite, 2 aucune IHM en marche, 3 nom in
 Depuis la 1.20.0 (`src/hmi/HmiIncident.hpp`, `src/app/ai/AiIncident.hpp`) : à l'apparition d'une alarme (fronts seulement, jamais à chaque cycle), un **dossier d'incident** autonome est créé dans `ihm/ressources/enregistrements/` : contexte copié au moment du défaut (alarme, chaîne de dépendances lue dans le graphe des relations, valeurs disponibles, chronologie, alarmes liées, pistes classées avec leur niveau de certitude), capture, vidéo Motion-JPEG des secondes autour du défaut, analyses et commentaires successifs, empreintes SHA-256 vérifiables par `sha256sum`. Valider un incident le copie vers `valides/` après vérification.
 
 Le code le précise : cette fonction aide à comprendre un événement ; elle n'est pas une surveillance de sécurité de la logique automate.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -236,6 +277,8 @@ Le code le précise : cette fonction aide à comprendre un événement ; elle n'
 - **Exporter / Importer** l'IHM : archive (`.xihm`, ou `.zip` des versions 1.x) ; importer reconstruit l'IHM du projet ouvert en une commande annulable.
 - **Dossier de l'IHM** en **Word ou PDF** (`src/hmi/HmiDossier.hpp`) : couverture, présentation, chaque vue avec sa vignette, variables, alarmes, recettes, utilisateurs, scripts, essais ; jamais les mots de passe.
 - **Historique des modifications des objets** (`src/hmi/HmiEditHistory.hpp`) : à chaque enregistrement, chaque objet créé, modifié ou supprimé est noté propriété par propriété, signé (date, nom du PC, compte Windows, version), 100 entrées par objet, dans `ihm/historique-edition/<id de vue>.txt`.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -249,3 +292,9 @@ Le code le précise : cette fonction aide à comprendre un événement ; elle n'
 - Vidéo MP4/WMV/MOV : Windows seulement (Media Foundation).
 - Pas de programme automate dans IHM Studio : il se relie à l'automate comme à un équipement.
 - Les exécutables graphiques livrés sont pour Windows x64 ; voir les plates-formes dans le [README](../README.md#plates-formes).
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [API-STUDIO.md](API-STUDIO.md) · [FORMATS.md](FORMATS.md) · [ASSISTANT-IA.md](ASSISTANT-IA.md) · [README.md](images/README.md)</sub> <!-- nav -->

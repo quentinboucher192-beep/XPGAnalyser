@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # IHM Simulation : rapport final (spécification du 08/10/2026)
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Ce rapport clôt votre spécification « IHM Simulation » : génération incrémentale, compilation, diagnostics, journalisation et rémanence. Elle a été livrée en quatre lots :
 
@@ -35,6 +38,8 @@ Le détail de chaque lot est dans `docs/LIVRAISON-1.11.13.md` à `docs/LIVRAISON
 | Le projet compile sans erreur | oui | Linux (GCC) et Windows (MinGW-w64), sans erreur. |
 | Les fonctionnalités existantes continuent de fonctionner | oui | les 59 suites de tests passent (5 933 contrôles dans `hmi_editor_test` seul). |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 1. Les fichiers créés
 
 **Les services :**
@@ -60,6 +65,8 @@ Le détail de chaque lot est dans `docs/LIVRAISON-1.11.13.md` à `docs/LIVRAISON
 **Les documents :**
 - `docs/LIVRAISON-1.11.13.md` à `docs/LIVRAISON-1.11.16.md` ;
 - ce rapport.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 2. Les fichiers modifiés
 
@@ -87,6 +94,8 @@ Le détail de chaque lot est dans `docs/LIVRAISON-1.11.13.md` à `docs/LIVRAISON
 
 En tout : 83 fichiers, environ 20 300 lignes ajoutées et 1 450 retirées, pour les quatre lots.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. Le rôle de chaque service
 
 | Service | Où | Rôle |
@@ -100,6 +109,8 @@ En tout : 83 fichiers, environ 20 300 lignes ajoutées et 1 450 retirées, pour 
 | **La rémanence d'exploitation** (RuntimePersistenceService) | `hmi::retain` | Elle garde les variables cochées « Rémanente » sur le poste. Le module a son propre format, son verrou, son import et son export (CSV pour Excel), sa vérification d'intégrité et l'état d'une variable pour l'éditeur. |
 | **Les écritures atomiques** | `core::writeFileAtomic` | Cache, artefacts, rémanences et exports sont écrits d'un bloc, avec la copie de l'ancien. |
 | **Le cycle de la simulation** (SimulationController) | `app::HmiSimulationPane` | Démarrer par le build, Arrêter, Redémarrer, Générer et redémarrer, l'arrêt sur modification et sa carte ; sur le poste, la capture regroupée des variables rémanentes. |
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 4. Le format du cache de build
 
@@ -136,6 +147,8 @@ fin
 4. le `.tmp` renommé.
 
 **Le verrou.** `build.lock` contient le PID et l'heure de l'instance qui construit. Une seconde instance ne construit pas en même temps, et le dit. Un verrou de plus de 10 minutes est repris.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 5. Le format des fichiers de rémanence
 
@@ -221,6 +234,8 @@ L'import relit ce CSV même modifié dans Excel :
 
 L'import relit aussi le format du poste. Une valeur va à sa variable par son identifiant si le nom concorde, sinon par son nom : un CSV sans identifiant, ou venu d'un autre projet, fonctionne donc. Les variables inconnues, non rémanentes ou liées sont écartées, et le compte rendu le dit.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 6. Les règles exactes d'invalidation
 
 ### Le build (lot 1)
@@ -285,6 +300,8 @@ Le reste est dit en avertissement.
 
 Un script de Démarrage qui écrit une variable a le dernier mot. Par exemple, `Compteur_Clics := 0;` dans votre script `Init` remet ce compteur à zéro même s'il est rémanent.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 7. Les tests ajoutés
 
 | Suite (CTest) | Fichier | Contrôles | Ce qu'elle couvre |
@@ -329,6 +346,8 @@ Un script de Démarrage qui écrit une variable a le dernier mot. Par exemple, `
 | 28 | appel invalide à `IHM_LOG` | `hmilog` *verification* ; `hmibuild` *ihmLogInvalide* |
 | 29 | navigation vers la source depuis un diagnostic | `hmieditor` *sources1116* ; session 11116 (`ihm-curseur 2 "Horloge"`) |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 8. Les limitations restantes
 
 - **Rien n'a été lancé sur un vrai Windows** : tout a été vérifié sous Wine (l'exe livré et son installateur).
@@ -338,6 +357,8 @@ Un script de Démarrage qui écrit une variable a le dernier mot. Par exemple, `
 - **La valeur actuelle** de la fiche est celle de la simulation de l'éditeur, quand elle tourne. Le poste d'exploitation ne tourne pas sous l'éditeur : sa valeur du moment est celle qu'il garde.
 - **Deux instances de l'éditeur** sur le même projet peuvent écrire, l'une après l'autre, la rémanence de simulation. Chaque écriture reste entière, mais la dernière l'emporte. Le build et le poste, eux, ont leur verrou.
 - **Le cas 20** (« génération sans effacement ») est vérifié dans le volet sans un vrai build incrémental derrière. La chaîne complète l'est dans la session 11115.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 9. Tester vous-même l'ensemble
 
@@ -372,3 +393,9 @@ Prenez une copie d'Armoire_Gaz.
    1. Fermez l'application pendant que le poste tourne, puis ouvrez `ihm/historique/remanence_exploitation.txt` : il finit par `fin`.
    2. Coupez-le à la main (supprimez la fin) : au lancement suivant, le poste reprend la copie `.bak` et le journal le dit.
    3. Lancez deux postes sur le même projet : le second dit qu'un autre poste écrit déjà, puis prend la relève quand le premier s'arrête.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->

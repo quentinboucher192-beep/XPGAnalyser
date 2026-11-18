@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Compiler API Studio et IHM Studio
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [TESTS.md](TESTS.md) · [CONFIG-INI.md](CONFIG-INI.md) · [DEPANNAGE.md](DEPANNAGE.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Ce guide couvre les trois façons de construire la suite à partir du dépôt (version 1.22.0) et la fabrication de l'installateur. Les commandes viennent des scripts du dépôt (`CMakeLists.txt`, `outils/`). Retour au [README](../README.md).
 
@@ -16,6 +19,8 @@ Ce guide couvre les trois façons de construire la suite à partir du dépôt (v
 8. [Outils de maintenance du dépôt](#outils)
 9. [Avant une livraison : la version](#version)
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="chaines"></a>
@@ -28,6 +33,8 @@ Ce guide couvre les trois façons de construire la suite à partir du dépôt (v
 | **MSBuild + MSVC (Visual Studio 2022 ou Build Tools)** | `build\Release\API-Studio.exe`, `IHM-Studio.exe` ; installateur par `outils\package.bat` | liste des sources tenue à jour (essai `vcxproj`) ; l'ancienne version de ce guide indiquait que ces scripts n'avaient pas encore tourné sous Windows, aucune note de livraison ultérieure ne rapporte une compilation MSVC, et la version du fichier `.rc` est en retard (§ 9) |
 
 Versions d'outils constatées dans l'environnement de construction utilisé pour les livraisons récentes : GCC 13.3 (Linux), MinGW-w64 GCC 13 (variante `posix`), CMake 3.28, Ninja 1.11. Minimum déclaré : CMake 3.24 (`cmake_minimum_required`), C++20.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -44,6 +51,8 @@ Versions d'outils constatées dans l'environnement de construction utilisé pour
 | Npcap (Windows) / libpcap (Linux) | capture de l'espion Modbus | chargés à la demande s'ils sont installés ; option `XPG_SANS_NPCAP` |
 | Python 3 | outils, essai `vcxproj` | outil externe |
 | Inno Setup ≥ 6.3 | installateur | outil externe (`#if Ver < EncodeVer(6, 3, 0)` dans `installateur/XPGAnalyser.iss`) |
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -62,6 +71,8 @@ ctest --test-dir build-linux --output-on-failure
 - Options CMake : `XPG_WITH_SDL`, `XPG_BUILD_TESTS`, `XPG_WARNINGS_AS_ERRORS`, `XPG_SANS_NPCAP` ; chemins d'essai `XPG_FIXTURE`, `XHW_FIXTURE`, `XPG_LIBS_DIR` (voir [ARCHITECTURE.md](ARCHITECTURE.md#bibliotheques)).
 - Mémoire : `src/hmi/HmiGuideText.cpp` (l'aide F1 générée) est compilé en `-O1` avec GCC/Clang et demande tout de même beaucoup de mémoire (environ 12 Go selon les notes de livraison 1.21.x) ; réduire le parallélisme (`ninja -C build-linux -j 2`) si besoin.
 - Détail des essais : [TESTS.md](TESTS.md).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -85,6 +96,8 @@ Ce que fait le script :
 
 Le runtime C++ étant lié statiquement, seuls `SDL3.dll` et `pdfium.dll` accompagnent les exécutables.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="paquet-linux"></a>
@@ -104,6 +117,8 @@ python3 outils/mingw/package_mingw.py --iscc /chemin/vers/ISCC.exe [--portables 
 5. avec `--portables DOSSIER` : un zip par application, `API-Studio-<version>-portable.zip` et `IHM-Studio-<version>-portable.zip`.
 
 `WINEPREFIX` et `WINEDEBUG` sont lus dans l'environnement.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -167,6 +182,8 @@ outils\package.bat /non-interactif
 
 Chaque script tient un journal dans `outils\journaux\<script>_<date>.log` (ignoré par Git) et affiche un résumé.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="codes"></a>
@@ -187,6 +204,8 @@ Chaque script tient un journal dans `outils\journaux\<script>_<date>.log` (ignor
 
 Dépannage : [DEPANNAGE.md](DEPANNAGE.md). Paramètres : [CONFIG-INI.md](CONFIG-INI.md).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="outils"></a>
@@ -205,6 +224,8 @@ Dépannage : [DEPANNAGE.md](DEPANNAGE.md). Paramètres : [CONFIG-INI.md](CONFIG-
 | `tools/tutoriels/generer_tutoriels.py`, `tools/sessions/` | Didacticiels et séances rejouées (`--script`) qui servent aux captures et aux vérifications. |
 | `tools/help_preview.cpp`, `tools/execorder_preview.cpp`, `tools/macros/macro_form.cpp` | Programmes de prévisualisation qui font peindre de vrais widgets par le moteur SVG (non construits par `CMakeLists.txt`). |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="version"></a>
@@ -220,3 +241,9 @@ La version doit être identique dans quatre fichiers (`src/core/Version.hpp`, ra
 `outils\build.bat` et `outils\package.bat` vérifient leur concordance sous Windows (`Get-XpgVersionsDuProjet`, `outils/lib/XpgOutils.psm1`).
 
 > **1.22.0** : les quatre fichiers portent 1.22.0. Jusqu'à la 1.21.3, `resources/windows/xpg_analyzer.rc` (le fichier de ressources utilisé par `XpgAnalyzer.vcxproj`) était resté à `1.12.0`, ce qui arrêtait `build.bat` et `package.bat` sur « Versions incohérentes » (code 2). La chaîne CMake (Linux, MinGW) n'est pas concernée : elle produit sa ressource depuis `resources/windows/xpg_analyzer.rc.in` avec la version de `CMakeLists.txt`.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ARCHITECTURE.md](ARCHITECTURE.md) · [TESTS.md](TESTS.md) · [CONFIG-INI.md](CONFIG-INI.md) · [DEPANNAGE.md](DEPANNAGE.md)</sub> <!-- nav -->

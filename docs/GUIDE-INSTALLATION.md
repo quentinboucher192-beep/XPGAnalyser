@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Installer, mettre à jour, réparer, désinstaller API IHM Studio
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [FORMATS.md](FORMATS.md) · [CONFIG-INI.md](CONFIG-INI.md) · [README.md](images/README.md) · [DEPANNAGE.md](DEPANNAGE.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Pour l'utilisateur, sous Windows. Un seul fichier : **`API-IHM-Studio-Setup-<version>.exe`** (pour cette version : `API-IHM-Studio-Setup-1.22.0.exe`). Il installe API Studio et/ou IHM Studio et apporte tout ce dont ils ont besoin, sans Internet : `SDL3.dll`, `pdfium.dll` (lecteur PDF) et, pour une version compilée avec MSVC, le runtime Visual C++ placé à côté des exécutables. Retour au [README](../README.md).
 
@@ -9,6 +12,8 @@ Pour l'utilisateur, sous Windows. Un seul fichier : **`API-IHM-Studio-Setup-<ver
 ## Configuration requise
 
 D'après `installateur/XPGAnalyser.iss` : Windows **10 version 1809 (10.0.17763) ou plus récent**, **x64** (`ArchitecturesAllowed=x64compatible`). L'installation « pour moi seul » ne demande pas de droits d'administrateur (`PrivilegesRequired=lowest`) ; « tous les comptes » les demande.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 1. Installer
 
@@ -81,6 +86,8 @@ API-IHM-Studio-Setup-1.22.0.exe /VERYSILENT /ALLUSERS /PROFIL=poste /POSTE="D:\P
 
 Un paramètre faux (`/PROFIL=autre`, le poste sans son projet…) arrête l'installateur sans rien installer ; le journal (`/LOG`) dit pourquoi.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 2. Où sont les choses
 
 | Quoi | Où |
@@ -95,9 +102,13 @@ Un paramètre faux (`/PROFIL=autre`, le poste sans son projet…) arrête l'inst
 
 Dans l'application, l'accueil (lien **Dossiers**), **Projet › Dossiers de l'application…** et **À propos** montrent ces dossiers. Chacun a un bouton **Ouvrir** ; les données, les projets, la bibliothèque et les captures ont aussi **Changer…**, avec copie du contenu si demandée ; l'ancien dossier n'est jamais effacé. Le format de ces fichiers : [CONFIG-INI.md](CONFIG-INI.md) et [FORMATS.md](FORMATS.md#emplacements).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. Mettre à jour
 
 Lancer le nouvel installateur : même `AppId`, donc Windows voit une mise à jour, pas un deuxième logiciel. Le dossier, le choix « pour qui », le profil et le dossier des données sont repris. La version installée est sauvegardée d'abord, puis l'application est fermée proprement. Les fichiers livrés non modifiés sont mis à jour ; ceux que tu as modifiés sont gardés, et la nouvelle version est rangée à côté. Les 3 dernières sauvegardes sont gardées (`[Maintenance] sauvegardes_a_garder`).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 4. En cas de problème (menu Démarrer › API IHM Studio › Maintenance)
 
@@ -116,6 +127,8 @@ Avant de modifier quoi que ce soit : l'application est fermée proprement (forc�
 
 Une installation pour tous les comptes se répare en administrateur : le script propose de se relancer avec les droits, pour cette opération seulement.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 5. Désinstaller
 
 Taper « désinstaller » dans la recherche Windows : **Désinstaller API IHM Studio** (menu Démarrer). Ou : Paramètres › Applications › Applications installées › **API IHM Studio** › Désinstaller.
@@ -126,9 +139,13 @@ Taper « désinstaller » dans la recherche Windows : **Désinstaller API IHM St
 
 Sans surveillance : `unins000.exe /VERYSILENT` (dans le dossier du programme) garde les données ; `/SUPPRIMERDONNEES=oui` les envoie à la Corbeille.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 6. Versions portables
 
 Chaque livraison fournit aussi un zip par application : `API-Studio-<version>-portable.zip` et `IHM-Studio-<version>-portable.zip` (fabriqués par `outils/mingw/package_mingw.py --portables`). Sans `installation.ini` à côté de l'exécutable, l'application range projets, bibliothèque, ressources et captures dans son **dossier de travail** (ou celui de l'exécutable s'il contient `resources\`), et ignore `XPGAnalyser.ini` (`src/app/Dossiers.hpp`, `src/main.cpp`). Les réglages restent dans `%APPDATA%\XpgAnalyzer`.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 7. La recette à faire sur un PC Windows
 
@@ -139,3 +156,9 @@ Tout cela n'a été essayé que sous Wine (voir `RAPPORT-ANALYSE.md`, § 10, et 
 3. Réinstaller par-dessus (mise à jour) : la sauvegarde de la version d'avant apparaît dans `restore_backup.bat /liste`.
 4. Supprimer `SDL3.dll` du dossier du programme, puis Maintenance › Réparer › Réparation automatique : l'application redémarre.
 5. Désinstaller en gardant les données : `Documents\XPGAnalyser` est toujours là.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [FORMATS.md](FORMATS.md) · [CONFIG-INI.md](CONFIG-INI.md) · [README.md](images/README.md) · [DEPANNAGE.md](DEPANNAGE.md)</sub> <!-- nav -->

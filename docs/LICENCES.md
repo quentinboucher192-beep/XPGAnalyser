@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Licences — conception (préparées en 1.29.0, branchées en 1.30.0)
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [DEPLOIEMENT.md](DEPLOIEMENT.md) · [SERVICE-LICENCES.md](SERVICE-LICENCES.md) · [BOUTIQUE.md](BOUTIQUE.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Ce document décrit les licences : le format des fichiers signés, le registre des éditions et fonctionnalités, l'identité d'un PC, la vérification hors ligne et ses états (dont **« Non activées »** : un programme sans clé d'éditeur n'est jamais bloqué), l'activation par fichier, les deux fichiers de clés et l'option CMake de la clé d'essai, ce que lit l'écran Licence (registre, PC liés, historique), l'outil de l'éditeur (livré à part, avec son registre des activations), l'installateur et le contrôle du paquet. Il reprend la maquette validée (onglets Studio, Admin, Client, Architecture) et les décisions prises avec toi :
 - **version 1 sans service en ligne** : licences signées, vérifiées hors ligne, activation **par fichier** ;
@@ -18,6 +21,8 @@ Retour au [README](../README.md). Voir aussi [DEPLOIEMENT.md](DEPLOIEMENT.md) (l
 | Interface | **1.30.0** : les Studios lient `xpg_licensing` (l'écran Licence et les verrous des entrées : `src/app/Licence*`) | — |
 | Installateur | **1.30.0** : `%ProgramData%\XPG\Licences` créé pour tous les comptes, avec le droit Modifier des Utilisateurs ; gardé à la désinstallation ; le registre livré (`licences\registre.xpgreg`) s'il est dans le dossier à livrer ; le contrôle du paquet dans `package_mingw.py` **et** `package.ps1` (§ 13) | le registre réel, signé par toi (`ressources-licences/registre.xpgreg`) |
 | En ligne | **1.35.0** : le service des licences (`docs/SERVICE-LICENCES.md`) ; côté PC (§ 12 bis) : la **licence en ligne** (champ `service`, aucun PC lié) valable avec l'activation de ce PC signée par le service, le **bail** et son **compteur** (l'heure retenue), l'heure signée, la licence **flottante** et son jeton, la **Découverte** enregistrée par le service | **voir chaque lancement du logiciel** (§ 12) |
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 2. Les programmes et les modules
 
@@ -39,6 +44,8 @@ Retour au [README](../README.md). Voir aussi [DEPLOIEMENT.md](DEPLOIEMENT.md) (l
 
 `licensing/` ne dépend que de `core/` (JSON, processus) et de `deploy/Crypto` (SHA-256, Ed25519, hasard, DPAPI, écriture d'un fichier privé : rien n'est réécrit). Il n'a ni interface ni lien vers `src/app/` ; c'est `xpg_app` qui le lie (1.30.0 : `target_link_libraries(xpg_app PUBLIC xpg_licensing)` ; CMake remet `xpg_deploy` et `xpg_core` après lui sur la ligne de lien, ce que demande l'éditeur de liens de MinGW).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. L'enveloppe signée
 
 Licence (`.xpglic`), registre (`.xpgreg`), révocations (`.xpgrev`) et demande d'activation (`.xpgreq`) sont des fichiers texte faits d'un ou de plusieurs **blocs** :
@@ -55,6 +62,8 @@ SIGNATURE ed25519 xpg-cb0d1ae560b52310 <128 hexadécimaux>
 - Le fichier rendu par l'Admin contient **la licence, le registre et, si on la donne, la liste de révocation** : le client n'importe qu'un fichier.
 
 **La lecture est stricte** : JSON bien formé, un objet, **aucune clé en double** (à aucun niveau), **aucune clé inconnue** (un champ qui restreindrait une licence ne peut pas être ignoré en silence ; un champ nouveau = une version nouvelle du format), chaque champ du bon genre et dans ses bornes. Un format plus récent est refusé avec « mets à jour ce programme ».
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 4. Le registre (le « manifeste numéroté »)
 
@@ -92,6 +101,8 @@ SIGNATURE ed25519 xpg-cb0d1ae560b52310 <128 hexadécimaux>
 - `unlicensed_edition` : l'édition qui s'applique **sans licence** (et quand la licence ne vaut pas) — FREE dans la maquette.
 - **Numéroté** : un client refuse un registre plus ancien que le plus récent qu'il a vu (à l'import, et si le fichier est remplacé sur le disque).
 - Le registre d'exemple (`tests/fixtures/licences/registre-exemple.json`) reprend les 21 fonctionnalités et les 6 éditions de la maquette (FREE 4, PERSONAL 10, PROFESSIONAL 18, ENTERPRISE 21, EVALUATION 18, CUSTOM 0). Ce sont des **exemples** : tout se règle dans le registre, rien dans le code. Les deux limites déclarées (`max_views`, `requests_per_day`) servent aux essais ; aucune édition n'en fixe.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 5. La licence
 
@@ -133,6 +144,8 @@ SIGNATURE ed25519 xpg-cb0d1ae560b52310 <128 hexadécimaux>
 
 **Plusieurs PC** : une licence liste ses PC. Pour en ajouter un, l'Admin ré-émet la licence (même identifiant) avec l'ancienne et la nouvelle demande (`--licence ancienne.xpglic --demande nouveau.xpgreq`) ; les PC déjà liés gardent leur fichier, le nouveau reçoit le sien. L'Admin refuse au-delà de `max_devices`. Un PC n'accepte pas une émission **plus ancienne** de la licence qu'il a déjà.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 6. Les révocations
 
 ```json
@@ -142,6 +155,8 @@ SIGNATURE ed25519 xpg-cb0d1ae560b52310 <128 hexadécimaux>
 ```
 
 Numérotée et signée ; un client refuse une liste plus ancienne que la plus récente vue. Avec `device` : la licence n'est retirée que pour ce PC (un transfert). Une liste déjà vue qui **disparaît** du disque, ou qui est remplacée par une plus ancienne : la licence devient Invalide (pas de retour à Valide). Sans service, un PC n'apprend une révocation qu'en important un fichier qui la porte (une licence renouvelée, ou un envoi exprès). 1.35.0 : une licence EN LIGNE révoquée revient dans la réponse du renouvellement (`retirees`, raison `revoquee`) et ce PC la retire - la liste entière n'est plus envoyée ; une licence liée à des PC reçoit la liste par l'état de son poste, scellée par l'éditeur pour ce seul PC.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 7. L'identité du PC et l'activation par fichier
 
@@ -168,6 +183,8 @@ Une relecture de sécurité a confirmé que la cryptographie tient (signature v�
 - **L'outil de l'éditeur** : `liste --csv` neutralise une cellule qui commencerait par `= + - @` (une formule Excel venue d'une demande) et une demande dont le nom de PC commence ainsi est refusée ; jusqu'à la 1.34.0, le jeton GitHub ne partait que vers `https://api.github.com` (ou la boucle locale, pour les essais) ; depuis la 1.35.0 il n'y a plus de jeton : chaque appel au service des licences est signé par la clé de l'éditeur.
 
 **Compatibilité** : les nouveaux champs (`station`, `issued_before`) sont facultatifs et écrits seulement quand ils servent ; un client 1.30/1.31 refuse un document qui les porte (champ inconnu). Sans conséquence aujourd'hui : aucun programme livré n'a encore la clé de l'éditeur. Il faut l'outil de l'éditeur 1.32.0 pour lire une demande 1.32.0.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 8. Les états
 
@@ -227,6 +244,8 @@ Un Studio installé, licences actives (une clé de l'éditeur), **sans fichier d
 **Un dossier où ce compte n'écrit pas** : un début déjà noté (dans n'importe quelle copie) compte ; si aucune copie ne peut le noter, l'évaluation est donnée depuis ce lancement, et `detail` dit qu'elle n'est pas gardée d'un lancement à l'autre (sous Windows, la copie de HKCU s'écrit presque toujours).
 
 **Honnêtement** : quelqu'un qui efface **toutes** les copies (et l'historique) recommence ; ceci arrête la réinstallation et l'effacement d'un fichier, pas davantage — comme pour l'horloge (§ 8).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 9. L'API (`src/licensing/Licensing.hpp`)
 
@@ -288,6 +307,8 @@ struct HistoryEvent        { std::int64_t at; std::string kind; /* "import", "de
 
 Exemple de ligne : `{"at":"2027-11-09T00:00:00Z","kind":"etat","ok":true,"status":"grace","text":"Valide → Grâce : …"}`. **500 lignes au plus** : les plus anciennes partent ; une ligne illisible est ignorée (et ne se recopie pas) ; un champ inconnu (une version plus récente) n'empêche pas de lire la ligne. Un changement d'état n'est noté qu'une fois, même si deux programmes de ce PC (API Studio et IHM Studio) le constatent : le dernier état noté est relu dans le fichier. Pendant un import, la ligne d'état vient après celle de l'import (la cause, puis l'effet). En Non activées, l'évaluation n'écrit rien. Un dossier où ce compte n'écrit pas : rien n'est noté, `detail` le dit (§ 7).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 10. Jamais de perte de travail (la règle du branchement des menus, 1.30.0)
 
 - **Ouvrir, Enregistrer, Enregistrer sous, Exporter, Fermer, Quitter** ne portent **aucun** identifiant de fonctionnalité et ne demandent **jamais** `isFeatureEnabled`, quel que soit l'état (Expirée, Révoquée, Invalide, Autre PC, Absente, Horloge reculée). Les exports « avancés » éventuels (`advanced_export`) sont des entrées à part ; l'export ordinaire d'un projet reste toujours permis.
@@ -296,6 +317,8 @@ Exemple de ligne : `{"at":"2027-11-09T00:00:00Z","kind":"etat","ok":true,"status
 - Chaque entrée verrouillée garde sa place dans le menu, avec le cadenas « pas dans ta licence » (maquette) et la phrase ; jamais une entrée qui disparaît.
 - 1.39.0 : **barrée**. Dans les menus (la barre du haut, les menus du clic droit de l'explorateur), l'arbre du projet (et les boutons de la rangée des outils), la palette Aller à / Faire (Ctrl+K), une entrée dont la fonctionnalité n'est pas dans la licence a son libellé barré, un cadenas et « pas dans ta licence ». Elle reste choisissable : le clic va au contrôle (`licence::gate`), qui ouvre la fenêtre **« Ta licence ne permet pas cette action »** : l'action, la fonctionnalité qu'elle demande (et son logiciel), pourquoi (la Découverte, ta licence X, pas de licence valable), sa capture, les offres qui la contiennent avec leur prix ; Voir les offres… ouvre la boutique. Le test est en ligne dans `Licence.hpp` (`licence::locked`, `lockedAction`) : les menus et les listes se compilent aussi dans des essais sans `Licence.cpp`. L'Assistant IA (ouvrir le panneau, envoyer, créer une mission) passe par le même contrôle.
 - Aucun nom de l'outil Admin dans le code des clients (le contrôle du paquet le refuserait).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 11. L'outil de l'éditeur : `XPG-License-Admin`
 
@@ -446,6 +469,8 @@ Les règles : le réseau et Argon2id jamais sur le fil de l'interface ; une opé
 
 Le contrôle du paquet refuse aussi le nom `XPG-License-Manager-Admin` ; l'application porte la marque de l'outil (`kAdminMarker`). `outils/mingw/admin_editeur.sh` construit les deux cibles et met dans le zip de l'éditeur l'application, `SDL3.dll` et la console.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 12. Ce qui est prévu pour plus tard, et pourquoi il faut un service hébergé
 
 *1.35.0 : le service est là (un Worker Cloudflare, `docs/SERVICE-LICENCES.md`) ; ce que le PC en fait est au § 12 bis. Ce paragraphe garde le raisonnement de la 1.30.*
@@ -461,6 +486,8 @@ Le format prévoit `type: "floating"` et `service` ; rien ne prétend les faire 
 - **Voir chaque lancement du logiciel** (même sans activation : qui l'utilise, quelle version, quand) : le registre des activations de l'Admin (§ 11) ne voit que les demandes que les clients lui envoient. Voir chaque lancement demande le **service de licences en ligne** : à chaque lancement, le client enverrait l'identifiant de sa licence (s'il en a une), l'**empreinte de la clé du PC**, la version du logiciel et la date — **jamais le matériel** (ni nom réseau, ni adresse MAC, ni numéro de série). Il faudra aussi **informer clairement les utilisateurs** (RGPD : une mention dans les conditions d'utilisation, ce qui est envoyé, pourquoi, combien de temps c'est gardé). Prévu avec l'hébergement ; **pas fait**.
 
 L'hébergement (un petit serveur, ou une fonction en ligne avec sa base) n'est pas décidé ; le format est prêt à l'accueillir sans changer les licences par fichier.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 12 bis. Le service en ligne (1.35.0) : le côté du PC
 
@@ -526,6 +553,8 @@ Activée (une activation `flottante`), elle demande en plus `jeton.xpgjet` : le 
 
 Les fichiers de plus dans le dossier des licences : `activation.xpgact`, `jeton.xpgjet`, `decouverte.xpgdec`, `horloge.bin`, `code-activation.txt` (laissé par l'installateur, effacé après).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 13. Le contrôle du paquet
 
 `outils/mingw/package_mingw.py` contrôle le dossier à livrer **après le staging et pour chaque zip portable** ; un seul écart arrête la construction, avec la liste. Il cherche, dans les noms et dans les octets de chaque fichier (en ASCII et en UTF-16 : les chaînes larges des exe) :
@@ -556,6 +585,8 @@ Vérifié : ISCC 6.4.1 (sous Wine, `/O-` : le script compile, sans rien produire
 
 **1.32.0 : le contrôle du paquet** refuse aussi : dans `licences\`, tout sauf le registre, la liste de révocation et les textes de licence des bibliothèques ; partout, `*.xpglic`, `*.xpgreq`, `github*.json`, `etat.bin`, `historique.jsonl`, un dossier `archive/` (1.35.0 : aussi les fichiers du service de l'outil Admin — `service.json`, `service-releve.json`, `archive-vu.json`, `postes-publies.json`, `cle-synchro.cle` — et un dossier `demandes-en-ligne/`), un bloc de licence ou de demande dans n'importe quel fichier, une sauvegarde de clé (`*.xpgcle`, `XPG-SAUVEGARDE-CLE`), les fichiers de la synchro (`*.xpgsync`, `XPG-CHIFFRE 1 xpgs-`, `XPG-INDEX 1 xpgs-`). Avec `[Licences] obligatoires = oui` dans `outils/config.ini` (ou `--licences-obligatoires`), une construction dont `PublisherKey.hpp` n'a aucune clé est refusée (par défaut `non` : la clé de l'éditeur n'est pas encore créée).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 14. Les essais
 
 `licensing_test <XPG-License-Admin> <racine du dépôt> <libxpg_licensing.a>` (ctest `licensing`) : une clé d'éditeur d'essai créée dans un dossier temporaire, des PC simulés (un dossier chacun, une paire de clés chacun), l'heure donnée par l'essai.
@@ -580,3 +611,9 @@ Vérifié : ISCC 6.4.1 (sous Wine, `/O-` : le script compile, sans rien produire
 `github_sync_test` (ctest `githubsync`, 1.31.0 à 1.34.0) a été retiré avec la synchro GitHub en 1.35.0 ; la synchro de l'archive par le service est essayée par `admin_service_test` (ctest `adminservice`, § 11 quater).
 
 Sous Linux : **239** contrôles (1.29.0 : 154). Sous Wine (exe MinGW) en 1.29.0 : 142 contrôles, le contrôle du paquet sauté ; en 1.30.0, `licensing_test` n'a pas été refait sous Wine (`build-mingw` est configuré sans les essais) — l'outil Admin MinGW, lui, a été essayé sous Wine (§ 11 ter : `--version`, `creer-cle --essai`, `cle`, `exporter-cle` vers les deux fichiers, `--garder`, `--vide`, `signer-registre`, `verifier`).
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [DEPLOIEMENT.md](DEPLOIEMENT.md) · [SERVICE-LICENCES.md](SERVICE-LICENCES.md) · [BOUTIQUE.md](BOUTIQUE.md)</sub> <!-- nav -->

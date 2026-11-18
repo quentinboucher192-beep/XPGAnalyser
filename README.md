@@ -1,3 +1,4 @@
+<a id="haut-de-page"></a> <!-- nav -->
 <p align="center">
   <img src="resources/logo/api_studio_64.png" alt="Logo d'API Studio" width="64" height="64">
   &nbsp;&nbsp;
@@ -5,6 +6,8 @@
 </p>
 
 # API IHM Studio — API Studio et IHM Studio
+
+<sub>[⬇ Bas de page](#bas-de-page) · [Sommaire](#sommaire) · [Documentation](#documentation)</sub> <!-- nav -->
 
 Suite logicielle de bureau, écrite en C++20 avec une interface maison sur SDL3, pour travailler sur des **projets d'automatisme Schneider Electric programmés avec EcoStruxure Control Expert** et sur leur **supervision** :
 
@@ -43,6 +46,8 @@ Ce document est le point d'entrée de la documentation. Il décrit le code prés
 11. [Limitations connues](#limitations)
 12. [Documentation](#documentation)
 13. [Composants tiers et licences](#licences)
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -111,6 +116,8 @@ Les deux applications ne partagent ni leurs projets, ni leurs réglages, ni leur
 - **Éditeur** (licences, boutique, service) : [§ 2.5 à 2.7](#licence-studios), [docs/LICENCES.md](docs/LICENCES.md), [docs/ADMINS.md](docs/ADMINS.md), [docs/BOUTIQUE.md](docs/BOUTIQUE.md), [docs/SERVICE-LICENCES.md](docs/SERVICE-LICENCES.md), et le mode d'emploi livré avec l'Admin (`outils/mingw/LISEZ-MOI-EDITEUR.txt`).
 - **Développeur** : [§ 3 Architecture](#architecture), [§ 4 Organisation du dépôt](#depot), [§ 7 Formats](#formats), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Contributeur** : [§ 6 Compilation et développement](#compilation), [§ 10 Tests](#tests), [docs/GUIDE-COMPILATION.md](docs/GUIDE-COMPILATION.md), [docs/TESTS.md](docs/TESTS.md).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -248,6 +255,8 @@ Code : `src/license_admin/` (`Admin`, `ServiceClient`, `ArchiveSync`, `KeyBackup
 - **La confiance** : la clé de l'éditeur reste hors ligne ; le service a sa propre clé, créée par lui et certifiée par l'éditeur pour un an ; un Studio ne croit un document du service que s'il est signé par une clé certifiée pour l'adresse compilée. Du code d'activation, le service ne garde que l'empreinte ; les secrets de Stripe sont des secrets du Worker.
 - **La mise en ligne** est faite par l'éditeur, sur son compte : Admin › Service en ligne › **Déployer le service**, ou `outils/service/deployer.bat` / `deployer.sh` (`outils/service/LISEZ-MOI-SERVICE.txt`). Pour les essais, `outils/service/lancer-local.sh` lance le vrai Worker sur le poste (`workerd`, hors ligne).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="architecture"></a>
@@ -341,6 +350,8 @@ flowchart LR
     stripe -->|"événements signés"| svc
 ```
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="depot"></a>
@@ -384,6 +395,8 @@ flowchart LR
 | `main.cpp` | Point d'entrée des deux Studios | `xpg_api`, `xpg_ihm` |
 
 Remarques sur la racine : `build.sh` et `runtests.sh` sont des scripts historiques (voir [§ 10](#tests)) ; `Aide-2026-09-21.html` est une page HTML « Aide de la bibliothèque » exportée, `lot21.patch` un fichier de différences conservé tel quel et `XpgAnalyzer.lnk` un raccourci Windows : aucun de ces trois fichiers n'est utilisé par la construction ni par les scripts de fabrication.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -472,6 +485,8 @@ La console de l'Admin a ses propres commandes ([§ 2.6](#admin-editeur)) ; `XPG-
 
 Sous Linux, les réglages sont dans `$XDG_CONFIG_HOME/xpg-analyzer` (par défaut `~/.config/xpg-analyzer`). Détail et justification : [docs/FORMATS.md](docs/FORMATS.md#emplacements), [docs/CONFIG-INI.md](docs/CONFIG-INI.md), [docs/LICENCES.md](docs/LICENCES.md).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="compilation"></a>
@@ -551,6 +566,8 @@ La mise en ligne du service se fait depuis l'Admin (Service en ligne › Déploy
 - **Notes de version** : table des notes affichées dans l'application, `src/help/ReleaseNotes.cpp` ; une note de livraison par version dans `docs/LIVRAISON-<version>.md`.
 - **Format des projets IHM** : toute donnée nouvelle qui ne peut pas être relue par une version antérieure augmente `hmi::kFormatVersion` (règle décrite dans `src/hmi/HmiStore.hpp`).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="formats"></a>
@@ -581,6 +598,8 @@ Référence complète : [docs/FORMATS.md](docs/FORMATS.md) ; documents des licen
 - **Sauvegardes** : sauvegarde de la version installée avant mise à jour (3 gardées), réserve de réparation (`Reserve\<version>`), reprise après arrêt brutal, sauvegardes de la mémoire de l'Assistant, version « Avant restauration » ; côté éditeur, la sauvegarde de secours quotidienne de l'Admin (30 gardées, `docs/ADMINS.md`, § 9).
 - **Données de l'Assistant** : dossier `IA/` (conversations, pièces jointes, `parametres.json` sans clé, `notifications.json`, `cles/` protégées par DPAPI sous Windows…) — [docs/ASSISTANT-IA.md](docs/ASSISTANT-IA.md#donnees).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="assistant"></a>
@@ -603,6 +622,8 @@ Un modèle servi sur le PC (Ollama, LM Studio) reçoit les mêmes données sans 
 - `http://` n'est accepté que vers le poste lui-même, ou vers une adresse privée pour un service compatible OpenAI sans clé ;
 - limites : qualité dépendante du modèle, essais automatiques faits avec un faux fournisseur (aucun essai avec une vraie IA rapporté pour les 1.22.0 à 1.46.0), bac à sable non isolé du réseau sous Windows, C/C++ jamais exécutés, PDF scannés et `.xls` non lus.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="captures"></a>
@@ -613,6 +634,8 @@ La documentation ne contient **aucune capture d'écran du logiciel** : les image
 Le logiciel, lui, livre des captures : les **aperçus des fonctionnalités** montrés par la fenêtre Licence (`resources/licences/fonctions/`, 54 images et leurs légendes, 2 ou 3 par fonctionnalité depuis la 1.45.0), faits avec les programmes Windows sous Wine sur des projets de démonstration fictifs, sans aucune donnée de client (`resources/licences/fonctions/LISEZ-MOI.txt`).
 
 Les emplacements prévus pour la documentation, le contenu attendu de chaque capture et la façon de les produire (F12, séances rejouées avec `--script` et `--captures`) sont listés dans [docs/images/README.md](docs/images/README.md).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -627,6 +650,8 @@ Détail : [docs/TESTS.md](docs/TESTS.md) (son inventaire suite par suite est cel
 - **Plates-formes réellement essayées** : Linux (CTest, 175 suites réussies pour la 1.46.0) ; les exécutables Windows ont été vérifiés **sous Wine, pas sur un vrai Windows** : `--version`, `--cli` sur le projet d'essai, installations silencieuses par-dessus la version précédente (Studios et Admin), et pour les licences, de bout en bout, un Studio compilé avec la clé d'essai et l'Admin contre le vrai service lancé sur le poste (notes de livraison 1.35.0 à 1.46.0).
 - `build.sh` et `runtests.sh` sont historiques (le premier se déclare « plus tenu à jour ») : la référence est CMake/CTest.
 - Des essais réussis ne prouvent pas l'absence de défauts ; l'interface graphique réelle, les services d'IA réels, Windows hors Wine, le vrai Cloudflare, le vrai Stripe, les vraies boîtes de courriel, plusieurs vrais PC et les automates physiques ne sont pas couverts par les essais automatiques. Quelques suites contre le service local (`adminguidemandes`, `service_studios`) ont échoué une fois sous forte charge puis réussi à chaque autre passage, sans cause trouvée (notes 1.35.0, 1.36.0, 1.39.0).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -650,6 +675,8 @@ Relevées dans le code et les notes de livraison jusqu'à la 1.46.0 :
 - **Dépôt** : `SDL3.dll`/`SDL3.lib`, PDFium et les modules Node.js du service (`service/node_modules`) ne sont pas versionnés ; 22 suites d'essais déclarées n'ont pas leur source.
 
 Aucune feuille de route n'est publiée dans ce dépôt ; seule la conception de la 1.47.0 en cours y figure ([§ 12](#documentation)).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -684,6 +711,8 @@ Les références fonctionnelles disent dans leur en-tête la version qu'elles d�
 
 Documents historiques, conservés tels quels : notes de livraison `docs/LIVRAISON-<version>.md` (de la 1.11.3 à la 1.46.0 ; la plus récente est [docs/LIVRAISON-1.46.0.md](docs/LIVRAISON-1.46.0.md) ; l'audit fait avant les missions IA : [docs/AUDIT-MISSIONS-1.22.0.md](docs/AUDIT-MISSIONS-1.22.0.md)), audit de conception de l'Assistant IA ([docs/ASSISTANT-IA-AUDIT.md](docs/ASSISTANT-IA-AUDIT.md)), audit de la bibliothèque d'objets ([docs/AUDIT-BIBLIOTHEQUE-OBJETS.md](docs/AUDIT-BIBLIOTHEQUE-OBJETS.md)), rapports ([docs/RAPPORT-ANALYSE.md](docs/RAPPORT-ANALYSE.md), [docs/RAPPORT-FINAL-IHM-SIMULATION.md](docs/RAPPORT-FINAL-IHM-SIMULATION.md), [docs/REFONTE-SCRIPTS-ANALYSE.md](docs/REFONTE-SCRIPTS-ANALYSE.md)), notes de travail `docs/NOTES-*.md`, maquettes HTML plus anciennes `docs/maquettes/maquette-*.html`, classeur d'accompagnement (`docs/automation.xlsx`, `docs/automation.xlsm`, `docs/Automation.bas`, `docs/make_workbook.py`, `docs/GUIDE.txt`). Ces documents décrivent l'état du logiciel à leur date.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 <a id="licences"></a>
@@ -704,3 +733,9 @@ Le dépôt ne contient pas de fichier de licence pour le code du projet lui-mêm
 | Police Inter (1.41.0) | Texte de l'interface des Studios et de l'Admin | SIL OFL 1.1 (`resources/fonts/LICENCE-Inter-OFL.txt`) |
 | Police Barlow (installateur) | Habillage des installateurs | SIL OFL (`installateur/polices/OFL-Barlow.txt`) |
 | wrangler (non versionné) | Outil de Cloudflare pour lancer et mettre en ligne le service (`service/package.json`, installé par `npm ci`) | celle du paquet npm (non reprise dans le dépôt) |
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [Sommaire](#sommaire) · [Documentation](#documentation)</sub> <!-- nav -->

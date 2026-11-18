@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Dépannage
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [GUIDE-INSTALLATION.md](GUIDE-INSTALLATION.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Retour au [README](../README.md). Compilation : [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) ; installation : [GUIDE-INSTALLATION.md](GUIDE-INSTALLATION.md).
 
@@ -29,6 +32,8 @@ Sous Windows, d'abord : **`collect_diagnostics.bat`**. Il crée un zip sur le Bu
 | La compilation s'arrête faute de mémoire sur `src/hmi/HmiGuideText.cpp` | Fichier d'aide généré très gros (environ 12 Go de mémoire d'après les notes de livraison) | Compiler avec moins de tâches en parallèle (`ninja -j 2`, `JOBS=2 outils/mingw/cross_mingw.sh`). |
 | `cross_mingw.sh` : `SDL3.dll` introuvable | `third_party/SDL3/lib/x64/` n'est pas dans le dépôt (seuls les en-têtes y sont) | Y poser `SDL3.dll` et `SDL3.lib` du paquet officiel (voir `third_party/SDL3/ORIGINE.txt`). |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## Installation et utilisation
 
 | Symptôme | Que faire |
@@ -42,6 +47,8 @@ Sous Windows, d'abord : **`collect_diagnostics.bat`**. Il crée un zip sur le Bu
 | Retour à la version d'avant | Maintenance › Restaurer une sauvegarde (`/precedente`). |
 | Une bibliothèque modifiée « a disparu » après une mise à jour | Elle n'est jamais écrasée : ta version est en place, la version livrée est à côté (`.livre-<version>`). Le rapport `migration_<date>.txt` les liste. |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## Codes de retour
 
 Voir `GUIDE-COMPILATION.md` § 7. Pour la maintenance :
@@ -53,6 +60,8 @@ Voir `GUIDE-COMPILATION.md` § 7. Pour la maintenance :
 | 6 | l'application est restée ouverte, rien n'a été modifié |
 | 7 | l'installateur est introuvable (réinstallation) |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## Assistant IA
 
 | Symptôme | Que faire |
@@ -61,3 +70,9 @@ Voir `GUIDE-COMPILATION.md` § 7. Pour la maintenance :
 | « http:// n'est accepté que vers ce poste… » | Utiliser `https://`. `http://` n'est accepté que vers `localhost`/`127.x`, et vers une adresse privée pour un service compatible OpenAI sans clé ([ASSISTANT-IA.md](ASSISTANT-IA.md#fournisseurs)). |
 | La clé API est à ressaisir à chaque séance (Linux) | Normal : sous Linux, la clé n'est gardée qu'en mémoire. |
 | « La réponse a été coupée » | Augmenter **Réponse** dans les Paramètres, ou demander en plusieurs fois ; voir [ASSISTANT-IA.md § 9](ASSISTANT-IA.md#suite). |
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md) · [GUIDE-INSTALLATION.md](GUIDE-INSTALLATION.md)</sub> <!-- nav -->

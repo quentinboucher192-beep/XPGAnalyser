@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Le service des licences (1.35.0) : le contrat
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [LICENCES.md](LICENCES.md) · [BOUTIQUE.md](BOUTIQUE.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Le service des licences est un Worker Cloudflare (`service/`, JavaScript, Durable Objects avec SQLite), mis en ligne par l'éditeur sur son compte (gratuit). Il remplace GitHub pour **tout** : les demandes des clients, l'activation par code, les licences flottantes, l'heure signée, la Découverte, et la synchro privée de l'archive de l'éditeur.
 
@@ -10,6 +13,8 @@ Ce document est **le contrat** entre trois programmes : le Worker (`service/`), 
 - **La clé de service** (Ed25519) est **créée par le Worker** lui-même, à son premier appel, et ne le quitte jamais. Elle est gardée dans le stockage du Durable Object. Elle signe les activations, les jetons des licences flottantes, l'heure et les Découvertes.
 - **Le certificat de service** : un bloc signé par la clé de l'éditeur (genre `service`), qui dit « cette clé de service est la mienne, jusqu'à telle date, pour ces droits ». L'éditeur le signe dans son outil, après avoir lu la clé publique de service (`GET /admin/cle-service`), puis le dépose (`PUT /admin/certificat`). Les Studios ne croient un document du service que s'il est signé par la clé que nomme un certificat valide.
 - **La clé du PC** (Ed25519, `identite-pc.cle`) authentifie chaque appel d'un Studio. Aucun jeton partagé n'est publié nulle part.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 2. Les appels signés
 
@@ -39,6 +44,8 @@ Pour `/admin/…`, la clé doit en plus être dans `PUBLISHER_KEYS` (sinon 403).
 
 L'**identifiant d'un poste** : `deviceId(clé)` = les 32 premiers hexadécimaux de SHA-256(`"xpg-poste-passerelle/1"` ‖ clé publique), comme en 1.34.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. Les documents signés par le service
 
 Ce sont des blocs `XPG-LICENSING 1 <genre> <taille>` (voir `SignedFile.hpp`), signés par la **clé de service**. Le JSON est **exactement** celui-ci : pas d'autre champ, dans cet ordre, sans espaces ; les dates en `AAAA-MM-JJTHH:MM:SSZ`.
@@ -53,6 +60,8 @@ Ce sont des blocs `XPG-LICENSING 1 <genre> <taille>` (voir `SignedFile.hpp`), si
 
 Les licences, le registre, les révocations et l'état d'un PC (`poste`, 1.34) restent signés par **l'éditeur**, comme avant.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 4. Le bail d'une activation (la désactivation même hors ligne)
 
 - Une activation vaut **jusqu'à `jusqu_a`** : `emis` + le bail de la licence (`bail_jours`, 30 par défaut, réglé par l'éditeur).
@@ -63,12 +72,16 @@ Les licences, le registre, les révocations et l'état d'un PC (`poste`, 1.34) r
 - **Le compteur** (dans `etat.bin` et ses copies) : la dernière heure signée du service, et le temps écoulé depuis. Ce temps ne fait qu'avancer : les écarts positifs de l'horloge, et le temps où le programme tourne. L'heure retenue est le **maximum** de l'horloge du PC et de « dernière heure signée + temps écoulé ». Reculer l'horloge ne prolonge donc pas un bail. À la connexion suivante, l'heure signée recale tout.
 - **Sept jours avant la fin**, le Studio prévient : « connecte ce PC à Internet avant le … ».
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 4 bis. La station et les changements de PC
 
 - **La station** : l'empreinte de l'installation de Windows du PC (`stationHash` : l'identifiant de l'installation et la clé du PC, 32 hexadécimaux). Le `.xpgreq` envoyé à `/v1/activer` la porte (sinon : 400 `demande`) ; le service la garde avec l'activation. `/v1/renouveler`, `/v1/flottante/jeton` et `/v1/flottante/rendre` la portent aussi (`"station"`, obligatoire) ; `/v1/liberer` peut la porter. Une autre station que celle de l'activation : rien n'est renouvelé (motif `autre_poste`), aucun jeton n'est donné ni rendu (403 `activation`, « cette activation est pour un autre poste »). Les jetons flottants sont tenus par (licence, clé, station). Une clé de PC recopiée sur d'autres machines n'y sert donc à rien : chaque copie est une autre station.
 - **Activer avec la clé d'un PC déjà actif pour cette licence, depuis une autre station**, pendant son bail : 403 `activation` (la copie ne prend pas la place de l'original).
 - **Les changements de PC** (une licence fixe) : un PC qui se libère lui-même (`/v1/liberer`) rend sa place tout de suite au plus **max(2, postes)** fois par licence sur **30 jours glissants**. Au-delà, sa place reste prise jusqu'à la fin de son bail (`place_jusqu_a` dans `GET /admin/licences`) ; le refus d'un autre PC (409 `complet`) le dit, avec `"libre_le"`. Une place retirée par l'éditeur (`/admin/activations/retirer`), ou d'une licence qu'il désactive, revient **tout de suite** (sa décision). Une licence flottante n'a pas de place à garder (son jeton est rendu).
 - **Le ménage** (une fois par jour) : une activation libérée ou retirée est effacée 7 jours après son `jusqu_a`, une activation active 90 jours après (un PC parti sans se libérer : revenu, il s'active de nouveau avec son code) ; le Studio efface alors l'activation dont le service ne dit plus rien. Une licence a au plus **10 × postes + 10** lignes d'activation (flottante : **max(50, 20 × postes)**) : au-delà, 409 `limite` pour CETTE licence seulement.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 5. Les routes
 
@@ -170,6 +183,8 @@ Les fichiers des 3 dernières versions sont gardés ; les autres, 30 jours aprè
 - Au plus 1 000 demandes en attente et 20 Mio de demandes gardées (une demande close est effacée après 7 jours), 10 000 licences, 100 000 activations (et par licence, § 4 bis).
 - **Les lignes écrites** (le plan gratuit : 100 000 par jour) : une route publique n'écrit rien ; `renouveler` 3 (le nonce, le bail, le numéro ; +2 par licence de plus), `flottante/jeton` 2, `activer` 9 (un PC neuf) ; un appel refusé (signature, limite) : 0. Les appels du jour sont comptés en mémoire et écrits une fois par minute au plus. Sur 127.0.0.1 seulement, la réponse le dit : `X-XPG-Lignes-Ecrites`.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 5 bis. Le relais des sessions par Internet (1.44.0)
 
 IHM Studio fait des **sessions par Internet** (`docs/SESSIONS.md`, § 7) à travers ce service : **un autre Durable Object, un par session** (`Relais`, `service/src/relais.js`, `idFromName(<localisateur>)`, sa migration `v2` dans `wrangler.toml`). Le relais **ne fait que passer des octets chiffrés de bout en bout** : il ne voit ni le code de la session, ni le projet, ni les noms des équipiers (seulement le nom de la session, le nom de l'hôte et le nom du projet que l'hôte lui donne en l'ouvrant).
@@ -193,6 +208,8 @@ IHM Studio fait des **sessions par Internet** (`docs/SESSIONS.md`, § 7) à trav
 **Les limites du relais** : 1,5 Mio décodés par appel (le corps : 2,5 Mio au plus) ; 16 Mio en attente par boîte, 32 Mio pour la session (au-delà : refusé, à refaire) ; 12 connexions ouvertes (8 membres : l'hôte fait la règle) ; `frapper` 10 fois en 10 min par clé et 60 fois par heure pour la session ; 900 appels par minute et par clé ; devant le service, le limiteur `LIMITE_RELAIS` (1 200 appels par minute et par adresse ; `ouvrir` : `LIMITE_PC`). `LIMITES_ESSAI=sans` (127.0.0.1 seulement) les lève.
 
 **Le coût** (le plan gratuit) : chaque PC d'une session fait au plus un `recevoir` toutes les 25 s au calme, plus un appel par envoi groupé quand on travaille ; l'objet d'une session est actif tant qu'un `recevoir` attend (la durée de Durable Object est comptée pendant toute la session).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 5 ter. La boutique et les commandes (1.46.0)
 
@@ -218,6 +235,8 @@ Les secrets de Stripe (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) sont des **
 put`, posés par l'Admin : Boutique › Brancher Stripe…) : jamais dans une table, une sauvegarde, une réponse ou un
 journal. `STRIPE_API_BASE` (un faux Stripe des essais) n'est écouté que pour un appel à 127.0.0.1.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 6. Le code d'activation
 
 - Sa forme : `XPG-XXXX-XXXX-XXXX-XXXX`, 16 caractères en base32 de Crockford, soit 80 bits tirés au hasard par l'outil de l'éditeur.
@@ -226,12 +245,16 @@ journal. `STRIPE_API_BASE` (un faux Stripe des essais) n'est écouté que pour u
 - L'éditeur voit le code à la création. 1.37.0 : son outil le garde **chiffré** (DPAPI, pour son compte Windows) dans `codes-activation/` pour le revoir (Licences › Voir le code…, `code-licence`) ; le service, lui, n'en a toujours que l'empreinte.
 - 1.37.0 : en réponse à une demande, le code part aussi **scellé pour le PC qui l'a demandée**, dans son état « poste » (les champs `code`, `licence_en_ligne`) : son Studio l'ouvre avec sa clé et s'active seul (`POST /v1/activer`). Le service ne voit qu'un bloc scellé.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 7. La Découverte (l'essai de 30 jours)
 
 - Au premier lancement, le Studio commence sa Découverte sur le PC : c'est l'évaluation de la 1.34, renommée. Elle marche hors ligne.
 - En ligne, il la déclare au service (`POST /v1/decouverte`) avec l'empreinte de la machine : `machine` = les 32 premiers hexadécimaux de SHA-256(`"xpg-decouverte/1|"` + l'identifiant de l'installation Windows). Le service rend le **premier début connu pour cette machine**, et le Studio retient le plus ancien des deux.
 - Effacer les fichiers de la Découverte ne relance donc pas l'essai tant que le PC est en ligne. L'empreinte ne dit rien du matériel, mais elle reconnaît l'installation : c'est dit dans la fenêtre Licence.
 - **Ses limites, honnêtement** : l'identifiant de l'installation Windows (`MachineGuid`) change à une réinstallation de Windows, et un administrateur du PC peut le changer ; un PC qui reste hors ligne compte seulement sur ses copies locales. Quelqu'un qui réinstalle Windows, ou change cet identifiant et efface les copies, recommence donc un essai. La Découverte freine l'essai répété ; elle ne l'empêche pas.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 7 bis. La demande en ligne, le chemin principal (1.36.0)
 
@@ -255,6 +278,8 @@ Le poids sur le plan gratuit : une vérification fait au plus quatre appels (`/v
 
 **Une copie d'essai n'appelle jamais le vrai service** : dans une construction avec la clé d'essai (`XPG_LICENCES_CLE_ESSAI`), l'adresse compilée est ignorée ; seule la variable `XPG_SERVICE` (le service des essais, sur ce poste) en donne une.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 8. Ce qui reste sur le PC (le dossier des licences)
 
 | Fichier | Contenu |
@@ -265,3 +290,9 @@ Le poids sur le plan gratuit : une vérification fait au plus quatre appels (`/v
 | `decouverte.xpgdec` | le bloc `decouverte` |
 | `code-activation.txt` | un code laissé par l'installateur, en attente du premier lancement en ligne (effacé après) |
 | `etat.bin` | aussi le compteur du bail (§ 4) |
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [LICENCES.md](LICENCES.md) · [BOUTIQUE.md](BOUTIQUE.md)</sub> <!-- nav -->

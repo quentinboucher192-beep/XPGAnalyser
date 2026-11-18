@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Captures d'écran de la documentation
+
+<sub>[⬅ README](../../README.md) · [Documentation](../../README.md#documentation) · [API-STUDIO.md](../API-STUDIO.md) · [IHM-STUDIO.md](../IHM-STUDIO.md) · [ASSISTANT-IA.md](../ASSISTANT-IA.md) · [GUIDE-INSTALLATION.md](../GUIDE-INSTALLATION.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 **Ce dossier ne contient encore aucune capture.** Le dépôt ne contient pas de capture d'écran du logiciel (vérifié pour la 1.21.3) :
 
@@ -14,6 +17,8 @@ Retour au [README](../../README.md#captures).
 - **F12** dans l'application : capture de la fenêtre dans le dossier des captures (`src/help/Shortcuts.cpp`, `src/app/Capture.cpp`).
 - **Séances rejouées** : `--script <séance> --captures <dossier> --size 1920x1080` rejoue une séance (`src/app/ScriptRunner.hpp`) et écrit ses captures ; c'est ainsi que sont faites les captures des livraisons (`src/main.cpp`). Les séances existantes sont dans `tools/sessions/`.
 - Une capture doit montrer le logiciel réel, avec des données de démonstration (par exemple le projet modèle `bac/Armoire_Gaz` ou un projet créé pour l'occasion) et aucune donnée de client, clé API ou mot de passe.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## Captures à ajouter
 
@@ -39,3 +44,9 @@ Retour au [README](../../README.md#captures).
 | `docs/images/installateur-profil.png` | Page « Que veux-tu installer ? » de l'installateur | [GUIDE-INSTALLATION.md](../GUIDE-INSTALLATION.md) |
 
 Quand une capture est ajoutée, la référencer depuis le document indiqué avec un chemin relatif et un texte alternatif qui décrit ce qu'elle montre.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../../README.md) · [Documentation](../../README.md#documentation) · [API-STUDIO.md](../API-STUDIO.md) · [IHM-STUDIO.md](../IHM-STUDIO.md) · [ASSISTANT-IA.md](../ASSISTANT-IA.md) · [GUIDE-INSTALLATION.md](../GUIDE-INSTALLATION.md)</sub> <!-- nav -->

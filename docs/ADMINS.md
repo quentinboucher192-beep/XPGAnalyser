@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Plusieurs admins, le journal, les fichiers, les mises à jour (1.44.0) : le contrat
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [FORMATS.md](FORMATS.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 Maquette validée : `docs/maquettes/1.43.0` (planches 00 à 08 ; la 08, les droits, ajoutée à la demande de l'éditeur).
 Ce document est le contrat entre l'Admin, le service (`service/`) et les Studios. Ce qui n'y est pas ne change pas
@@ -21,6 +24,8 @@ Réservé à l'admin+, jamais donné : ajouter / retirer un admin, leurs droits 
 sa criticité ; publier une version ; envoyer un fichier ; le certificat du service. **Gérer le service** (1.47.0, § 11 :
 le mettre en ligne ou à jour, son adresse, ses adresses de secours, le relevé du jour) est aussi à l'admin+ seul, mais il
 peut le confier à **un** admin pour un temps court (une dérogation : 72 h au plus, jamais permanente).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 2. Les droits (13 fonctions)
 
@@ -57,6 +62,8 @@ l'origine de chaque admin vivent chez l'admin+ (`profils-admins.json`, partagé 
 que le nom du profil d'origine (pour l'affichage) et les droits effectifs. Le profil de départ, « Tous les droits »,
 ne se modifie pas.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 3. La liste des admins (genre `admins`, signée par la clé de l'éditeur)
 
 Un bloc `XPG-LICENSING 1 admins <taille>` (l'enveloppe de `SignedFile.hpp`), au plus 64 Kio :
@@ -85,6 +92,8 @@ Un bloc `XPG-LICENSING 1 admins <taille>` (l'enveloppe de `SignedFile.hpp`), au 
 **Où les Studios la trouvent** : `GET /v1/admins` (publique) ; `GET /v1/etat` donne son numéro (`admins`) ; un fichier de
 licence exporté par un admin porte deux blocs (la liste, puis la licence) et l'import garde la liste si elle est plus
 récente. Elle est gardée dans le dossier des licences (`admins.xpgadm`), comme le registre.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 4. Devenir admin : le code d'invitation, sans demande (1.51.0)
 
@@ -143,6 +152,8 @@ l'Admin+ ».
 par adresse, 5 par jour par PC : les mêmes compteurs que les demandes d'avant) ; 20 inscrits au plus attendent l'Admin+ ;
 retirer un admin (§ 3) ; la clé d'admin qui naît sur son PC et n'en sort jamais.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 5. Le trousseau (partager la clé de synchro)
 
 L'archive partagée (`ArchiveSync`) est scellée par la clé de synchro. L'admin+ la donne à chaque admin, **scellée pour sa
@@ -153,6 +164,8 @@ l'admin retiré a pu lire l'archive jusque-là ; un « Changer la clé de synchr
 
 L'archive accepte désormais les documents signés par **la clé de l'éditeur ou un admin de la liste** (plus seulement la
 clé de ce PC). Les profils, les courriels des admins, les invitations, la criticité vivent dans l'archive (scellés).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 6. Le service
 
@@ -271,6 +284,8 @@ Les Studios et les Admins disent leur version dans l'en-tête `X-XPG-Logiciel` (
 `API-Studio/1.44.0`, `XPG-License-Admin/1.44.0`) de leurs appels signés ; le service garde, par clé, le logiciel, la
 version et l'heure (`logiciels`). `GET /admin/versions` (admin+) : les versions publiées, et combien de PC sont à jour.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 7. Le Studio
 
 - **La liste des admins** : relevée avec le registre (§ 3) ; `verifyTrusted` accepte une clé d'admin de la liste
@@ -285,6 +300,8 @@ version et l'heure (`logiciels`). `GET /admin/versions` (admin+) : les versions 
 - **Sur le PC d'un admin** : l'Admin laisse un **jeton d'admin** (`jeton-admin.xpgjet`, genre `jetonadmin`, signé par sa clé :
   `{"cle","poste","expire"}`, 30 jours) dans son dossier ; le Studio du même compte le lit et l'envoie
   (`X-XPG-Jeton`) pour télécharger aussi l'installateur de l'Admin : « Ton Admin 1.44.0 n'est plus à jour ».
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 8. L'Admin
 
@@ -318,6 +335,8 @@ sans réseau :
 `{"format":"xpg-invitations-admins/1","invitations":[{"nom","courriel","profil","par","le","id","expire","droits",
 "admis","admis_le"}]}`, les 100 dernières ; 1.51.0 : `droits`, les droits choisis, avec lesquels l'Admin+ signe ; `admis`,
 la clé signée d'office pour elle). 1.51.0 : plus de page « Demandes d'admin » (`demandes-admins` : une page inconnue).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 9. La sauvegarde de secours (si le service tombe)
 
@@ -366,6 +385,8 @@ ne sont pas dans la sauvegarde (trop gros) : la page Versions les redemande (`fi
 autre adresse que celle de la sauvegarde : le certificat de la même clé de service est signé de nouveau pour elle. Le poste
 de l'admin+ intact peut ne remettre **que le service** (son dossier, plus récent que la sauvegarde, ne recule pas).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 10. Les adresses de secours
 
 Le registre peut porter `fallback_services` : jusqu'à 3 adresses (https) de services de secours, signées avec le reste.
@@ -373,6 +394,8 @@ Un Studio qui **ne joint pas** l'adresse principale (une panne réseau, pas une 
 l'ordre ; un document de ce service n'est cru que si son certificat (signé par l'éditeur) nomme cette adresse. Une
 adresse de secours se règle dans Service en ligne (admin+ ; 1.47.0 : ou l'admin qui a le droit `offres` pendant sa
 dérogation, § 11) ; son service se certifie comme le principal.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 11. Gérer le service : l'admin+ seul, la dérogation courte ; la connexion qui voyage avec l'installateur (1.47.0)
 
@@ -510,6 +533,8 @@ son PC ; sa **durée est choisie par l'admin+** quand il l'envoie.
   jeton partagé**, jamais le mot de passe de l'admin+. Le kit reçoit les clés publiques de l'éditeur que le service croit
   (`cle-publique.txt`, `PUBLISHER_KEYS`), jamais la sienne ; une mise en ligne qui donne une autre adresse (un autre
   compte Cloudflare) est signalée : ce n'est pas le service de l'éditeur.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ## 12. Trois exécutables : Studios, Admin+, Admin ; l'invitation par codes (1.49.0)
 
@@ -673,6 +698,8 @@ demande d'avant signée d'office, une invitation que ce poste n'a pas créée ja
 retapé, déjà servi, expiré) ; `adminguiadmins` (la recherche du PC, le dialogue en une étape, le code tapé dans la page,
 Relever qui signe) ; `adminguicompte`, `adminguiedition`, `adminguishell` (plus de « Demandes d'admin »).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## 13. Repartir de zéro (1.49.0)
 
 **La demande** : « dans la 1.49, remets à zéro toutes les données sauvegardées sur les licences, les admins, les clients,
@@ -729,3 +756,9 @@ Essais : `service/test/reinitialiser.test.js` (un monde par les routes ordinaire
 refus ; tout l'effacé, tout le gardé ; le Studio ; la restauration) ; `admin_reset_test` (le bandeau une fois, la carte,
 la fenêtre, XPG Admin jamais ; puis contre le service local : l'action de bout en bout, le dossier, le journal, la
 restauration).
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [FORMATS.md](FORMATS.md)</sub> <!-- nav -->

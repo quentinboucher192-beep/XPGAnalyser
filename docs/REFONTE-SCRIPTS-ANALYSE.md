@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Refonte des scripts et des fonctions : l'analyse du dépôt (§ 26)
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 > **Ce document répond au § 26 de ta demande** : avant toute modification, il fait l'état des lieux du logiciel existant. On y trouve :
 > - l'architecture actuelle ;
@@ -46,6 +49,8 @@
 > Convention : `chemin:ligne` renvoie au fichier source du dépôt au moment de l'analyse. Quand un point
 > n'a pas pu être vérifié avec certitude, c'est dit explicitement (« non vérifié », « à confirmer »).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ## Sommaire
 
 0. Synthèse en dix constats
@@ -60,6 +65,8 @@
 9. Liste précise des fichiers à modifier
 10. Charge relative par module (XS/S/M/L/XL, § 23 de la spécification)
 11. Plan de migration par lots
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -124,6 +131,8 @@
     `Ctrl+T`, `Ctrl+-`, `Ctrl+.`, `F6` sont **impossibles sans toucher la couche plateforme**.
     Plusieurs touches demandées sont **déjà prises** : `F12` (capture d'écran), `Ctrl+H` (historique),
     `Ctrl+K` (Aller à…), `F7` (Compiler), `F8` (démarrer/arrêter l'IHM), `Ctrl+J` (panneau du bas).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -262,6 +271,8 @@ expression *fx* (lecture seule, ni `;` ni `:=`).
 D'où le principe du § 11 : **les modèles deviennent la source, et un texte équivalent est
 reconstruit pour ces consommateurs** tant qu'ils n'ont pas été portés un à un sur le modèle.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 ## 2. Modèles existants
@@ -397,6 +408,8 @@ Conséquences pour la refonte :
   et **groupes** (`core::GroupCommand`, `CommandGroupScope`) : un import ou une migration = une
   commande.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 ## 3. Fonctionnement actuel de la compilation
@@ -482,6 +495,8 @@ affiché** à chaque modification (squiggles `MultiLineText::Squiggle`) — « l
 C'est le meilleur candidat pour « Compiler le document actif » **sans** passer par la validation
 globale.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 ## 4. Fonctionnement actuel de la génération
@@ -519,6 +534,8 @@ Ce qui manque par rapport au § 17 :
   écrites** et **les éléments ignorés** (seul le compte `reused` existe) ;
 - **pas d'étape « représentation intermédiaire »** : le seul intermédiaire est l'AST privé de
   `sim::Program`, interne à `Interpreter.cpp` (classes déclarées dans le `.cpp`, non exposées).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -569,6 +586,8 @@ les `Id` du paquet ne servent pas à reconnaître un élément déjà présent.
 | Transactionnel, annulation complète | **oui** (une commande) |
 | Rapport | `ImportResult::summary()` (texte), non persistant |
 | Compatibilité anciens formats | oui par construction (le petit projet est relu par `parseProject`, qui lit tous les formats ≤ 22) |
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -649,6 +668,8 @@ partout — et **tout changement de comportement touche tous ces éditeurs** (ri
   (limite : le format riche ne sort pas du processus).
 - **Rejeu de sessions** (`app/ScriptRunner.*` : `touche Ctrl+Z`, `clic`, `arbre "A/B"`…) et 128
   sessions dans `tools/sessions/` : tests d'intégration clavier/souris possibles sans écran réel.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -795,6 +816,8 @@ les autres progressivement, pas en ajouter un douzième.
   (complétion ; la branche de repli au clavier qui le suit est inaccessible, `Controls.cpp:2272` puis `:2374`).
 - Copier sans sélection = **tout le texte** (Visual Studio : la ligne) ; couper sans sélection : rien.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 ## 8. Risques de régression
@@ -853,6 +876,8 @@ sortie de CMake qu'aucun essai IHM n'est « sauté » ou « non enregistré » a
 **21 sources d'essai citées par `CMakeLists.txt` sont absentes du dépôt** (dont `treednd_test`,
 `macro_test`, `grafcet_test`, `xref_test`, `executionorder_test`, `help_test`) : ces essais sont
 sautés ; pour la refonte, la couverture de l'arbre repose donc sur `viewmodel_test` seul.
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -938,6 +963,8 @@ CMake), **[D]** documentation/aide, **[T]** test. Les numéros de lot renvoient 
 | `XpgAnalyzer.vcxproj`, `XpgAnalyzer.vcxproj.filters` | [M] | 0 (décision : resynchroniser ou déclarer obsolète) |
 | `build.sh` | [M] si conservé | 0 |
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 ## 10. Charge relative par module (niveaux du § 23)
@@ -1008,6 +1035,8 @@ correspond à la voie recommandée (§ 11), le second à la variante maximale.
   `Vue.Instance.Fonction`, espace de noms global, collisions avec `Vue.Objet.Propriété`), renommage
   symbolique (douze réécritures textuelles, aucun index de références, trou avéré dans
   `renameFunctionEverywhere`).
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 ---
 
@@ -1302,3 +1331,9 @@ le client.
 `SDL_SetClipboardText` sous Windows ; le comportement de `SDLK_MINUS`/`SDLK_COMMA` sur AZERTY ; la
 chaîne réellement utilisée pour produire les installateurs (CMake/mingw présumée) ; l'absence de
 toute lecture des artefacts de build par le moteur (aucune trouvée par recherche).*
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation)</sub> <!-- nav -->

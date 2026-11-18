@@ -1,4 +1,7 @@
+<a id="haut-de-page"></a> <!-- nav -->
 # Assistant IA dans IHM Studio — audit (phase 1)
+
+<sub>[⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ASSISTANT-IA.md](ASSISTANT-IA.md) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
 
 > **Document historique.** Cet audit décrit l'état du code **avant** l'implémentation de l'Assistant (1.14.2). Plusieurs constats ne sont plus vrais en 1.21.3 : un client HTTPS existe (WinHTTP sous Windows, libcurl chargée à la demande sous Linux, `src/app/ai/AiHttp.hpp`), la clé API est protégée par DPAPI sous Windows (`AiSecret.hpp`, `AiKeys.hpp`), et de nombreux modules ont été ajoutés (fournisseurs Anthropic et compatible OpenAI, IA intégrée, plan d'opérations, mémoire et souvenirs, notifications…). La référence à jour est [ASSISTANT-IA.md](ASSISTANT-IA.md).
 
@@ -207,6 +210,8 @@ Deux exécutables (`API-Studio`, `IHM-Studio`), un seul code : seul `main.cpp` c
   mots de passe), pas de chiffrement réversible.
 - Pas de base SQLite.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 ## 2. Ce que ça veut dire pour l'IA (phases 3 à 9, décrites, pas codées)
@@ -364,6 +369,8 @@ et les séances de script soient reproductibles.
 
 Soit **6 à 8 semaines** pour un copilote réellement utilisable, hors réglage du dialogue avec le modèle.
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 ## 3. Le plan de la maquette (phase 2)
@@ -417,6 +424,8 @@ variables, avertissements et erreurs, l'aperçu en grand ; Appliquer, Annuler, M
 - Les pièces jointes : PNG, JPG, PDF, TXT, CSV, XLSX, XML, JSON, `.xihm`, `.xapi`, le projet ; copiées
   dans `IA/pieces-jointes/<id>/` ; un autre format est refusé (et le dit).
 
+<sub>[⬆ Haut de page](#haut-de-page) · [⬇ Bas de page](#bas-de-page)</sub> <!-- nav -->
+
 ---
 
 ## 4. Ce que la maquette contient (après l'audit)
@@ -439,3 +448,9 @@ racine `IA/` (App.cpp), la commande de séance `ia` (ScriptRunner). Essais : `te
 Le centre « Mémoire et apprentissage de l'IA » (section 12 de la demande) s'y ajoute : `AiMemory`, `AiMemoryJson`,
 `AiKnowledge`, `AiMemoryDialog`, la commande `ia.memoire` et les commandes de séance `memoire-…`. Essais :
 `tests/ai_memoire_test.cpp`. Le détail est dans `docs/LIVRAISON-1.14.2.md`.
+
+---
+
+<a id="bas-de-page"></a> <!-- nav -->
+
+<sub>[⬆ Haut de page](#haut-de-page) · [⬅ README](../README.md) · [Documentation](../README.md#documentation) · [ASSISTANT-IA.md](ASSISTANT-IA.md)</sub> <!-- nav -->
